@@ -184,7 +184,13 @@ For OR, use `|` inside parentheses:
 E ? (dept_id = 20 | salary > 80000)
 ```
 
-Result: Carol (dept 20), Eve (dept 20), and Dave (salary 90000).
+Result:
+
+| emp_id | name  | salary | dept_id | role     |
+|--------|-------|--------|---------|----------|
+| 3      | Carol | 55000  | 20      | engineer |
+| 4      | Dave  | 90000  | 10      | engineer |
+| 5      | Eve   | 45000  | 20      | engineer |
 
 ### Natural join: `*`
 
@@ -298,7 +304,16 @@ This is useful for making two relations compatible for union. Union requires bot
 ContractorPay @ [pay > salary] | (E # [name salary])
 ```
 
-Result: all 5 employees plus Frank, each with `{name, salary}`.
+Result:
+
+| name  | salary |
+|-------|--------|
+| Alice | 80000  |
+| Bob   | 60000  |
+| Carol | 55000  |
+| Dave  | 90000  |
+| Eve   | 45000  |
+| Frank | 70000  |
 
 ### Set difference: `-`
 
@@ -386,6 +401,28 @@ Result:
 
 The difference from `/`: the intermediate state (with the `team` RVA) is a real relation you can filter, extend, or otherwise manipulate before collapsing.
 
+### Intersect: `&`
+
+`&` returns tuples present in both sides. Like `-`, the right side needs parentheses when it's a compound expression.
+
+```
+(E # emp_id) & (Phone # emp_id)
+```
+
+| Step | What happens |
+|------|-------------|
+| `E # emp_id` | Project to emp_id: `{1, 2, 3, 4, 5}` |
+| `& (Phone # emp_id)` | Keep only emp_ids also in Phone: `{1, 3}` |
+
+Result:
+
+| emp_id |
+|--------|
+| 1      |
+| 3      |
+
+Employees who DO have a phone on file — the complement of the `-` (difference) example.
+
 ### Sort: `$` and take: `^`
 
 `$` sorts a relation. **This leaves the relational world** — the result is an array (ordered), not a relation (unordered set). No further relational operations can follow.
@@ -452,9 +489,9 @@ Result:
 @    rename            E @ [pay > salary]
 +    extend            E + bonus: salary * 0.1
 +:   modify            E +: salary: salary * 1.1
--    difference        E # emp_id - (Phone # emp_id)
-|    union             (E # [name salary]) | (Contractors # [name salary])
-&    intersect         (E # emp_id) & (Phone # emp_id)
+-    difference        A - (B)
+|    union             A | (B)
+&    intersect         A & (B)
 /    summarize         E / dept_id [n: #.  avg: %. salary]
 /.   summarize all     E /. [n: #.  total: +. salary]
 /:   nest by           E /: dept_id > team
