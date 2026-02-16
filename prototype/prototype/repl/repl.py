@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import readline  # noqa: F401 — import enables line editing and history for input()
+
 from prototype.data.sample import load_sample_data
 from prototype.executor.environment import Environment
 from prototype.executor.executor import Executor, ExecutionError
