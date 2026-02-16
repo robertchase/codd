@@ -1,0 +1,27 @@
+[project]
+name = "prototype"
+version = "0.1.0"
+description = "Codd relational algebra prototype: parser + executor"
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.0",
+]
+
+[project.scripts]
+codd = "prototype.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.black]
+target-version = ["py312"]

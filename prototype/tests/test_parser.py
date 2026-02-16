@@ -1,0 +1,259 @@
+"""Tests for the parser."""
+
+from prototype.lexer.lexer import Lexer
+from prototype.parser.parser import Parser, ParseError
+from prototype.parser import ast_nodes as ast
+import pytest
+
+
+def parse(source: str) -> ast.RelExpr:
+    """Helper: lex + parse a source string."""
+    tokens = Lexer(source).tokenize()
+    return Parser(tokens).parse()
+
+
+class TestAtom:
+    """Test parsing atomic expressions."""
+
+    def test_relation_name(self) -> None:
+        result = parse("E")
+        assert isinstance(result, ast.RelName)
+        assert result.name == "E"
+
+    def test_parenthesized(self) -> None:
+        result = parse("(E)")
+        assert isinstance(result, ast.RelName)
+        assert result.name == "E"
+
+
+class TestProject:
+    """Test project parsing."""
+
+    def test_single_attr(self) -> None:
+        result = parse("E # name")
+        assert isinstance(result, ast.Project)
+        assert result.attrs == ("name",)
+
+    def test_multiple_attrs(self) -> None:
+        result = parse("E # [name salary]")
+        assert isinstance(result, ast.Project)
+        assert result.attrs == ("name", "salary")
+
+
+class TestFilter:
+    """Test filter parsing."""
+
+    def test_simple_gt(self) -> None:
+        result = parse("E ? salary > 50000")
+        assert isinstance(result, ast.Filter)
+        assert isinstance(result.condition, ast.Comparison)
+        assert result.condition.op == ">"
+        assert isinstance(result.condition.right, ast.IntLiteral)
+        assert result.condition.right.value == 50000
+
+    def test_eq_string(self) -> None:
+        result = parse('E ? name = "Alice"')
+        assert isinstance(result, ast.Filter)
+        assert result.condition.op == "="
+        assert isinstance(result.condition.right, ast.StringLiteral)
+        assert result.condition.right.value == "Alice"
+
+    def test_negated_filter(self) -> None:
+        result = parse('E ?! role = "engineer"')
+        assert isinstance(result, ast.NegatedFilter)
+        assert result.condition.op == "="
+
+    def test_or_condition(self) -> None:
+        result = parse("E ? (dept_id = 20 | salary > 80000)")
+        assert isinstance(result, ast.Filter)
+        assert isinstance(result.condition, ast.BoolCombination)
+        assert result.condition.op == "|"
+
+    def test_and_condition(self) -> None:
+        result = parse("E ? (salary > 50000 & dept_id = 10)")
+        assert isinstance(result, ast.Filter)
+        assert isinstance(result.condition, ast.BoolCombination)
+        assert result.condition.op == "&"
+
+    def test_set_membership(self) -> None:
+        result = parse("E ? dept_id = {10, 20, 30}")
+        assert isinstance(result, ast.Filter)
+        assert isinstance(result.condition.right, ast.SetLiteral)
+        assert len(result.condition.right.elements) == 3
+
+
+class TestChaining:
+    """Test chaining of operations."""
+
+    def test_filter_project(self) -> None:
+        result = parse("E ? salary > 50000 # [name salary]")
+        assert isinstance(result, ast.Project)
+        assert isinstance(result.source, ast.Filter)
+
+    def test_double_filter(self) -> None:
+        result = parse("E ? dept_id = 10 ? salary > 70000")
+        assert isinstance(result, ast.Filter)
+        assert isinstance(result.source, ast.Filter)
+        assert isinstance(result.source.source, ast.RelName)
+
+    def test_join_filter_project(self) -> None:
+        result = parse('E * D ? dept_name = "Engineering" # [name salary]')
+        assert isinstance(result, ast.Project)
+        assert isinstance(result.source, ast.Filter)
+        assert isinstance(result.source.source, ast.NaturalJoin)
+
+
+class TestJoin:
+    """Test join parsing."""
+
+    def test_natural_join(self) -> None:
+        result = parse("E * D")
+        assert isinstance(result, ast.NaturalJoin)
+        assert isinstance(result.right, ast.RelName)
+        assert result.right.name == "D"
+
+    def test_nest_join(self) -> None:
+        result = parse("E *: Phone > phones")
+        assert isinstance(result, ast.NestJoin)
+        assert isinstance(result.right, ast.RelName)
+        assert result.nest_name == "phones"
+
+
+class TestExtend:
+    """Test extend parsing."""
+
+    def test_single(self) -> None:
+        result = parse("E + bonus: salary * 0.1")
+        assert isinstance(result, ast.Extend)
+        assert len(result.computations) == 1
+        comp = result.computations[0]
+        assert comp.name == "bonus"
+        assert isinstance(comp.expr, ast.BinOp)
+        assert comp.expr.op == "*"
+
+    def test_multiple(self) -> None:
+        result = parse("E + [bonus: salary * 0.1  tax: salary * 0.3]")
+        assert isinstance(result, ast.Extend)
+        assert len(result.computations) == 2
+        assert result.computations[0].name == "bonus"
+        assert result.computations[1].name == "tax"
+
+
+class TestRename:
+    """Test rename parsing."""
+
+    def test_single(self) -> None:
+        result = parse("E @ pay > salary")
+        assert isinstance(result, ast.Rename)
+        assert result.mappings == (("pay", "salary"),)
+
+    def test_multiple(self) -> None:
+        result = parse("E @ [pay > salary  dept > department]")
+        assert isinstance(result, ast.Rename)
+        assert len(result.mappings) == 2
+
+
+class TestSetOps:
+    """Test set operation parsing."""
+
+    def test_union(self) -> None:
+        result = parse("E | (D)")
+        assert isinstance(result, ast.Union)
+
+    def test_difference(self) -> None:
+        result = parse("E # emp_id - (Phone # emp_id)")
+        assert isinstance(result, ast.Difference)
+        assert isinstance(result.source, ast.Project)
+
+    def test_intersect(self) -> None:
+        result = parse("(E # emp_id) & (Phone # emp_id)")
+        assert isinstance(result, ast.Intersect)
+
+
+class TestSummarize:
+    """Test summarize parsing."""
+
+    def test_single_key(self) -> None:
+        result = parse("E / dept_id [n: #.  avg: %. salary]")
+        assert isinstance(result, ast.Summarize)
+        assert result.group_attrs == ("dept_id",)
+        assert len(result.aggregates) == 2
+        assert result.aggregates[0].name == "n"
+        assert result.aggregates[0].func == "#."
+        assert result.aggregates[1].name == "avg"
+        assert result.aggregates[1].func == "%."
+        assert result.aggregates[1].attr == "salary"
+
+    def test_summarize_all(self) -> None:
+        result = parse("E /. [n: #.  total: +. salary]")
+        assert isinstance(result, ast.SummarizeAll)
+        assert len(result.aggregates) == 2
+
+    def test_nest_by(self) -> None:
+        result = parse("E /: dept_id > team")
+        assert isinstance(result, ast.NestBy)
+        assert result.group_attrs == ("dept_id",)
+        assert result.nest_name == "team"
+
+
+class TestSort:
+    """Test sort parsing."""
+
+    def test_ascending(self) -> None:
+        result = parse("E $ salary")
+        assert isinstance(result, ast.Sort)
+        assert result.keys == (ast.SortKey(attr="salary", descending=False),)
+
+    def test_descending(self) -> None:
+        result = parse("E $ salary-")
+        assert isinstance(result, ast.Sort)
+        assert result.keys == (ast.SortKey(attr="salary", descending=True),)
+
+    def test_multi_key(self) -> None:
+        result = parse("E $ [dept_id salary-]")
+        assert isinstance(result, ast.Sort)
+        assert len(result.keys) == 2
+        assert result.keys[0].descending is False
+        assert result.keys[1].descending is True
+
+    def test_take(self) -> None:
+        result = parse("E $ salary- ^ 3")
+        assert isinstance(result, ast.Take)
+        assert result.count == 3
+        assert isinstance(result.source, ast.Sort)
+
+
+class TestComplexExpressions:
+    """Test complex chained expressions from the design doc."""
+
+    def test_union_with_rename(self) -> None:
+        result = parse("ContractorPay @ [pay > salary] | (E # [name salary])")
+        assert isinstance(result, ast.Union)
+        assert isinstance(result.source, ast.Rename)
+
+    def test_sort_take(self) -> None:
+        result = parse("E # [name salary] $ salary- ^ 3")
+        assert isinstance(result, ast.Take)
+        assert isinstance(result.source, ast.Sort)
+        assert isinstance(result.source.source, ast.Project)
+
+    def test_nest_by_extend(self) -> None:
+        result = parse("E /: dept_id > team + [top: >. team.salary]")
+        assert isinstance(result, ast.Extend)
+        assert isinstance(result.source, ast.NestBy)
+        comp = result.computations[0]
+        assert comp.name == "top"
+        assert isinstance(comp.expr, ast.AggregateCall)
+        assert comp.expr.func == ">."
+
+
+class TestErrors:
+    """Test parse error handling."""
+
+    def test_unexpected_token(self) -> None:
+        with pytest.raises(ParseError):
+            parse("? salary > 50000")
+
+    def test_missing_closing_bracket(self) -> None:
+        with pytest.raises(ParseError):
+            parse("E # [name salary")
