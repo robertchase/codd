@@ -529,7 +529,14 @@ class Parser:
                     arg=ast.AttrRef(parts=(attr_name,)),
                     source=ast.RelName(name=source_name),
                 )
-            # Simple attr
+            # For #. (count), a bare identifier is the source RVA to count
+            if func == "#.":
+                source_name = self._advance().value
+                return ast.AggregateCall(
+                    func=func,
+                    source=ast.RelName(name=source_name),
+                )
+            # For other aggregates, bare identifier is the attribute
             attr_tok = self._advance()
             return ast.AggregateCall(
                 func=func, arg=ast.AttrRef(parts=(attr_tok.value,))
