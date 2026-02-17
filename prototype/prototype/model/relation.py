@@ -77,6 +77,9 @@ class Relation:
 
     def project(self, attrs: frozenset[str]) -> Relation:
         """Project: keep only the specified attributes (#)."""
+        unknown = attrs - self._attributes
+        if unknown:
+            raise ValueError(f"project references unknown attributes: {sorted(unknown)}")
         projected = frozenset(t.project(attrs) for t in self._tuples)
         return Relation(projected, attributes=attrs)
 
@@ -123,6 +126,11 @@ class Relation:
         for t in self._tuples:
             new_values = compute(t)
             if new_attrs is None:
+                overlap = self._attributes & frozenset(new_values.keys())
+                if overlap:
+                    raise ValueError(
+                        f"extend cannot overwrite existing attributes (use modify): {sorted(overlap)}"
+                    )
                 new_attrs = self._attributes | frozenset(new_values.keys())
             result.add(t.extend(new_values))
         if new_attrs is None:
@@ -131,10 +139,22 @@ class Relation:
 
     def modify(self, compute: Callable[[Tuple_], dict[str, Value]]) -> Relation:
         """Modify: replace existing attributes (+:)."""
-        return self.extend(compute)
+        result: set[Tuple_] = set()
+        for t in self._tuples:
+            new_values = compute(t)
+            unknown = frozenset(new_values.keys()) - self._attributes
+            if unknown:
+                raise ValueError(
+                    f"modify references unknown attributes: {sorted(unknown)}"
+                )
+            result.add(t.extend(new_values))
+        return Relation(frozenset(result), attributes=self._attributes)
 
     def rename(self, mapping: dict[str, str]) -> Relation:
         """Rename: change attribute names (@)."""
+        unknown = frozenset(mapping.keys()) - self._attributes
+        if unknown:
+            raise ValueError(f"rename references unknown attributes: {sorted(unknown)}")
         new_attrs = frozenset(mapping.get(a, a) for a in self._attributes)
         result = frozenset(t.rename(mapping) for t in self._tuples)
         return Relation(result, attributes=new_attrs)
@@ -177,6 +197,11 @@ class Relation:
 
         Returns a relation with the grouping key(s) plus the named aggregates.
         """
+        unknown = group_attrs - self._attributes
+        if unknown:
+            raise ValueError(
+                f"summarize group key references unknown attributes: {sorted(unknown)}"
+            )
         groups: dict[Tuple_, list[Tuple_]] = {}
         for t in self._tuples:
             key = t.project(group_attrs)
@@ -207,6 +232,11 @@ class Relation:
         plus a relation-valued attribute containing the group members
         (with the grouping key attributes removed from the nested tuples).
         """
+        unknown = group_attrs - self._attributes
+        if unknown:
+            raise ValueError(
+                f"nest_by group key references unknown attributes: {sorted(unknown)}"
+            )
         groups: dict[Tuple_, list[Tuple_]] = {}
         for t in self._tuples:
             key = t.project(group_attrs)

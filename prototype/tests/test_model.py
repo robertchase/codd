@@ -394,3 +394,39 @@ class TestRelation:
         r1 = Relation(frozenset({Tuple_(a=1)}))
         r2 = Relation(frozenset({Tuple_(a=1)}))
         assert hash(r1) == hash(r2)
+
+    def test_project_unknown_attribute(self) -> None:
+        e = self._employees()
+        with pytest.raises(ValueError, match="project references unknown attributes"):
+            e.project(frozenset({"nonexistent"}))
+
+    def test_extend_rejects_existing_attribute(self) -> None:
+        e = self._employees()
+        with pytest.raises(
+            ValueError, match="extend cannot overwrite existing attributes"
+        ):
+            e.extend(lambda t: {"name": t["name"].upper()})
+
+    def test_modify_rejects_unknown_attribute(self) -> None:
+        e = self._employees()
+        with pytest.raises(ValueError, match="modify references unknown attributes"):
+            e.modify(lambda t: {"nonexistent": 1})
+
+    def test_rename_unknown_attribute(self) -> None:
+        e = self._employees()
+        with pytest.raises(ValueError, match="rename references unknown attributes"):
+            e.rename({"nonexistent": "something"})
+
+    def test_summarize_unknown_group_attr(self) -> None:
+        e = self._employees()
+        with pytest.raises(
+            ValueError, match="summarize group key references unknown attributes"
+        ):
+            e.summarize(frozenset({"nonexistent"}), {"n": lambda r: len(r)})
+
+    def test_nest_by_unknown_group_attr(self) -> None:
+        e = self._employees()
+        with pytest.raises(
+            ValueError, match="nest_by group key references unknown attributes"
+        ):
+            e.nest_by(frozenset({"nonexistent"}), "group")
