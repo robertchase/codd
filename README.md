@@ -1,2 +1,2 @@
 # codd
-a true relational data store
+a relational algebra
