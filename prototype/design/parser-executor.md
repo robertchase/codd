@@ -107,11 +107,11 @@ For `/:` (nest by) + `+` (extend) chains like `E /: dept_id > team + [top: >. te
 
 ## Testing
 
-181 tests across 6 files:
+184 tests across 6 files:
 
 | File | Tests | Scope |
 |------|-------|-------|
-| test_model.py | 41 | Tuple_ and Relation operations |
+| test_model.py | 44 | Tuple_ and Relation operations |
 | test_lexer.py | 44 | Tokenization, digraphs, literals, errors |
 | test_parser.py | 36 | AST construction for all operator types |
 | test_executor.py | 23 | Execution of individual operators |
