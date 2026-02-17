@@ -92,6 +92,9 @@ class TestDigraphOperators:
     def test_bang_tilde(self) -> None:
         assert types("!~") == [TokenType.BANG_TILDE]
 
+    def test_lt_colon(self) -> None:
+        assert types("<:") == [TokenType.LT_COLON]
+
     def test_colon_colon(self) -> None:
         assert types("::") == [TokenType.COLON_COLON]
 
@@ -179,6 +182,14 @@ class TestComplexExpressions:
         expected = [
             TokenType.IDENT, TokenType.STAR_COLON, TokenType.IDENT,
             TokenType.GT, TokenType.IDENT,
+        ]
+        assert result == expected
+
+    def test_unnest(self) -> None:
+        src = "E <: phones"
+        result = types(src)
+        expected = [
+            TokenType.IDENT, TokenType.LT_COLON, TokenType.IDENT,
         ]
         assert result == expected
 

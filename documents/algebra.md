@@ -255,6 +255,28 @@ Result:
 
 Nobody is lost. Bob, Dave, and Eve have no phone on file — their `phones` is the empty set, which is a value, not NULL. Carol has two phone numbers — her `phones` is a set of two tuples.
 
+### Unnest: `<:`
+
+`<:` is the inverse of nest join — it flattens a relation-valued attribute back into flat tuples. Each nested tuple is merged with its parent row (minus the RVA attribute). Tuples with empty RVAs are dropped.
+
+```
+E *: Phone > phones <: phones
+```
+
+| Step | What happens |
+|------|-------------|
+| `E` | 5 tuples |
+| `*: Phone > phones` | Nest matching Phone tuples into `phones` |
+| `<: phones` | Flatten `phones` back into flat tuples; drop empty |
+
+Result: same shape as `E * Phone` — 3 tuples (Alice×1 phone, Carol×2 phones).
+
+| emp_id | name  | salary | dept_id | role     | phone    |
+|--------|-------|--------|---------|----------|----------|
+| 1      | Alice | 80000  | 10      | engineer | 555-1234 |
+| 3      | Carol | 55000  | 20      | engineer | 555-5678 |
+| 3      | Carol | 55000  | 20      | engineer | 555-9999 |
+
 ### Extend: `+`
 
 `+` adds computed attributes to each tuple.
@@ -478,6 +500,90 @@ Result:
 
 ---
 
+## Equivalences
+
+Operators overlap by design — the same result can often be expressed multiple ways. These equivalences show how operators relate to each other.
+
+### Join = nest join + unnest
+
+```
+E * Phone
+≡
+E *: Phone > phones <: phones
+```
+
+Nest join keeps every tuple (unmatched rows get an empty set), then unnest drops the empty-set rows and flattens — exactly what natural join does.
+
+### Negated filter = difference with self
+
+```
+E ?! role = "engineer"
+≡
+E - (E ? role = "engineer")
+```
+
+The negated filter keeps everything that doesn't match, which is the same as subtracting the matching tuples.
+
+### Intersect via double difference
+
+```
+A & (B)
+≡
+A - (A - (B))
+```
+
+Remove everything not in B.
+
+### Chained filters = AND
+
+```
+E ? dept_id = 10 ? salary > 70000
+≡
+E ? (dept_id = 10 & salary > 70000)
+```
+
+### Chained negated filters = NOR
+
+```
+E ?! dept_id = 10 ?! role = "engineer"
+≡
+E ?! (dept_id = 10 | role = "engineer")
+```
+
+Each `?!` removes matching tuples, so chaining removes tuples matching either condition — De Morgan's law: NOT c1 AND NOT c2 = NOT (c1 OR c2).
+
+### Intersect = join (when headings match)
+
+When two relations have identical attribute names, natural join on all attributes is just intersection — a tuple must appear on both sides.
+
+```
+(E # [name salary]) & (R # [name salary])
+≡
+(E # [name salary]) * (R # [name salary])
+```
+
+### Summarize = nest by + extend + project
+
+```
+E / dept_id [n: #.  avg: %. salary]
+≡
+E /: dept_id > team + [n: #. team  avg: %. team.salary] # [dept_id n avg]
+```
+
+Summarize is shorthand for: group into an RVA, compute aggregates over it, then project away the RVA. The `/:` form gives you the intermediate state to work with before collapsing.
+
+### Anti-semi-join via nest join
+
+"Employees without phones" — the nest join + count approach: nest the matching tuples, count them, keep only those with zero matches.
+
+```
+E # emp_id - (Phone # emp_id)
+≡
+E *: Phone > phones + n: #. phones ? n = 0 # emp_id
+```
+
+---
+
 ## Quick Reference
 
 ```
@@ -486,6 +592,7 @@ Result:
 #    project           E # name  /  E # [name salary]
 *    natural join      E * D
 *:   nest join         E *: Phone > phones
+<:   unnest            E *: Phone > phones <: phones
 @    rename            E @ [pay > salary]
 +    extend            E + bonus: salary * 0.1
 +:   modify            E +: salary: salary * 1.1

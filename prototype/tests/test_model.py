@@ -296,6 +296,51 @@ class TestRelation:
             for member in team:
                 assert "dept_id" not in member
 
+    def test_unnest(self) -> None:
+        e = self._employees()
+        p = self._phones()
+        nested = e.nest_join(p, "phones")
+        result = nested.unnest("phones")
+        # Only employees with phones survive: emp_id=1 (1 phone), emp_id=3 (2 phones)
+        assert len(result) == 3
+        assert "phones" not in result.attributes
+        assert "phone" in result.attributes
+        emp_ids = {t["emp_id"] for t in result}
+        assert emp_ids == {1, 3}
+
+    def test_unnest_empty_rvas_dropped(self) -> None:
+        # All RVAs empty -> empty result
+        r = Relation(
+            frozenset(
+                {
+                    Tuple_(
+                        a=1,
+                        nested=Relation(
+                            frozenset(), attributes=frozenset({"b"})
+                        ),
+                    ),
+                }
+            )
+        )
+        result = r.unnest("nested")
+        assert len(result) == 0
+
+    def test_unnest_multi_nested(self) -> None:
+        inner1 = Relation(frozenset({Tuple_(x=10), Tuple_(x=20)}))
+        inner2 = Relation(frozenset({Tuple_(x=30)}))
+        r = Relation(
+            frozenset(
+                {
+                    Tuple_(a=1, nested=inner1),
+                    Tuple_(a=2, nested=inner2),
+                }
+            )
+        )
+        result = r.unnest("nested")
+        assert len(result) == 3
+        vals = {(t["a"], t["x"]) for t in result}
+        assert vals == {(1, 10), (1, 20), (2, 30)}
+
     def test_sort(self) -> None:
         e = self._employees()
         projected = e.project(frozenset({"name", "salary"}))

@@ -22,7 +22,7 @@ Immutable, hashable wrapper around `dict[str, Value]`. Supports `project`, `exte
 
 ### Relation
 
-Immutable set of tuples backed by `frozenset[Tuple_]` — automatic deduplication enforces set semantics. Carries an `attributes: frozenset[str]` for empty relations. All 14 relational operations return new Relations.
+Immutable set of tuples backed by `frozenset[Tuple_]` — automatic deduplication enforces set semantics. Carries an `attributes: frozenset[str]` for empty relations. All 15 relational operations return new Relations.
 
 ### Value
 
@@ -34,7 +34,7 @@ Immutable set of tuples backed by `frozenset[Tuple_]` — automatic deduplicatio
 
 ## Lexer
 
-Hand-written single-pass lexer with two-character lookahead for digraph detection. Digraphs (`?!`, `*:`, `/.`, `/:`, `#.`, `+.`, `>.`, `<.`, `%.`, `:=`, `|=`, `-=`, `?=`, `!=`, `>=`, `<=`, `!~`, `::`, `+:`) are checked before single-character operators. Line comments start with `--`.
+Hand-written single-pass lexer with two-character lookahead for digraph detection. Digraphs (`?!`, `*:`, `<:`, `/.`, `/:`, `#.`, `+.`, `>.`, `<.`, `%.`, `:=`, `|=`, `-=`, `?=`, `!=`, `>=`, `<=`, `!~`, `::`, `+:`) are checked before single-character operators. Line comments start with `--`.
 
 50+ token types in the `TokenType` enum. Each `Token` carries type, value, line, and column.
 
@@ -68,10 +68,10 @@ For `*`, `*:`: the right operand is always a bare relation name (plus `> alias` 
 
 ## AST
 
-25 frozen dataclasses in two categories:
+26 frozen dataclasses in two categories:
 
 - **Expressions** (scalar values): `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `AttrRef`, `BinOp`, `SetLiteral`, `AggregateCall`, `SubqueryExpr`
-- **Relational expressions** (relations/arrays): `RelName`, `Filter`, `NegatedFilter`, `Project`, `NaturalJoin`, `NestJoin`, `Extend`, `Rename`, `Union`, `Difference`, `Intersect`, `Summarize`, `SummarizeAll`, `NestBy`, `Sort`, `Take`
+- **Relational expressions** (relations/arrays): `RelName`, `Filter`, `NegatedFilter`, `Project`, `NaturalJoin`, `NestJoin`, `Unnest`, `Extend`, `Rename`, `Union`, `Difference`, `Intersect`, `Summarize`, `SummarizeAll`, `NestBy`, `Sort`, `Take`
 
 Plus `Condition` types for filters: `Comparison`, `BoolCombination`.
 
@@ -99,7 +99,7 @@ For `/:` (nest by) + `+` (extend) chains like `E /: dept_id > team + [top: >. te
 
 ### Implemented
 
-`?`, `?!`, `#`, `*`, `*:`, `@`, `+`, `-`, `|`, `&`, `/`, `/.`, `/:`, `$`, `^`, chained `?` (AND), `|`/`&` inside filter parens (OR/AND), bracket elision, set literals, aggregate functions (`#.`, `+.`, `>.`, `<.`, `%.`), REPL with sample data, `eval` CLI command.
+`?`, `?!`, `#`, `*`, `*:`, `<:`, `@`, `+`, `-`, `|`, `&`, `/`, `/.`, `/:`, `$`, `^`, chained `?` (AND), `|`/`&` inside filter parens (OR/AND), bracket elision, set literals, aggregate functions (`#.`, `+.`, `>.`, `<.`, `%.`), REPL with sample data, `eval` CLI command.
 
 ### Deferred
 
@@ -107,16 +107,16 @@ For `/:` (nest by) + `+` (extend) chains like `E /: dept_id > team + [top: >. te
 
 ## Testing
 
-171 tests across 6 files:
+181 tests across 6 files:
 
 | File | Tests | Scope |
 |------|-------|-------|
-| test_model.py | 38 | Tuple_ and Relation operations |
-| test_lexer.py | 42 | Tokenization, digraphs, literals, errors |
-| test_parser.py | 34 | AST construction for all operator types |
-| test_executor.py | 22 | Execution of individual operators |
+| test_model.py | 41 | Tuple_ and Relation operations |
+| test_lexer.py | 44 | Tokenization, digraphs, literals, errors |
+| test_parser.py | 36 | AST construction for all operator types |
+| test_executor.py | 23 | Execution of individual operators |
 | test_aggregates.py | 9 | Aggregate function implementations |
-| test_integration.py | 26 | End-to-end: parse + execute examples from algebra.md |
+| test_integration.py | 28 | End-to-end: parse + execute examples from algebra.md |
 
 ## Usage
 

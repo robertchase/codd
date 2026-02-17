@@ -119,6 +119,22 @@ class TestJoin:
         assert result.nest_name == "phones"
 
 
+class TestUnnest:
+    """Test unnest parsing."""
+
+    def test_simple_unnest(self) -> None:
+        result = parse("E <: phones")
+        assert isinstance(result, ast.Unnest)
+        assert isinstance(result.source, ast.RelName)
+        assert result.nest_attr == "phones"
+
+    def test_unnest_after_nest_join(self) -> None:
+        result = parse("E *: Phone > phones <: phones")
+        assert isinstance(result, ast.Unnest)
+        assert result.nest_attr == "phones"
+        assert isinstance(result.source, ast.NestJoin)
+
+
 class TestExtend:
     """Test extend parsing."""
 

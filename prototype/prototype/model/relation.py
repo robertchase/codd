@@ -210,6 +210,31 @@ class Relation:
             result.add(key_tuple.extend({nest_name: nested}))
         return Relation(frozenset(result), attributes=result_attrs)
 
+    def unnest(self, nest_attr: str) -> Relation:
+        """Unnest: flatten a relation-valued attribute (<:).
+
+        For each tuple, expand the RVA into individual tuples merged
+        with the parent (minus the RVA attribute). Tuples with empty
+        RVAs are dropped.
+        """
+        result: set[Tuple_] = set()
+        result_attrs: frozenset[str] | None = None
+        parent_attrs = self._attributes - {nest_attr}
+        for t in self._tuples:
+            rva = t[nest_attr]
+            if not isinstance(rva, Relation):
+                raise ValueError(f"{nest_attr} is not a relation-valued attribute")
+            if len(rva) == 0:
+                continue
+            if result_attrs is None:
+                result_attrs = parent_attrs | rva.attributes
+            parent = t.project(parent_attrs)
+            for nested in rva:
+                result.add(parent.merge(nested))
+        if result_attrs is None:
+            result_attrs = parent_attrs
+        return Relation(frozenset(result), attributes=result_attrs)
+
     def sort(self, key_fn: Callable[[Tuple_], object]) -> list[Tuple_]:
         """Sort: order the tuples, returning a list ($).
 

@@ -37,6 +37,7 @@ class TokenType(Enum):
     # Digraph operators
     QUESTION_BANG = auto()  # ?!  negated filter
     STAR_COLON = auto()     # *:  nest join
+    LT_COLON = auto()       # <:  unnest
     SLASH_DOT = auto()      # /.  summarize all
     SLASH_COLON = auto()    # /:  nest by
     PLUS_COLON = auto()     # +:  modify

@@ -152,6 +152,20 @@ class TestJoin:
                 assert len(t["phones"]) == 0
 
 
+class TestUnnest:
+    """Test <: (unnest)."""
+
+    def test_nest_then_unnest(self) -> None:
+        result = run("E *: Phone > phones <: phones")
+        assert isinstance(result, Relation)
+        # Alice has 1 phone, Carol has 2 -> 3 tuples
+        assert len(result) == 3
+        assert "phone" in result.attributes
+        assert "phones" not in result.attributes
+        names = {t["name"] for t in result}
+        assert names == {"Alice", "Carol"}
+
+
 class TestExtend:
     """Test + (extend)."""
 

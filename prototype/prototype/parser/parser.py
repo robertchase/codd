@@ -107,6 +107,8 @@ class Parser:
                 left = self._parse_natural_join(left)
             elif tok.type == TokenType.STAR_COLON:
                 left = self._parse_nest_join(left)
+            elif tok.type == TokenType.LT_COLON:
+                left = self._parse_unnest(left)
             elif tok.type == TokenType.PLUS:
                 left = self._parse_extend(left)
             elif tok.type == TokenType.AT:
@@ -164,6 +166,12 @@ class Parser:
         self._expect(TokenType.GT)
         name_tok = self._expect(TokenType.IDENT)
         return ast.NestJoin(source=source, right=right, nest_name=name_tok.value)
+
+    def _parse_unnest(self, source: ast.RelExpr) -> ast.Unnest:
+        """Parse: <: attr_name."""
+        self._advance()  # consume <:
+        name_tok = self._expect(TokenType.IDENT)
+        return ast.Unnest(source=source, nest_attr=name_tok.value)
 
     def _parse_extend(self, source: ast.RelExpr) -> ast.Extend:
         """Parse: + name: expr or + [name1: expr1  name2: expr2]."""

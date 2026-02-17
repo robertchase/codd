@@ -107,6 +107,7 @@ codd> E # [name salary] $ salary- ^ 3
 #    project           E # name  or  E # [name salary]
 *    natural join      E * D
 *:   nest join         E *: Phone > phones
+<:   unnest            E *: Phone > phones <: phones
 @    rename            E @ [pay > salary]
 +    extend            E + bonus: salary * 0.1
 -    difference        A - (B)

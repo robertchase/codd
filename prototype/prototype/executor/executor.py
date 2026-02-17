@@ -46,6 +46,8 @@ class Executor:
             return self._eval_natural_join(node)
         if isinstance(node, ast.NestJoin):
             return self._eval_nest_join(node)
+        if isinstance(node, ast.Unnest):
+            return self._eval_unnest(node)
         if isinstance(node, ast.Extend):
             return self._eval_extend(node)
         if isinstance(node, ast.Rename):
@@ -112,6 +114,11 @@ class Executor:
         left = self._as_relation(node.source)
         right = self._as_relation(node.right)
         return left.nest_join(right, node.nest_name)
+
+    def _eval_unnest(self, node: ast.Unnest) -> Relation:
+        """Evaluate: source <: nest_attr."""
+        source = self._as_relation(node.source)
+        return source.unnest(node.nest_attr)
 
     def _eval_extend(self, node: ast.Extend) -> Relation:
         """Evaluate: source + computations."""

@@ -182,6 +182,14 @@ class NestJoin:
 
 
 @dataclass(frozen=True)
+class Unnest:
+    """Unnest: <: attr_name — flatten a relation-valued attribute."""
+
+    source: RelExpr
+    nest_attr: str
+
+
+@dataclass(frozen=True)
 class NamedExpr:
     """A named computed expression: name: expr."""
 
@@ -297,6 +305,7 @@ RelExpr = (
     | Project
     | NaturalJoin
     | NestJoin
+    | Unnest
     | Extend
     | Rename
     | Union

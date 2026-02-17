@@ -125,6 +125,29 @@ class TestJoinExamples:
                 assert len(phones) == 0
 
 
+class TestUnnestExamples:
+    """Test unnest examples from algebra.md."""
+
+    def test_nest_then_unnest_roundtrip(self) -> None:
+        """E *: Phone > phones <: phones -> same shape as E * Phone."""
+        unnested = run("E *: Phone > phones <: phones")
+        joined = run("E * Phone")
+        assert isinstance(unnested, Relation)
+        assert isinstance(joined, Relation)
+        assert len(unnested) == len(joined)
+        assert unnested.attributes == joined.attributes
+        assert unnested == joined
+
+    def test_unnest_drops_empty_rvas(self) -> None:
+        """Unnest drops tuples with empty RVAs (no phones)."""
+        result = run("E *: Phone > phones <: phones")
+        assert isinstance(result, Relation)
+        # Only Alice (1 phone) and Carol (2 phones) survive
+        names = {t["name"] for t in result}
+        assert names == {"Alice", "Carol"}
+        assert len(result) == 3
+
+
 class TestExtendExamples:
     """Test extend examples from algebra.md."""
 
