@@ -132,12 +132,14 @@ Whitespace-delimited (`ws`) handles command output like `ps aux`, `df -h`, `ls -
 
 Scan all values per column and infer:
 
-| Priority | Type   | Rule |
-|----------|--------|------|
-| 1        | `int`  | All non-empty values match `^-?[0-9]+$` |
-| 2        | `float`| All non-empty values match `^-?[0-9]*\.[0-9]+$` |
-| 3        | `bool` | All non-empty values are `true`/`false` (case-insensitive) |
-| 4        | `str`  | Fallback |
+| Priority | Type      | Rule |
+|----------|-----------|------|
+| 1        | `int`     | All non-empty values match `^-?[0-9]+$` |
+| 2        | `Decimal` | All non-empty values parse as decimal numbers (but not all int) |
+| 3        | `bool`    | All non-empty values are `true`/`false` (case-insensitive) |
+| 4        | `str`     | Fallback |
+
+`Decimal` (Python's `decimal.Decimal`) is used instead of `float` to avoid IEEE 754 rounding errors. This matters for financial data — `Decimal("9.19") + Decimal("11.07")` is exactly `20.26`, not `20.259999999999998`. String values in mixed-type columns are also promoted to `Decimal` (rather than `float`) during aggregation and arithmetic.
 
 This requires a full scan of the data before building relations. Fine for the file sizes this tool targets.
 
@@ -261,7 +263,7 @@ Default: `table` when stdout is a TTY, `csv` when piped.
 ### This design
 
 - CSV, TSV, JSON, whitespace-delimited loading
-- Type inference (int, float, bool, str)
+- Type inference (int, Decimal, bool, str)
 - Missing-value decomposition with `--key`
 - Key inference heuristics
 - Optional column grouping
