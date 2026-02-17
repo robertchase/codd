@@ -139,20 +139,31 @@ class Relation:
         result = frozenset(t.rename(mapping) for t in self._tuples)
         return Relation(result, attributes=new_attrs)
 
+    def _check_same_heading(self, other: Relation, op: str) -> None:
+        """Raise ValueError if two relations have different attributes."""
+        if self._attributes != other._attributes:
+            raise ValueError(
+                f"{op} requires matching attributes: "
+                f"{sorted(self._attributes)} vs {sorted(other._attributes)}"
+            )
+
     def union(self, other: Relation) -> Relation:
         """Union: tuples in either relation (|)."""
+        self._check_same_heading(other, "union")
         return Relation(
             self._tuples | other._tuples, attributes=self._attributes
         )
 
     def difference(self, other: Relation) -> Relation:
         """Difference: tuples in self but not in other (-)."""
+        self._check_same_heading(other, "difference")
         return Relation(
             self._tuples - other._tuples, attributes=self._attributes
         )
 
     def intersect(self, other: Relation) -> Relation:
         """Intersect: tuples in both relations (&)."""
+        self._check_same_heading(other, "intersect")
         return Relation(
             self._tuples & other._tuples, attributes=self._attributes
         )

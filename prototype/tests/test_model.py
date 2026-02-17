@@ -1,5 +1,7 @@
 """Tests for the data model: Tuple_ and Relation."""
 
+import pytest
+
 from prototype.model.types import Tuple_
 from prototype.model.relation import Relation
 
@@ -249,6 +251,24 @@ class TestRelation:
         result = e_ids.intersect(p_ids)
         ids = {t["emp_id"] for t in result}
         assert ids == {1, 3}
+
+    def test_union_heading_mismatch(self) -> None:
+        r1 = Relation(frozenset({Tuple_(a=1)}))
+        r2 = Relation(frozenset({Tuple_(b=2)}))
+        with pytest.raises(ValueError, match="union requires matching attributes"):
+            r1.union(r2)
+
+    def test_difference_heading_mismatch(self) -> None:
+        e = self._employees()
+        joined = e.natural_join(self._phones())
+        with pytest.raises(ValueError, match="difference requires matching attributes"):
+            e.difference(joined)
+
+    def test_intersect_heading_mismatch(self) -> None:
+        r1 = Relation(frozenset({Tuple_(a=1)}))
+        r2 = Relation(frozenset({Tuple_(a=1, b=2)}))
+        with pytest.raises(ValueError, match="intersect requires matching attributes"):
+            r1.intersect(r2)
 
     def test_summarize(self) -> None:
         e = self._employees()
