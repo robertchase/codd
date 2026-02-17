@@ -2,7 +2,29 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
+
 from prototype.model.relation import Relation
+from prototype.model.types import Value
+
+
+def _promote_numeric(val: Value) -> Value:
+    """Promote a string to int or Decimal if possible."""
+    if not isinstance(val, str):
+        return val
+    try:
+        return int(val)
+    except ValueError:
+        pass
+    try:
+        return Decimal(val)
+    except InvalidOperation:
+        return val
+
+
+def _extract_values(rel: Relation, attr: str) -> list[Value]:
+    """Extract and promote values for an attribute across all tuples."""
+    return [_promote_numeric(t[attr]) for t in rel]
 
 
 def agg_count(rel: Relation, attr: str | None = None) -> int:
@@ -14,21 +36,24 @@ def agg_sum(rel: Relation, attr: str | None = None) -> int | float:
     """Sum an attribute across tuples (+.)."""
     if attr is None:
         raise ValueError("+. requires an attribute name")
-    return sum(t[attr] for t in rel)
+    values = _extract_values(rel, attr)
+    return sum(values)
 
 
 def agg_max(rel: Relation, attr: str | None = None) -> int | float | str:
     """Max of an attribute across tuples (>.)."""
     if attr is None:
         raise ValueError(">. requires an attribute name")
-    return max(t[attr] for t in rel)
+    values = _extract_values(rel, attr)
+    return max(values)
 
 
 def agg_min(rel: Relation, attr: str | None = None) -> int | float | str:
     """Min of an attribute across tuples (<.)."""
     if attr is None:
         raise ValueError("<. requires an attribute name")
-    return min(t[attr] for t in rel)
+    values = _extract_values(rel, attr)
+    return min(values)
 
 
 def agg_mean(rel: Relation, attr: str | None = None) -> int | float:
@@ -39,7 +64,7 @@ def agg_mean(rel: Relation, attr: str | None = None) -> int | float:
     """
     if attr is None:
         raise ValueError("%. requires an attribute name")
-    values = [t[attr] for t in rel]
+    values = _extract_values(rel, attr)
     total = sum(values)
     count = len(values)
     if count == 0:
@@ -50,6 +75,7 @@ def agg_mean(rel: Relation, attr: str | None = None) -> int | float:
 
 
 AGGREGATE_FUNCTIONS: dict[str, type] = {}
+
 
 def get_aggregate(func_name: str):
     """Return the aggregate function for the given name."""

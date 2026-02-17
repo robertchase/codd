@@ -200,6 +200,22 @@ class TestSummarize:
         assert result.aggregates[1].func == "%."
         assert result.aggregates[1].attr == "salary"
 
+    def test_single_aggregate_no_brackets(self) -> None:
+        result = parse("E / dept_id total: +. salary")
+        assert isinstance(result, ast.Summarize)
+        assert result.group_attrs == ("dept_id",)
+        assert len(result.aggregates) == 1
+        assert result.aggregates[0].name == "total"
+        assert result.aggregates[0].func == "+."
+        assert result.aggregates[0].attr == "salary"
+
+    def test_summarize_all_no_brackets(self) -> None:
+        result = parse("E /. n: #.")
+        assert isinstance(result, ast.SummarizeAll)
+        assert len(result.aggregates) == 1
+        assert result.aggregates[0].name == "n"
+        assert result.aggregates[0].func == "#."
+
     def test_summarize_all(self) -> None:
         result = parse("E /. [n: #.  total: +. salary]")
         assert isinstance(result, ast.SummarizeAll)
@@ -261,6 +277,35 @@ class TestComplexExpressions:
         assert comp.name == "top"
         assert isinstance(comp.expr, ast.AggregateCall)
         assert comp.expr.func == ">."
+
+
+class TestAssignment:
+    """Test := assignment parsing."""
+
+    def test_simple_assignment(self) -> None:
+        result = parse("high := E ? salary > 70000")
+        assert isinstance(result, ast.Assignment)
+        assert result.name == "high"
+        assert isinstance(result.expr, ast.Filter)
+
+    def test_assignment_with_chain(self) -> None:
+        result = parse("names := E # name")
+        assert isinstance(result, ast.Assignment)
+        assert result.name == "names"
+        assert isinstance(result.expr, ast.Project)
+
+    def test_assignment_bare_relation(self) -> None:
+        result = parse("copy := E")
+        assert isinstance(result, ast.Assignment)
+        assert result.name == "copy"
+        assert isinstance(result.expr, ast.RelName)
+        assert result.expr.name == "E"
+
+    def test_assignment_complex_chain(self) -> None:
+        result = parse("top3 := E # [name salary] $ salary- ^ 3")
+        assert isinstance(result, ast.Assignment)
+        assert result.name == "top3"
+        assert isinstance(result.expr, ast.Take)
 
 
 class TestErrors:

@@ -318,3 +318,14 @@ RelExpr = (
     | Sort
     | Take
 )
+
+
+# --- Top-level statements ---
+
+
+@dataclass(frozen=True)
+class Assignment:
+    """Assignment: name := expr."""
+
+    name: str
+    expr: RelExpr

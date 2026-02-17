@@ -9,6 +9,7 @@ from prototype.executor.environment import Environment
 from prototype.executor.executor import Executor, ExecutionError
 from prototype.lexer.lexer import Lexer, LexError
 from prototype.model.relation import Relation
+from prototype.parser import ast_nodes as ast
 from prototype.parser.parser import Parser, ParseError
 from prototype.repl.formatter import format_array, format_relation
 
@@ -43,6 +44,8 @@ def run_repl(env: Environment | None = None) -> None:
             tree = Parser(tokens).parse()
             result = executor.execute(tree)
 
+            if isinstance(tree, ast.Assignment):
+                print(f"{tree.name} := ", end="")
             if isinstance(result, list):
                 print(format_array(result))
             elif isinstance(result, Relation):

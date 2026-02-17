@@ -33,14 +33,34 @@ class Parser:
         self._tokens = tokens
         self._pos = 0
 
-    def parse(self) -> ast.RelExpr:
-        """Parse the token stream into an AST."""
+    def parse(self) -> ast.RelExpr | ast.Assignment:
+        """Parse the token stream into an AST.
+
+        Checks for assignment (IDENT := expr) before parsing as expression.
+        """
+        if (
+            self._peek().type == TokenType.IDENT
+            and self._peek(1).type == TokenType.COLON_EQ
+        ):
+            return self._parse_assignment()
+
         result = self._parse_expr()
         if self._peek().type != TokenType.EOF:
             raise ParseError(
                 f"Unexpected token {self._peek().value!r}", self._peek()
             )
         return result
+
+    def _parse_assignment(self) -> ast.Assignment:
+        """Parse: name := expr."""
+        name_tok = self._advance()  # consume IDENT
+        self._advance()  # consume :=
+        expr = self._parse_expr()
+        if self._peek().type != TokenType.EOF:
+            raise ParseError(
+                f"Unexpected token {self._peek().value!r}", self._peek()
+            )
+        return ast.Assignment(name=name_tok.value, expr=expr)
 
     # --- Token navigation ---
 
@@ -328,14 +348,17 @@ class Parser:
         return ast.NamedExpr(name=name_tok.value, expr=expr)
 
     def _parse_aggregate_list(self) -> list[ast.NamedAggregate]:
-        """Parse: [name1: agg_func  name2: agg_func attr]."""
-        self._expect(TokenType.LBRACKET)
-        aggregates: list[ast.NamedAggregate] = []
-        while self._peek().type != TokenType.RBRACKET:
-            agg = self._parse_named_aggregate()
-            aggregates.append(agg)
-        self._expect(TokenType.RBRACKET)
-        return aggregates
+        """Parse: name: agg_func [attr] or [name1: agg_func  name2: agg_func attr]."""
+        if self._peek().type == TokenType.LBRACKET:
+            self._advance()
+            aggregates: list[ast.NamedAggregate] = []
+            while self._peek().type != TokenType.RBRACKET:
+                agg = self._parse_named_aggregate()
+                aggregates.append(agg)
+            self._expect(TokenType.RBRACKET)
+            return aggregates
+        else:
+            return [self._parse_named_aggregate()]
 
     def _parse_named_aggregate(self) -> ast.NamedAggregate:
         """Parse: name: agg_func [attr].

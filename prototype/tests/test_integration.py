@@ -3,6 +3,10 @@
 Each test verifies the full pipeline: lex -> parse -> execute -> check results.
 """
 
+import io
+import tempfile
+
+from prototype.data.loader import load_csv
 from prototype.data.sample import load_sample_data
 from prototype.executor.environment import Environment
 from prototype.executor.executor import Executor
@@ -345,3 +349,109 @@ class TestComplexChains:
         assert len(result) == 1
         t = next(iter(result))
         assert t["avg_size"] == 2  # (3+2)//2 = 2 (integer floor division)
+
+
+class TestCsvLoading:
+    """Test loading CSV files and querying them."""
+
+    def test_load_and_filter(self) -> None:
+        """Load a CSV, filter it, verify results."""
+        csv_data = "name,age,city\nAlice,30,NYC\nBob,25,LA\nCarol,35,NYC\n"
+        env = Environment()
+        rel = load_csv(io.StringIO(csv_data), "people")
+        env.bind("people", rel)
+
+        tokens = Lexer("people ? age > 28").tokenize()
+        tree = Parser(tokens).parse()
+        result = Executor(env).execute(tree)
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        names = {t["name"] for t in result}
+        assert names == {"Alice", "Carol"}
+
+    def test_load_and_project(self) -> None:
+        """Load CSV, project columns."""
+        csv_data = "id,name,score\n1,Alice,95.5\n2,Bob,87.0\n"
+        env = Environment()
+        rel = load_csv(io.StringIO(csv_data), "students")
+        env.bind("students", rel)
+
+        tokens = Lexer("students # [name score]").tokenize()
+        tree = Parser(tokens).parse()
+        result = Executor(env).execute(tree)
+        assert result.attributes == frozenset({"name", "score"})
+        for t in result:
+            assert isinstance(t["score"], float)
+
+    def test_load_and_join(self) -> None:
+        """Load two CSVs, join them."""
+        emp_csv = "emp_id,name,dept_id\n1,Alice,10\n2,Bob,20\n"
+        dept_csv = "dept_id,dept_name\n10,Engineering\n20,Sales\n"
+        env = Environment()
+        env.bind("emp", load_csv(io.StringIO(emp_csv), "emp"))
+        env.bind("dept", load_csv(io.StringIO(dept_csv), "dept"))
+
+        tokens = Lexer("emp * dept").tokenize()
+        tree = Parser(tokens).parse()
+        result = Executor(env).execute(tree)
+        assert len(result) == 2
+        assert "dept_name" in result.attributes
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["dept_name"] == "Engineering"
+
+    def test_load_file_from_disk(self) -> None:
+        """Write a CSV to a temp file, load it, query it."""
+        csv_content = "product,price\nApple,1.50\nBanana,0.75\nCherry,2.00\n"
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False
+        ) as f:
+            f.write(csv_content)
+            f.flush()
+            path = f.name
+
+        env = Environment()
+        with open(path) as fh:
+            rel = load_csv(fh, "products")
+        env.bind("products", rel)
+
+        tokens = Lexer("products ? price > 1.0").tokenize()
+        tree = Parser(tokens).parse()
+        result = Executor(env).execute(tree)
+        assert len(result) == 2
+        names = {t["product"] for t in result}
+        assert names == {"Apple", "Cherry"}
+
+
+class TestAssignmentIntegration:
+    """Test := assignment in full pipeline."""
+
+    def test_assign_and_reuse(self) -> None:
+        """Assign a filtered relation, then query it."""
+        env = _env()
+        tokens = Lexer("high := E ? salary > 70000").tokenize()
+        tree = Parser(tokens).parse()
+        Executor(env).execute(tree)
+
+        tokens2 = Lexer("high # name").tokenize()
+        tree2 = Parser(tokens2).parse()
+        result = Executor(env).execute(tree2)
+        assert isinstance(result, Relation)
+        names = {t["name"] for t in result}
+        assert names == {"Alice", "Dave"}
+
+    def test_assign_with_csv_data(self) -> None:
+        """Load CSV, assign a derived relation, query it."""
+        csv_data = "name,age\nAlice,30\nBob,25\nCarol,35\n"
+        env = Environment()
+        env.bind("people", load_csv(io.StringIO(csv_data), "people"))
+
+        tokens = Lexer("seniors := people ? age >= 30").tokenize()
+        tree = Parser(tokens).parse()
+        Executor(env).execute(tree)
+
+        tokens2 = Lexer("seniors # name").tokenize()
+        tree2 = Parser(tokens2).parse()
+        result = Executor(env).execute(tree2)
+        names = {t["name"] for t in result}
+        assert names == {"Alice", "Carol"}

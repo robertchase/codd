@@ -1,7 +1,9 @@
 """Tests for the executor."""
 
+import pytest
+
 from prototype.executor.environment import Environment
-from prototype.executor.executor import Executor
+from prototype.executor.executor import Executor, ExecutionError
 from prototype.lexer.lexer import Lexer
 from prototype.model.relation import Relation
 from prototype.model.types import Tuple_
@@ -263,6 +265,188 @@ class TestSort:
         assert len(result) == 3
         names = [t["name"] for t in result]
         assert names == ["Dave", "Alice", "Bob"]
+
+
+class TestAssignment:
+    """Test := (assignment)."""
+
+    def test_simple_assignment(self) -> None:
+        env = _make_env()
+        result = run("high := E ? salary > 70000", env)
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        # Verify it was bound in the environment
+        assert "high" in env
+        assert env.lookup("high") == result
+
+    def test_assignment_then_use(self) -> None:
+        env = _make_env()
+        run("eng := E ? dept_id = 10", env)
+        result = run("eng # name", env)
+        assert isinstance(result, Relation)
+        names = {t["name"] for t in result}
+        assert names == {"Alice", "Bob", "Dave"}
+
+    def test_assignment_overwrites(self) -> None:
+        env = _make_env()
+        run("x := E ? salary > 80000", env)
+        assert len(env.lookup("x")) == 1
+        run("x := E ? salary > 50000", env)
+        assert len(env.lookup("x")) == 4
+
+
+class TestNumericPromotion:
+    """Test string-to-number promotion in arithmetic and comparisons."""
+
+    def _make_mixed_env(self) -> Environment:
+        """Create env with a relation where 'val' is str (mixed source)."""
+        env = Environment()
+        # Simulates a CSV column inferred as str due to mixed values,
+        # then filtered down to numeric-only rows.
+        env.bind(
+            "data",
+            Relation(
+                frozenset(
+                    {
+                        Tuple_(name="a", val="10"),
+                        Tuple_(name="b", val="20"),
+                        Tuple_(name="c", val="30"),
+                    }
+                )
+            ),
+        )
+        return env
+
+    def test_arithmetic_on_str_values(self) -> None:
+        """Extend with arithmetic on string values that are numeric."""
+        env = self._make_mixed_env()
+        result = run("data + doubled: val * 2", env)
+        assert isinstance(result, Relation)
+        for t in result:
+            assert isinstance(t["doubled"], int)
+            assert t["doubled"] == int(t["val"]) * 2
+
+    def test_comparison_str_vs_int_literal(self) -> None:
+        """Filter with numeric comparison on string-typed column."""
+        env = self._make_mixed_env()
+        result = run("data ? val > 15", env)
+        assert isinstance(result, Relation)
+        names = {t["name"] for t in result}
+        assert names == {"b", "c"}
+
+    def test_comparison_str_vs_float_literal(self) -> None:
+        """Filter with float comparison on string-typed column."""
+        env = Environment()
+        env.bind(
+            "data",
+            Relation(
+                frozenset(
+                    {
+                        Tuple_(name="a", val="1.5"),
+                        Tuple_(name="b", val="2.5"),
+                    }
+                )
+            ),
+        )
+        result = run("data ? val > 2.0", env)
+        names = {t["name"] for t in result}
+        assert names == {"b"}
+
+    def test_promotion_non_numeric_stays_str(self) -> None:
+        """Non-numeric strings are not promoted — arithmetic fails clearly."""
+        env = Environment()
+        env.bind(
+            "data",
+            Relation(frozenset({Tuple_(name="a", val="hello")})),
+        )
+        with pytest.raises(ExecutionError):
+            run("data + doubled: val * 2", env)
+
+    def test_filter_then_arithmetic(self) -> None:
+        """The user's scenario: mixed column, filter to numeric, do math."""
+        env = Environment()
+        env.bind(
+            "data",
+            Relation(
+                frozenset(
+                    {
+                        Tuple_(kind="num", val="100"),
+                        Tuple_(kind="num", val="200"),
+                        Tuple_(kind="str", val="hello"),
+                    }
+                )
+            ),
+        )
+        # Filter to numeric rows, then do arithmetic
+        result = run('data ? kind = "num" + doubled: val * 2', env)
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        for t in result:
+            assert isinstance(t["doubled"], int)
+        vals = {t["doubled"] for t in result}
+        assert vals == {200, 400}
+
+    def test_aggregate_sum_on_str_values(self) -> None:
+        """Summarize +. on string-typed numeric column promotes values."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset(
+                    {
+                        Tuple_(amount="10.50", category="A", type="F"),
+                        Tuple_(amount="20.00", category="A", type="F"),
+                        Tuple_(amount="5.00", category="B", type="F"),
+                        Tuple_(amount="not-a-number", category="X", type="X"),
+                    }
+                )
+            ),
+        )
+        result = run(
+            'R ? type = "F" / category amt: +. amount', env
+        )
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        for t in result:
+            if t["category"] == "A":
+                assert t["amt"] == 30.5
+            elif t["category"] == "B":
+                assert t["amt"] == 5.0
+
+    def test_aggregate_mean_on_str_values(self) -> None:
+        """Summarize %. on string-typed numeric column promotes values."""
+        env = Environment()
+        env.bind(
+            "data",
+            Relation(
+                frozenset(
+                    {
+                        Tuple_(val="10", grp="a"),
+                        Tuple_(val="20", grp="a"),
+                    }
+                )
+            ),
+        )
+        result = run("data / grp avg: %. val", env)
+        t = next(iter(result))
+        assert t["avg"] == 15
+
+    def test_aggregate_error_is_execution_error(self) -> None:
+        """TypeError from aggregates becomes ExecutionError, not a stack trace."""
+        env = Environment()
+        env.bind(
+            "data",
+            Relation(
+                frozenset(
+                    {
+                        Tuple_(val="hello", grp="a"),
+                        Tuple_(val="world", grp="a"),
+                    }
+                )
+            ),
+        )
+        with pytest.raises(ExecutionError):
+            run("data / grp total: +. val", env)
 
 
 class TestFilterAggregateLHS:

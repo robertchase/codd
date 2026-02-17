@@ -6,7 +6,9 @@ Uses isinstance dispatch (visitor-style without accept methods).
 
 from __future__ import annotations
 
-from prototype.executor.aggregates import get_aggregate
+from decimal import Decimal
+
+from prototype.executor.aggregates import _promote_numeric, get_aggregate
 from prototype.executor.environment import Environment
 from prototype.model.relation import Relation
 from prototype.model.types import Tuple_, Value
@@ -28,9 +30,33 @@ class Executor:
         """Return the environment."""
         return self._env
 
-    def execute(self, node: ast.RelExpr) -> Relation | list[Tuple_]:
-        """Execute a relational expression, returning a Relation or list (for Sort/Take)."""
-        return self._eval_rel(node)
+    def execute(
+        self, node: ast.RelExpr | ast.Assignment
+    ) -> Relation | list[Tuple_]:
+        """Execute a relational expression or assignment.
+
+        For assignments, evaluates the expression, binds the result in the
+        environment, and returns the relation.
+        """
+        try:
+            if isinstance(node, ast.Assignment):
+                return self._eval_assignment(node)
+            return self._eval_rel(node)
+        except ExecutionError:
+            raise
+        except (TypeError, ValueError) as e:
+            raise ExecutionError(str(e)) from e
+
+    def _eval_assignment(self, node: ast.Assignment) -> Relation | list[Tuple_]:
+        """Evaluate an assignment: name := expr."""
+        result = self._eval_rel(node.expr)
+        if isinstance(result, Relation):
+            self._env.bind(node.name, result)
+        else:
+            raise ExecutionError(
+                "Cannot assign a sorted array to a name (sort produces a list, not a relation)"
+            )
+        return result
 
     def _eval_rel(self, node: ast.RelExpr) -> Relation | list[Tuple_]:
         """Evaluate a relational expression node."""
@@ -216,7 +242,7 @@ class Executor:
                 val = t[k.attr]
                 if k.descending:
                     # Negate for numeric types, reverse for strings
-                    if isinstance(val, (int, float)):
+                    if isinstance(val, (int, float, Decimal)):
                         parts.append(-val)
                     else:
                         # For strings, we use a wrapper that reverses comparison
@@ -274,14 +300,24 @@ class Executor:
         return val
 
     def _eval_binop(self, expr: ast.BinOp, t: Tuple_) -> Value:
-        """Evaluate a binary arithmetic operation."""
-        left = self._eval_expr(expr.left, t)
-        right = self._eval_expr(expr.right, t)
+        """Evaluate a binary arithmetic operation.
+
+        String values are promoted to numbers when possible.
+        """
+        left = _promote_numeric(self._eval_expr(expr.left, t))
+        right = _promote_numeric(self._eval_expr(expr.right, t))
+
+        if isinstance(left, str) or isinstance(right, str):
+            raise ExecutionError(
+                f"Cannot apply {expr.op} to {left!r} and {right!r}"
+                " (non-numeric string)"
+            )
+
         ops = {
             "+": lambda a, b: a + b,
             "-": lambda a, b: a - b,
             "*": lambda a, b: a * b,
-            "/": lambda a, b: a / b if isinstance(a, float) or isinstance(b, float) else a // b,
+            "/": lambda a, b: a / b if isinstance(a, (float, Decimal)) or isinstance(b, (float, Decimal)) else a // b,
         }
         if expr.op not in ops:
             raise ExecutionError(f"Unknown operator: {expr.op}")
@@ -462,6 +498,21 @@ class _ReverseKey:
         return self._val >= other._val
 
 
+def _coerce_pair(a: Value, b: Value) -> tuple[Value, Value]:
+    """Promote strings to match a numeric counterpart for comparison.
+
+    If one side is numeric and the other is a string, promote the string.
+    If both are strings, promote both (enables numeric comparison on str columns).
+    """
+    if isinstance(a, str) and isinstance(b, (int, float, Decimal)):
+        return _promote_numeric(a), b
+    if isinstance(b, str) and isinstance(a, (int, float, Decimal)):
+        return a, _promote_numeric(b)
+    if isinstance(a, str) and isinstance(b, str):
+        return _promote_numeric(a), _promote_numeric(b)
+    return a, b
+
+
 def _make_scalar_cmp(get_left, op: str, rval: Value):
     """Create a comparison predicate with a constant RHS."""
     cmp_ops = {
@@ -473,6 +524,14 @@ def _make_scalar_cmp(get_left, op: str, rval: Value):
         "<=": lambda a, b: a <= b,
     }
     fn = cmp_ops[op]
+
+    if isinstance(rval, (int, float, Decimal)):
+        # RHS is numeric — promote LHS strings for comparison
+        def pred(t: Tuple_) -> bool:
+            lval, rv = _coerce_pair(get_left(t), rval)
+            return fn(lval, rv)
+        return pred
+
     return lambda t: fn(get_left(t), rval)
 
 
@@ -487,4 +546,8 @@ def _make_dynamic_cmp(get_left, op: str, get_right):
         "<=": lambda a, b: a <= b,
     }
     fn = cmp_ops[op]
-    return lambda t: fn(get_left(t), get_right(t))
+
+    def pred(t: Tuple_) -> bool:
+        lval, rval = _coerce_pair(get_left(t), get_right(t))
+        return fn(lval, rval)
+    return pred
