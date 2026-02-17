@@ -108,12 +108,13 @@ Expr = (
 
 @dataclass(frozen=True)
 class Comparison:
-    """A comparison: attr op value.
+    """A comparison: left op value.
 
+    left can be an attribute reference or an aggregate call (e.g. #. phones).
     op is one of: =, !=, >, <, >=, <=
     """
 
-    left: AttrRef
+    left: AttrRef | AggregateCall
     op: str
     right: Expr
 

@@ -369,13 +369,19 @@ class Executor:
 
     def _compile_comparison(self, comp: ast.Comparison):
         """Compile a comparison into a predicate function."""
-        attr_parts = comp.left.parts
+        if isinstance(comp.left, ast.AggregateCall):
+            agg_node = comp.left
 
-        def get_left(t: Tuple_) -> Value:
-            val = t[attr_parts[0]]
-            for part in attr_parts[1:]:
-                val = val[part]
-            return val
+            def get_left(t: Tuple_) -> Value:
+                return self._eval_aggregate_call(agg_node, t)
+        else:
+            attr_parts = comp.left.parts
+
+            def get_left(t: Tuple_) -> Value:
+                val = t[attr_parts[0]]
+                for part in attr_parts[1:]:
+                    val = val[part]
+                return val
 
         right_expr = comp.right
         op = comp.op

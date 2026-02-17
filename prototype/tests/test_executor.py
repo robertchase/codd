@@ -263,3 +263,35 @@ class TestSort:
         assert len(result) == 3
         names = [t["name"] for t in result]
         assert names == ["Dave", "Alice", "Bob"]
+
+
+class TestFilterAggregateLHS:
+    """Test aggregate operators on the LHS of filter conditions."""
+
+    def test_count_eq(self) -> None:
+        """#. phones = 1 keeps employees with exactly one phone."""
+        result = run("E *: Phone > phones ? #. phones = 1")
+        assert isinstance(result, Relation)
+        names = {t["name"] for t in result}
+        assert names == {"Alice"}
+
+    def test_count_gt(self) -> None:
+        """#. phones > 1 keeps employees with more than one phone."""
+        result = run("E *: Phone > phones ? #. phones > 1")
+        assert isinstance(result, Relation)
+        names = {t["name"] for t in result}
+        assert names == {"Carol"}
+
+    def test_count_zero(self) -> None:
+        """#. phones = 0 keeps employees with no phones."""
+        result = run("E *: Phone > phones ? #. phones = 0")
+        assert isinstance(result, Relation)
+        names = {t["name"] for t in result}
+        assert names == {"Bob", "Dave", "Eve"}
+
+    def test_count_bool_combination(self) -> None:
+        """Boolean combination of aggregate conditions."""
+        result = run("E *: Phone > phones ? (#. phones >= 1 & #. phones <= 2)")
+        assert isinstance(result, Relation)
+        names = {t["name"] for t in result}
+        assert names == {"Alice", "Carol"}

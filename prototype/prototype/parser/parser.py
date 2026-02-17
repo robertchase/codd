@@ -414,8 +414,15 @@ class Parser:
         return left
 
     def _parse_comparison(self) -> ast.Comparison:
-        """Parse: attr op value."""
-        left = self._parse_attr_ref()
+        """Parse: attr op value, or aggregate op value."""
+        agg_types = {
+            TokenType.HASH_DOT, TokenType.PLUS_DOT,
+            TokenType.GT_DOT, TokenType.LT_DOT, TokenType.PERCENT_DOT,
+        }
+        if self._peek().type in agg_types:
+            left: ast.AttrRef | ast.AggregateCall = self._parse_aggregate_call()
+        else:
+            left = self._parse_attr_ref()
         comp_ops = {
             TokenType.EQ: "=",
             TokenType.BANG_EQ: "!=",
