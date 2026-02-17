@@ -1,6 +1,7 @@
 """Tests for CSV loading and type inference."""
 
 import io
+from decimal import Decimal
 
 from prototype.data.loader import coerce_row, infer_types, load_csv
 from prototype.model.relation import Relation
@@ -14,16 +15,16 @@ class TestInferTypes:
         types = infer_types(rows)
         assert types == {"age": int, "id": int}
 
-    def test_all_floats(self) -> None:
+    def test_all_decimals(self) -> None:
         rows = [{"score": "3.5"}, {"score": "4.2"}]
         types = infer_types(rows)
-        assert types == {"score": float}
+        assert types == {"score": Decimal}
 
-    def test_mixed_int_float(self) -> None:
-        """If some values are int and some are float, the column is float."""
+    def test_mixed_int_decimal(self) -> None:
+        """If some values are int and some are decimal, the column is Decimal."""
         rows = [{"val": "1"}, {"val": "2.5"}]
         types = infer_types(rows)
-        assert types == {"val": float}
+        assert types == {"val": Decimal}
 
     def test_all_bool(self) -> None:
         rows = [{"active": "true"}, {"active": "false"}, {"active": "True"}]
@@ -58,10 +59,10 @@ class TestInferTypes:
         types = infer_types(rows)
         assert types == {"val": int}
 
-    def test_negative_floats(self) -> None:
+    def test_negative_decimals(self) -> None:
         rows = [{"val": "-1.5"}, {"val": "2.0"}]
         types = infer_types(rows)
-        assert types == {"val": float}
+        assert types == {"val": Decimal}
 
     def test_empty_rows(self) -> None:
         types = infer_types([])
@@ -76,10 +77,10 @@ class TestCoerceRow:
         assert result == {"age": 30}
         assert isinstance(result["age"], int)
 
-    def test_float_coercion(self) -> None:
-        result = coerce_row({"score": "3.5"}, {"score": float})
-        assert result == {"score": 3.5}
-        assert isinstance(result["score"], float)
+    def test_decimal_coercion(self) -> None:
+        result = coerce_row({"score": "3.5"}, {"score": Decimal})
+        assert result == {"score": Decimal("3.5")}
+        assert isinstance(result["score"], Decimal)
 
     def test_bool_coercion(self) -> None:
         result = coerce_row({"active": "true"}, {"active": bool})
@@ -120,12 +121,12 @@ class TestLoadCsv:
             assert isinstance(t["active"], bool)
             assert isinstance(t["name"], str)
 
-    def test_float_column(self) -> None:
+    def test_decimal_column(self) -> None:
         csv_data = "item,price\nApple,1.50\nBanana,0.75\n"
         result = load_csv(io.StringIO(csv_data), "prices")
         assert len(result) == 2
         for t in result:
-            assert isinstance(t["price"], float)
+            assert isinstance(t["price"], Decimal)
 
     def test_empty_file(self) -> None:
         result = load_csv(io.StringIO(""), "empty")
@@ -159,9 +160,9 @@ class TestLoadCsv:
         result = load_csv(io.StringIO(csv_data), "people")
         assert result.attributes == frozenset({"name", "age"})
 
-    def test_mixed_int_float_column(self) -> None:
-        """Column with mix of int and float strings becomes float."""
+    def test_mixed_int_decimal_column(self) -> None:
+        """Column with mix of int and decimal strings becomes Decimal."""
         csv_data = "val\n1\n2.5\n3\n"
         result = load_csv(io.StringIO(csv_data), "data")
         vals = {t["val"] for t in result}
-        assert all(isinstance(v, float) for v in vals)
+        assert all(isinstance(v, Decimal) for v in vals)

@@ -5,6 +5,7 @@ Each test verifies the full pipeline: lex -> parse -> execute -> check results.
 
 import io
 import tempfile
+from decimal import Decimal
 
 from prototype.data.loader import load_csv
 from prototype.data.sample import load_sample_data
@@ -381,7 +382,7 @@ class TestCsvLoading:
         result = Executor(env).execute(tree)
         assert result.attributes == frozenset({"name", "score"})
         for t in result:
-            assert isinstance(t["score"], float)
+            assert isinstance(t["score"], Decimal)
 
     def test_load_and_join(self) -> None:
         """Load two CSVs, join them."""
