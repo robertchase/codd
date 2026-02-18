@@ -266,6 +266,18 @@ class TestSort:
         names = [t["name"] for t in result]
         assert names == ["Dave", "Alice", "Bob"]
 
+    def test_take_from_relation(self) -> None:
+        """Take N tuples directly from a relation (no sort required)."""
+        result = run("E ^ 3")
+        assert isinstance(result, list)
+        assert len(result) == 3
+
+    def test_take_from_relation_more_than_available(self) -> None:
+        """Taking more than available returns all tuples."""
+        result = run("E ^ 100")
+        assert isinstance(result, list)
+        assert len(result) == 5
+
 
 class TestAssignment:
     """Test := (assignment)."""

@@ -256,9 +256,11 @@ class Executor:
     def _eval_take(self, node: ast.Take) -> list[Tuple_]:
         """Evaluate: source ^ N."""
         source = self._eval_rel(node.source)
-        if not isinstance(source, list):
-            raise ExecutionError("^ (take) requires a sorted array (use $ first)")
-        return source[: node.count]
+        if isinstance(source, Relation):
+            return list(source)[: node.count]
+        if isinstance(source, list):
+            return source[: node.count]
+        raise ExecutionError("^ (take) requires a relation or sorted array")
 
     # --- Expression evaluation ---
 
