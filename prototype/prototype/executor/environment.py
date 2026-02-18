@@ -25,5 +25,18 @@ class Environment:
         """Return all bound relation names, sorted."""
         return sorted(self._bindings.keys())
 
+    def unbind(self, name: str) -> None:
+        """Remove a relation binding by name.
+
+        Raises KeyError if the name is not bound.
+        """
+        if name not in self._bindings:
+            raise KeyError(f"Unknown relation: {name!r}")
+        del self._bindings[name]
+
+    def all_bindings(self) -> dict[str, Relation]:
+        """Return a copy of all bindings."""
+        return dict(self._bindings)
+
     def __contains__(self, name: str) -> bool:
         return name in self._bindings
