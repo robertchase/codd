@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from prototype.model.relation import Relation
 from prototype.model.types import Tuple_
 
@@ -13,6 +15,12 @@ def format_value(value: object) -> str:
             return "{}"
         tuples_str = ", ".join(_format_tuple_inline(t) for t in value)
         return "{" + tuples_str + "}"
+    if isinstance(value, Decimal):
+        # Whole numbers display without decimals (5.00 -> 5).
+        # Fractional values preserve trailing zeros (11.40 stays 11.40).
+        if value == value.to_integral_value():
+            return str(int(value))
+        return str(value)
     if isinstance(value, str):
         return value
     return str(value)
