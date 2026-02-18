@@ -27,11 +27,18 @@ from prototype.repl.formatter import format_array, format_relation
 @click.option(
     "--sample", is_flag=True, default=False, help="Load sample data (E, D, Phone, ContractorPay)"
 )
+@click.option(
+    "--genkey",
+    is_flag=True,
+    default=False,
+    help="Generate synthetic {relation}_id key column for each loaded file.",
+)
 def eval_cmd(
     expression: str,
     files: tuple[str, ...],
     aliases: tuple[str, ...],
     sample: bool,
+    genkey: bool,
 ) -> None:
     """Evaluate a single expression and print the result.
 
@@ -48,6 +55,10 @@ def eval_cmd(
     if sample:
         load_sample_data(env)
 
+    def _genkey_for(name: str) -> str | None:
+        """Resolve the genkey name for a relation."""
+        return name if genkey else None
+
     # Load aliased files (- means stdin)
     for alias in aliases:
         if "=" not in alias:
@@ -57,23 +68,23 @@ def eval_cmd(
         path = path.strip()
         if path == "-":
             stdin_consumed = True
-            _load_stdin(env, name)
+            _load_stdin(env, name, genkey=_genkey_for(name))
         else:
-            _load_file(env, path, name)
+            _load_file(env, path, name, genkey=_genkey_for(name))
 
     # Load positional files (stem becomes name, - means stdin)
     for filepath in files:
         if filepath == "-":
             stdin_consumed = True
-            _load_stdin(env, "stdin")
+            _load_stdin(env, "stdin", genkey=_genkey_for("stdin"))
         else:
             p = pathlib.Path(filepath)
             name = p.stem
-            _load_file(env, filepath, name)
+            _load_file(env, filepath, name, genkey=_genkey_for(name))
 
     # Auto-load stdin if piped and not already consumed
     if not stdin_consumed and not sys.stdin.isatty():
-        _load_stdin(env, "stdin")
+        _load_stdin(env, "stdin", genkey=_genkey_for("stdin"))
 
     try:
         tokens = Lexer(expression).tokenize()
@@ -90,19 +101,21 @@ def eval_cmd(
         raise click.ClickException(str(e))
 
 
-def _load_file(env: Environment, filepath: str, name: str) -> None:
+def _load_file(
+    env: Environment, filepath: str, name: str, *, genkey: str | None = None
+) -> None:
     """Load a CSV file into the environment."""
     try:
         with open(filepath) as f:
-            rel = load_csv(f, name)
+            rel = load_csv(f, name, genkey=genkey)
         env.bind(name, rel)
     except OSError as e:
         raise click.ClickException(f"Cannot read {filepath}: {e}")
 
 
-def _load_stdin(env: Environment, name: str) -> None:
+def _load_stdin(env: Environment, name: str, *, genkey: str | None = None) -> None:
     """Load CSV data from stdin into the environment."""
     if sys.stdin.isatty():
         raise click.ClickException("stdin requested but no data piped")
-    rel = load_csv(sys.stdin, name)
+    rel = load_csv(sys.stdin, name, genkey=genkey)
     env.bind(name, rel)

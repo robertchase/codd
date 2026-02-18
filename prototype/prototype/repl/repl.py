@@ -5,7 +5,7 @@ from __future__ import annotations
 import readline  # noqa: F401 — import enables line editing and history for input()
 from pathlib import Path
 
-from prototype.data.loader import load_csv
+from prototype.data.loader import LoadError, load_csv
 from prototype.data.sample import load_sample_data
 from prototype.data.workspace import is_workspace_file, load_workspace, save_workspace
 from prototype.executor.environment import Environment
@@ -96,12 +96,19 @@ def _cmd_load(args: list[str], env: Environment) -> None:
         print("Loaded: E (Employee), D (Department), Phone, ContractorPay")
         return
 
-    # Parse --as=Name option.
+    # Parse options: --as=Name, --genkey, --genkey=Name.
     file_arg = None
     alias = None
+    genkey: str | None = None
+    genkey_seen = False
     for arg in args:
         if arg.startswith("--as="):
             alias = arg[len("--as="):]
+        elif arg == "--genkey":
+            genkey_seen = True
+        elif arg.startswith("--genkey="):
+            genkey_seen = True
+            genkey = arg[len("--genkey="):]
         elif file_arg is None:
             file_arg = arg
         else:
@@ -121,19 +128,32 @@ def _cmd_load(args: list[str], env: Environment) -> None:
         if alias:
             print("Error: --as cannot be used with workspace files")
             return
+        if genkey_seen:
+            print("Error: --genkey cannot be used with workspace files")
+            return
         _load_workspace_file(path, env)
     else:
-        _load_csv_file(path, env, alias)
+        # Resolve genkey name: explicit name, or derive from relation name.
+        if genkey_seen and genkey is None:
+            genkey = alias if alias else path.stem
+        _load_csv_file(path, env, alias, genkey)
 
 
-def _load_csv_file(path: Path, env: Environment, alias: str | None) -> None:
+def _load_csv_file(
+    path: Path,
+    env: Environment,
+    alias: str | None,
+    genkey: str | None = None,
+) -> None:
     """Load a CSV file into the environment."""
     name = alias if alias else path.stem
     try:
         with open(path) as f:
-            rel = load_csv(f, name)
+            rel = load_csv(f, name, genkey=genkey)
         env.bind(name, rel)
         print(f"Loaded {name}: {len(rel)} tuples, attrs: {sorted(rel.attributes)}")
+    except LoadError as e:
+        print(f"Error: {e}")
     except Exception as e:
         print(f"Error loading {path}: {e}")
 

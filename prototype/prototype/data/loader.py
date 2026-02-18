@@ -10,12 +10,24 @@ from prototype.model.relation import Relation
 from prototype.model.types import Tuple_, Value
 
 
-def load_csv(source: TextIO, name: str) -> Relation:
+class LoadError(Exception):
+    """Raised when data loading fails."""
+
+
+def load_csv(
+    source: TextIO,
+    name: str,
+    *,
+    genkey: str | None = None,
+) -> Relation:
     """Read CSV data from a text stream and return a Relation.
 
     The first row is treated as headers (attribute names).
     Type inference is applied per column: int > Decimal > bool > str.
     Empty strings remain as empty strings (no missing-value decomposition yet).
+
+    If *genkey* is provided, a synthetic key column named ``{genkey}_id``
+    is prepended with sequential integers starting at 1.
     """
     reader = csv.reader(source)
     try:
@@ -25,22 +37,35 @@ def load_csv(source: TextIO, name: str) -> Relation:
 
     headers = [h.strip() for h in headers]
 
+    key_col: str | None = None
+    if genkey is not None:
+        key_col = f"{genkey}_id"
+        if key_col in headers:
+            raise LoadError(
+                f"Cannot generate key column {key_col!r}: "
+                "column already exists in the data"
+            )
+
     rows: list[dict[str, str]] = []
     for row in reader:
         if len(row) != len(headers):
             continue  # skip malformed rows
         rows.append(dict(zip(headers, row)))
 
+    all_attrs = frozenset(headers) | (frozenset({key_col}) if key_col else frozenset())
+
     if not rows:
-        return Relation(frozenset(), attributes=frozenset(headers))
+        return Relation(frozenset(), attributes=all_attrs)
 
     types = infer_types(rows)
     tuples: set[Tuple_] = set()
-    for row in rows:
+    for i, row in enumerate(rows, start=1):
         coerced = coerce_row(row, types)
+        if key_col is not None:
+            coerced[key_col] = i
         tuples.add(Tuple_(coerced))
 
-    return Relation(frozenset(tuples), attributes=frozenset(headers))
+    return Relation(frozenset(tuples), attributes=all_attrs)
 
 
 def infer_types(rows: list[dict[str, str]]) -> dict[str, type]:

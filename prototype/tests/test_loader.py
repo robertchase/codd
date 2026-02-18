@@ -3,7 +3,9 @@
 import io
 from decimal import Decimal
 
-from prototype.data.loader import coerce_row, infer_types, load_csv
+import pytest
+
+from prototype.data.loader import LoadError, coerce_row, infer_types, load_csv
 from prototype.model.relation import Relation
 
 
@@ -166,3 +168,56 @@ class TestLoadCsv:
         result = load_csv(io.StringIO(csv_data), "data")
         vals = {t["val"] for t in result}
         assert all(isinstance(v, Decimal) for v in vals)
+
+
+class TestGenkey:
+    """Test --genkey: synthetic key column generation."""
+
+    def test_genkey_adds_id_column(self) -> None:
+        csv_data = "name,age\nAlice,30\nBob,25\n"
+        result = load_csv(io.StringIO(csv_data), "people", genkey="people")
+        assert "people_id" in result.attributes
+        assert len(result) == 2
+        ids = {t["people_id"] for t in result}
+        assert ids == {1, 2}
+
+    def test_genkey_custom_name(self) -> None:
+        csv_data = "name\nAlice\nBob\n"
+        result = load_csv(io.StringIO(csv_data), "data", genkey="item")
+        assert "item_id" in result.attributes
+        ids = {t["item_id"] for t in result}
+        assert ids == {1, 2}
+
+    def test_genkey_preserves_original_data(self) -> None:
+        csv_data = "name,age\nAlice,30\nBob,25\n"
+        result = load_csv(io.StringIO(csv_data), "people", genkey="people")
+        names = {t["name"] for t in result}
+        assert names == {"Alice", "Bob"}
+
+    def test_genkey_sequential_integers(self) -> None:
+        """Keys are sequential starting at 1, one per CSV row."""
+        csv_data = "x\na\nb\nc\nd\n"
+        result = load_csv(io.StringIO(csv_data), "data", genkey="data")
+        ids = sorted(t["data_id"] for t in result)
+        assert ids == [1, 2, 3, 4]
+
+    def test_genkey_prevents_deduplication(self) -> None:
+        """Duplicate rows get distinct keys, preventing deduplication."""
+        csv_data = "name\nAlice\nAlice\n"
+        result = load_csv(io.StringIO(csv_data), "data", genkey="data")
+        assert len(result) == 2
+        ids = {t["data_id"] for t in result}
+        assert ids == {1, 2}
+
+    def test_genkey_column_conflict_raises(self) -> None:
+        """Error if generated key column name already exists."""
+        csv_data = "data_id,name\n1,Alice\n"
+        with pytest.raises(LoadError, match="column already exists"):
+            load_csv(io.StringIO(csv_data), "data", genkey="data")
+
+    def test_genkey_empty_data(self) -> None:
+        """Genkey with headers-only produces empty relation with key attr."""
+        csv_data = "name\n"
+        result = load_csv(io.StringIO(csv_data), "data", genkey="data")
+        assert len(result) == 0
+        assert "data_id" in result.attributes

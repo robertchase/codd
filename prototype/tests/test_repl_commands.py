@@ -112,6 +112,58 @@ class TestLoadCommand:
         out = capsys.readouterr().out
         assert "--as cannot be used with workspace" in out
 
+    def test_load_csv_with_genkey(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        csv_file = tmp_path / "items.csv"
+        csv_file.write_text("name,price\nApple,1.50\nBanana,0.75\n")
+
+        env = Environment()
+        _handle_command(f"\\load {csv_file} --genkey", env)
+
+        assert "items" in env
+        rel = env.lookup("items")
+        assert "items_id" in rel.attributes
+        assert len(rel) == 2
+
+    def test_load_csv_genkey_with_alias(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """--genkey uses --as name for key column."""
+        csv_file = tmp_path / "data.csv"
+        csv_file.write_text("x\n1\n2\n")
+
+        env = Environment()
+        _handle_command(f"\\load {csv_file} --as=Stuff --genkey", env)
+
+        assert "Stuff" in env
+        rel = env.lookup("Stuff")
+        assert "Stuff_id" in rel.attributes
+
+    def test_load_csv_genkey_custom_name(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """--genkey=NAME uses NAME_id as key column."""
+        csv_file = tmp_path / "data.csv"
+        csv_file.write_text("x\n1\n2\n")
+
+        env = Environment()
+        _handle_command(f"\\load {csv_file} --genkey=item", env)
+
+        rel = env.lookup("data")
+        assert "item_id" in rel.attributes
+
+    def test_load_workspace_rejects_genkey(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        ws_path = tmp_path / "test.codd"
+        ws_path.write_text('{"version": 1, "relations": {}}')
+
+        env = Environment()
+        _handle_command(f"\\load {ws_path} --genkey", env)
+        out = capsys.readouterr().out
+        assert "--genkey cannot be used with workspace" in out
+
 
 class TestSaveCommand:
     """Test \\save command."""

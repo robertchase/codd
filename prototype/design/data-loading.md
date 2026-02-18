@@ -186,7 +186,7 @@ employees - (employees_email # emp_id) * employees
 
 **`--key=attr`** — Use an existing column as the key.
 
-**`--genkey`** — Generate a synthetic key column named `{relation}_id` with values 1, 2, 3, ... This is the right choice when the data has no natural key (log files, command output, report dumps). Composes with `--as`:
+**`--genkey`** — Generate a synthetic key column named `{relation}_id` with values 1, 2, 3, ... This is the right choice when the data has no natural key (log files, command output, report dumps). `--genkey=NAME` uses `{NAME}_id` instead. Composes with `--as`:
 
 ```
 codd 'procs ? cpu > 5.0' --as procs=data.csv --genkey
@@ -194,7 +194,14 @@ codd 'procs ? cpu > 5.0' --as procs=data.csv --genkey
 
 ps aux | codd --genkey 'stdin ? cpu > 5.0'
 # key column is stdin_id
+
+\load data.csv --genkey=item
+# key column is item_id
 ```
+
+`--genkey` and `--key` are mutually exclusive — you either have a natural key or need a synthetic one.
+
+Key values are sequential integers starting at 1. When unioning a genkey'd relation with existing data, collisions can be avoided by offsetting: get the max of the existing relation's key and add it to the incoming keys.
 
 **Neither** — Infer the key with heuristics:
 
