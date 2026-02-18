@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Union
 
 # A Value can be a scalar or a nested Relation.
 # We use a forward reference for Relation to avoid circular imports.
-Value = Union[int, float, str, bool, "Relation"]
+Value = Union[int, float, Decimal, str, bool, "Relation"]
 
 # Re-export after Relation is defined; at runtime the union resolves lazily.
 
