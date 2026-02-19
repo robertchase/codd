@@ -86,6 +86,10 @@ def eval_cmd(
     if not stdin_consumed and not sys.stdin.isatty():
         _load_stdin(env, "stdin", genkey=_genkey_for("stdin"))
 
+    # Bash history expansion escapes '!' to '\!' in command-line arguments.
+    # Strip the backslash so operators like ?! and != work from the shell.
+    expression = expression.replace("\\!", "!")
+
     try:
         tokens = Lexer(expression).tokenize()
         tree = Parser(tokens).parse()

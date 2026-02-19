@@ -56,6 +56,10 @@ Recursive descent. The core is `_parse_postfix_chain`: parse an atom (relation n
 
 The parser knows which context it's in because extend computation parsing uses `_parse_computation_expr` (arithmetic context) while the main chain uses `_parse_postfix_chain` (relational context).
 
+### Ternary branches
+
+`?` inside extend computations parses as a ternary (`? condition true_expr false_expr`). Branches are parsed by `_parse_ternary_branch`, which accepts atoms, aggregate calls, and nested ternaries — but not binary arithmetic. This prevents the branch parser from greedily consuming postfix operators like `/` (summarize) or `*` (join) as arithmetic. Binary arithmetic in branches requires parentheses.
+
 ### Bracket elision
 
 Single items don't need brackets; multiple items do. This applies uniformly to `#` (project), `@` (rename), `$` (sort), `+` (extend). The parser checks for `[` to decide which form to use.
@@ -70,7 +74,7 @@ For `*`, `*:`: the right operand is always a bare relation name (plus `> alias` 
 
 26 frozen dataclasses in two categories:
 
-- **Expressions** (scalar values): `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `AttrRef`, `BinOp`, `SetLiteral`, `AggregateCall`, `SubqueryExpr`
+- **Expressions** (scalar values): `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `AttrRef`, `BinOp`, `SetLiteral`, `AggregateCall`, `SubqueryExpr`, `TernaryExpr`
 - **Relational expressions** (relations/arrays): `RelName`, `Filter`, `NegatedFilter`, `Project`, `NaturalJoin`, `NestJoin`, `Unnest`, `Extend`, `Rename`, `Union`, `Difference`, `Intersect`, `Summarize`, `SummarizeAll`, `NestBy`, `Sort`, `Take`
 
 Plus `Condition` types for filters: `Comparison`, `BoolCombination`.
@@ -99,7 +103,7 @@ For `/:` (nest by) + `+` (extend) chains like `E /: dept_id > team + [top: >. te
 
 ### Implemented
 
-`?`, `?!`, `#`, `*`, `*:`, `<:`, `@`, `+`, `-`, `|`, `&`, `/`, `/.`, `/:`, `$`, `^`, chained `?` (AND), `|`/`&` inside filter parens (OR/AND), bracket elision, set literals, aggregate functions (`#.`, `+.`, `>.`, `<.`, `%.`), REPL with sample data, `eval` CLI command.
+`?`, `?!`, `#`, `*`, `*:`, `<:`, `@`, `+`, `-`, `|`, `&`, `/`, `/.`, `/:`, `$`, `^`, chained `?` (AND), `|`/`&` inside filter parens (OR/AND), bracket elision, set literals, aggregate functions (`#.`, `+.`, `>.`, `<.`, `%.`), ternary expressions (`? cond true false` inside `+`), REPL with sample data, `eval` CLI command.
 
 ### Deferred
 
@@ -107,16 +111,20 @@ For `/:` (nest by) + `+` (extend) chains like `E /: dept_id > team + [top: >. te
 
 ## Testing
 
-190 tests across 6 files:
+299 tests across 10 files:
 
 | File | Tests | Scope |
 |------|-------|-------|
 | test_model.py | 50 | Tuple_ and Relation operations |
 | test_lexer.py | 44 | Tokenization, digraphs, literals, errors |
-| test_parser.py | 36 | AST construction for all operator types |
-| test_executor.py | 23 | Execution of individual operators |
+| test_parser.py | 45 | AST construction for all operator types |
+| test_executor.py | 47 | Execution of individual operators |
 | test_aggregates.py | 9 | Aggregate function implementations |
-| test_integration.py | 28 | End-to-end: parse + execute examples from algebra.md |
+| test_integration.py | 34 | End-to-end: parse + execute examples from algebra.md |
+| test_loader.py | 33 | CSV loading and type inference |
+| test_eval_cmd.py | 5 | CLI eval command |
+| test_repl_commands.py | 21 | REPL slash commands |
+| test_workspace.py | 11 | Workspace save/load |
 
 ## Usage
 

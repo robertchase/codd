@@ -282,24 +282,29 @@ class Executor:
             return self._eval_aggregate_call(expr, t)
         if isinstance(expr, ast.SubqueryExpr):
             return self._as_relation(expr.query)
+        if isinstance(expr, ast.TernaryExpr):
+            return self._eval_ternary(expr, t)
         raise ExecutionError(f"Unknown expression type: {type(expr).__name__}")
 
     def _eval_attr_ref(self, ref: ast.AttrRef, t: Tuple_) -> Value:
         """Evaluate an attribute reference, possibly dotted."""
-        if len(ref.parts) == 1:
-            return t[ref.parts[0]]
-        # Dotted: a.b means attribute 'b' of relation-valued attribute 'a'
-        # This is used in aggregate contexts like >. team.salary
-        val = t[ref.parts[0]]
-        for part in ref.parts[1:]:
-            if isinstance(val, Relation):
-                # Can't directly access an attribute of a relation
-                # This should be handled at the aggregate level
-                raise ExecutionError(
-                    f"Cannot access .{part} on a relation directly"
-                )
-            val = val[part]
-        return val
+        try:
+            if len(ref.parts) == 1:
+                return t[ref.parts[0]]
+            # Dotted: a.b means attribute 'b' of relation-valued attribute 'a'
+            # This is used in aggregate contexts like >. team.salary
+            val = t[ref.parts[0]]
+            for part in ref.parts[1:]:
+                if isinstance(val, Relation):
+                    # Can't directly access an attribute of a relation
+                    # This should be handled at the aggregate level
+                    raise ExecutionError(
+                        f"Cannot access .{part} on a relation directly"
+                    )
+                val = val[part]
+            return val
+        except KeyError as e:
+            raise ExecutionError(f"Unknown attribute: {e}") from e
 
     def _eval_binop(self, expr: ast.BinOp, t: Tuple_) -> Value:
         """Evaluate a binary arithmetic operation.
@@ -324,6 +329,13 @@ class Executor:
         if expr.op not in ops:
             raise ExecutionError(f"Unknown operator: {expr.op}")
         return ops[expr.op](left, right)
+
+    def _eval_ternary(self, expr: ast.TernaryExpr, t: Tuple_) -> Value:
+        """Evaluate a ternary (conditional) expression."""
+        predicate = self._compile_comparison(expr.condition)
+        if predicate(t):
+            return self._eval_expr(expr.true_expr, t)
+        return self._eval_expr(expr.false_expr, t)
 
     def _eval_aggregate_call(self, expr: ast.AggregateCall, t: Tuple_) -> Value:
         """Evaluate an aggregate function call in extend context."""

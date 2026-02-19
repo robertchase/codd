@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import readline  # noqa: F401 — import enables line editing and history for input()
 from pathlib import Path
 
 from prototype.data.loader import LoadError, load_csv
@@ -22,6 +21,11 @@ _last_save_path: Path | None = None
 
 def run_repl(env: Environment | None = None) -> None:
     """Run the interactive REPL."""
+    # Lazy import: readline must initialize after stdin is a real terminal.
+    # When stdin starts as a pipe (e.g. cat file | repl --as x=-), importing
+    # readline early leaves it unable to detect terminal capabilities.
+    import readline  # noqa: F401 — enables line editing and history for input()
+
     if env is None:
         env = Environment()
 

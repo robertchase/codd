@@ -75,6 +75,18 @@ class TestFilter:
         assert isinstance(result.condition, ast.BoolCombination)
         assert result.condition.op == "&"
 
+    def test_negative_int_literal(self) -> None:
+        result = parse("E ? salary > -1")
+        assert isinstance(result, ast.Filter)
+        assert isinstance(result.condition.right, ast.IntLiteral)
+        assert result.condition.right.value == -1
+
+    def test_negative_float_literal(self) -> None:
+        result = parse("E ? salary > -1.5")
+        assert isinstance(result, ast.Filter)
+        assert isinstance(result.condition.right, ast.FloatLiteral)
+        assert result.condition.right.value == -1.5
+
     def test_set_membership(self) -> None:
         result = parse("E ? dept_id = {10, 20, 30}")
         assert isinstance(result, ast.Filter)
@@ -306,6 +318,54 @@ class TestAssignment:
         assert isinstance(result, ast.Assignment)
         assert result.name == "top3"
         assert isinstance(result.expr, ast.Take)
+
+
+class TestTernaryParsing:
+    """Test ternary expression parsing."""
+
+    def test_basic_ternary(self) -> None:
+        result = parse('E + [grp: ? dept_id = 10 "eng" "other"]')
+        assert isinstance(result, ast.Extend)
+        comp = result.computations[0]
+        assert comp.name == "grp"
+        assert isinstance(comp.expr, ast.TernaryExpr)
+        assert isinstance(comp.expr.condition, ast.Comparison)
+        assert comp.expr.condition.op == "="
+        assert isinstance(comp.expr.true_expr, ast.StringLiteral)
+        assert comp.expr.true_expr.value == "eng"
+        assert isinstance(comp.expr.false_expr, ast.StringLiteral)
+        assert comp.expr.false_expr.value == "other"
+
+    def test_nested_ternary_parenthesized(self) -> None:
+        result = parse(
+            'E + [tier: ? salary >= 80000 "high" (? salary >= 60000 "mid" "low")]'
+        )
+        assert isinstance(result, ast.Extend)
+        comp = result.computations[0]
+        assert isinstance(comp.expr, ast.TernaryExpr)
+        assert isinstance(comp.expr.true_expr, ast.StringLiteral)
+        assert comp.expr.true_expr.value == "high"
+        # false branch is a nested ternary
+        assert isinstance(comp.expr.false_expr, ast.TernaryExpr)
+        inner = comp.expr.false_expr
+        assert isinstance(inner.true_expr, ast.StringLiteral)
+        assert inner.true_expr.value == "mid"
+        assert isinstance(inner.false_expr, ast.StringLiteral)
+        assert inner.false_expr.value == "low"
+
+    def test_nested_ternary_bare(self) -> None:
+        """Nested ternary without parentheses."""
+        result = parse(
+            'E + [tier: ? salary >= 80000 "high" ? salary >= 60000 "mid" "low"]'
+        )
+        assert isinstance(result, ast.Extend)
+        comp = result.computations[0]
+        assert isinstance(comp.expr, ast.TernaryExpr)
+        assert comp.expr.true_expr.value == "high"
+        assert isinstance(comp.expr.false_expr, ast.TernaryExpr)
+        inner = comp.expr.false_expr
+        assert inner.true_expr.value == "mid"
+        assert inner.false_expr.value == "low"
 
 
 class TestErrors:

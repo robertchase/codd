@@ -478,6 +478,16 @@ class Parser:
     def _parse_value_expr(self) -> ast.Expr:
         """Parse a value expression on the RHS of a comparison."""
         tok = self._peek()
+        if tok.type == TokenType.MINUS:
+            # Unary minus for negative numeric literals
+            if self._peek(1).type == TokenType.INTEGER:
+                self._advance()  # consume -
+                num_tok = self._advance()
+                return ast.IntLiteral(value=-int(num_tok.value))
+            if self._peek(1).type == TokenType.FLOAT:
+                self._advance()  # consume -
+                num_tok = self._advance()
+                return ast.FloatLiteral(value=-float(num_tok.value))
         if tok.type == TokenType.INTEGER:
             self._advance()
             return ast.IntLiteral(value=int(tok.value))
@@ -519,7 +529,12 @@ class Parser:
         This is the context where * means multiply and / means divide.
         Supports: attr, literal, attr op attr, attr op literal.
         Supports aggregate calls: #. or +. salary etc.
+        Supports ternary: ? condition true_expr false_expr.
         """
+        # Check for ternary expression
+        if self._peek().type == TokenType.QUESTION:
+            return self._parse_ternary_expr()
+
         # Check for aggregate calls first
         agg_types = {
             TokenType.HASH_DOT, TokenType.PLUS_DOT,
@@ -543,6 +558,32 @@ class Parser:
             return ast.BinOp(left=left, op=arith_ops[op_tok.type], right=right)
 
         return left
+
+    def _parse_ternary_expr(self) -> ast.TernaryExpr:
+        """Parse: ? condition true_expr false_expr."""
+        self._advance()  # consume ?
+        condition = self._parse_comparison()
+        true_expr = self._parse_ternary_branch()
+        false_expr = self._parse_ternary_branch()
+        return ast.TernaryExpr(
+            condition=condition, true_expr=true_expr, false_expr=false_expr
+        )
+
+    def _parse_ternary_branch(self) -> ast.Expr:
+        """Parse a single branch of a ternary expression.
+
+        Handles atoms, aggregate calls, and nested ternaries.
+        Binary arithmetic in branches requires parentheses.
+        """
+        if self._peek().type == TokenType.QUESTION:
+            return self._parse_ternary_expr()
+        agg_types = {
+            TokenType.HASH_DOT, TokenType.PLUS_DOT,
+            TokenType.GT_DOT, TokenType.LT_DOT, TokenType.PERCENT_DOT,
+        }
+        if self._peek().type in agg_types:
+            return self._parse_aggregate_call()
+        return self._parse_computation_atom()
 
     def _parse_aggregate_call(self) -> ast.AggregateCall:
         """Parse an aggregate call in extend context: #. or +. salary or >. team.salary."""
@@ -586,6 +627,16 @@ class Parser:
     def _parse_computation_atom(self) -> ast.Expr:
         """Parse an atomic computation value."""
         tok = self._peek()
+        if tok.type == TokenType.MINUS:
+            # Unary minus for negative numeric literals
+            if self._peek(1).type == TokenType.INTEGER:
+                self._advance()  # consume -
+                num_tok = self._advance()
+                return ast.IntLiteral(value=-int(num_tok.value))
+            if self._peek(1).type == TokenType.FLOAT:
+                self._advance()  # consume -
+                num_tok = self._advance()
+                return ast.FloatLiteral(value=-float(num_tok.value))
         if tok.type == TokenType.INTEGER:
             self._advance()
             return ast.IntLiteral(value=int(tok.value))

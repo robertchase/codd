@@ -301,6 +301,57 @@ Result:
 | Dave  | 90000  | 9000  |
 | Eve   | 45000  | 4500  |
 
+### Conditional extend: `?` inside `+`
+
+Inside extend computations, `?` becomes a ternary (conditional) expression:
+
+```
+? condition true_expr false_expr
+```
+
+The condition uses the same `attr op value` grammar as filter conditions (single comparison only — no `&`/`|` compound conditions). The condition is always exactly three tokens, followed by two branch values.
+
+```
+E + grp: ? dept_id = 10 "eng" "other"
+```
+
+| Step | What happens |
+|------|-------------|
+| `E` | 5 tuples |
+| `+ grp: ? dept_id = 10 "eng" "other"` | Add `grp`: "eng" when dept_id is 10, "other" otherwise |
+
+Result:
+
+| emp_id | name  | salary | dept_id | role     | grp   |
+|--------|-------|--------|---------|----------|-------|
+| 1      | Alice | 80000  | 10      | engineer | eng   |
+| 2      | Bob   | 60000  | 10      | manager  | eng   |
+| 3      | Carol | 55000  | 20      | engineer | other |
+| 4      | Dave  | 90000  | 10      | engineer | eng   |
+| 5      | Eve   | 45000  | 20      | engineer | other |
+
+Branch values can be literals, attribute references, or nested ternaries. Nesting lets you build multi-way classifications:
+
+```
+E + tier: ? salary >= 80000 "high" ? salary >= 60000 "mid" "low"
+```
+
+| name  | salary | tier |
+|-------|--------|------|
+| Alice | 80000  | high |
+| Bob   | 60000  | mid  |
+| Carol | 55000  | low  |
+| Dave  | 90000  | high |
+| Eve   | 45000  | low  |
+
+The typical use case is remapping or bucketing values before summarizing:
+
+```
+E + grp: ? dept_id = 10 "A" "B" / grp [n: #.  avg: %. salary]
+```
+
+Binary arithmetic in branches requires parentheses: `? salary > 100 (salary * 2) salary`.
+
 ### Rename: `@`
 
 `@` changes attribute names. Inside the brackets, `>` means "becomes."
@@ -595,6 +646,7 @@ E *: Phone > phones + n: #. phones ? n = 0 # emp_id
 <:   unnest            E *: Phone > phones <: phones
 @    rename            E @ [pay > salary]
 +    extend            E + bonus: salary * 0.1
++  ? ternary (in +)    E + grp: ? dept_id = 10 "eng" "other"
 +:   modify            E +: salary: salary * 1.1
 -    difference        A - (B)
 |    union             A | (B)

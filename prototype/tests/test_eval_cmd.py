@@ -9,6 +9,19 @@ from click.testing import CliRunner
 from prototype.cli.eval_cmd import eval_cmd
 
 
+class TestBashEscaping:
+    """Test that bash history expansion escaping is handled."""
+
+    def test_backslash_bang_stripped(self) -> None:
+        """Bash escapes ?! to ?\\!, eval should strip the backslash."""
+        runner = CliRunner()
+        result = runner.invoke(
+            eval_cmd, ["--sample", 'E ?\\! role = "engineer" # name'],
+        )
+        assert result.exit_code == 0
+        assert "Bob" in result.output
+
+
 class TestEvalGenkey:
     """Test --genkey flag on eval."""
 

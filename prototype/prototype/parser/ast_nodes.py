@@ -89,6 +89,15 @@ class SubqueryExpr:
     query: RelExpr
 
 
+@dataclass(frozen=True)
+class TernaryExpr:
+    """Conditional expression: ? condition true_expr false_expr."""
+
+    condition: Comparison
+    true_expr: Expr
+    false_expr: Expr
+
+
 # Expr is the union of all expression types
 Expr = (
     IntLiteral
@@ -100,6 +109,7 @@ Expr = (
     | SetLiteral
     | AggregateCall
     | SubqueryExpr
+    | TernaryExpr
 )
 
 

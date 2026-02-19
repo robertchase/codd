@@ -461,6 +461,89 @@ class TestNumericPromotion:
             run("data / grp total: +. val", env)
 
 
+class TestTernary:
+    """Test ? (ternary/conditional) in extend computations."""
+
+    def test_simple_remap(self) -> None:
+        """Remap dept_id 10 to 'eng', others to 'other'."""
+        result = run('E + [grp: ? dept_id = 10 "eng" "other"]')
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["dept_id"] == 10:
+                assert t["grp"] == "eng"
+            else:
+                assert t["grp"] == "other"
+
+    def test_numeric_threshold(self) -> None:
+        """Bucket by salary threshold."""
+        result = run("E + [big: ? salary > 70000 true false]")
+        assert isinstance(result, Relation)
+        for t in result:
+            expected = t["salary"] > 70000
+            assert t["big"] == expected
+
+    def test_passthrough(self) -> None:
+        """Cap salary at 80000."""
+        result = run("E + [capped: ? salary > 80000 80000 salary]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["salary"] > 80000:
+                assert t["capped"] == 80000
+            else:
+                assert t["capped"] == t["salary"]
+
+    def test_nested_ternary(self) -> None:
+        """Nested ternary for tier classification."""
+        result = run(
+            'E + [tier: ? salary >= 80000 "high" (? salary >= 60000 "mid" "low")]'
+        )
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["salary"] >= 80000:
+                assert t["tier"] == "high"
+            elif t["salary"] >= 60000:
+                assert t["tier"] == "mid"
+            else:
+                assert t["tier"] == "low"
+
+    def test_with_summarize(self) -> None:
+        """Ternary followed by summarize."""
+        result = run('E + [grp: ? dept_id = 10 "A" "B"] / grp [n: #.]')
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        for t in result:
+            if t["grp"] == "A":
+                assert t["n"] == 3  # dept_id=10: Alice, Bob, Dave
+            else:
+                assert t["n"] == 2  # dept_id=20: Carol, Eve
+
+    def test_unknown_attr_in_branch(self) -> None:
+        """Unknown attribute in ternary branch raises ExecutionError, not KeyError."""
+        with pytest.raises(ExecutionError, match="Unknown attribute"):
+            run('D + x: ? dept_id = 10 100 asdf')
+
+    def test_negative_literal_in_branch(self) -> None:
+        """Negative numeric literal in ternary branch."""
+        result = run("D + x: ? dept_id = 10 100 -1")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["dept_id"] == 10:
+                assert t["x"] == 100
+            else:
+                assert t["x"] == -1
+
+    def test_unbracketed_extend_then_summarize(self) -> None:
+        """Unbracketed ternary extend followed by summarize (no bracket ambiguity)."""
+        result = run('E + grp: ? dept_id = 10 "A" "B" / grp n: #.')
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        for t in result:
+            if t["grp"] == "A":
+                assert t["n"] == 3
+            else:
+                assert t["n"] == 2
+
+
 class TestFilterAggregateLHS:
     """Test aggregate operators on the LHS of filter conditions."""
 

@@ -110,6 +110,7 @@ codd> E # [name salary] $ salary- ^ 3
 <:   unnest            E *: Phone > phones <: phones
 @    rename            E @ [pay > salary]
 +    extend            E + bonus: salary * 0.1
++  ? ternary (in +)    E + grp: ? dept_id = 10 "eng" "other"
 -    difference        A - (B)
 |    union             A | (B)
 &    intersect         A & (B)
