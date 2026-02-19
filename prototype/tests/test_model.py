@@ -13,36 +13,43 @@ class TestTuple:
     """Tests for Tuple_ immutability, equality, hashing, and operations."""
 
     def test_create_from_dict(self) -> None:
+        """Create tuple from a dict of attributes."""
         t = Tuple_({"name": "Alice", "age": 30})
         assert t["name"] == "Alice"
         assert t["age"] == 30
 
     def test_create_from_kwargs(self) -> None:
+        """Create tuple from keyword arguments."""
         t = Tuple_(name="Bob", salary=60000)
         assert t["name"] == "Bob"
         assert t["salary"] == 60000
 
     def test_attributes(self) -> None:
+        """attributes() returns frozenset of attribute names."""
         t = Tuple_(name="Alice", salary=80000)
         assert t.attributes() == frozenset({"name", "salary"})
 
     def test_equality(self) -> None:
+        """Tuples with identical attributes are equal."""
         t1 = Tuple_(name="Alice", salary=80000)
         t2 = Tuple_(name="Alice", salary=80000)
         assert t1 == t2
 
     def test_inequality(self) -> None:
+        """Tuples with different values are not equal."""
         t1 = Tuple_(name="Alice", salary=80000)
         t2 = Tuple_(name="Bob", salary=60000)
         assert t1 != t2
 
     def test_hashable(self) -> None:
+        """Equal tuples produce the same hash and deduplicate in sets."""
         t1 = Tuple_(name="Alice", salary=80000)
         t2 = Tuple_(name="Alice", salary=80000)
         assert hash(t1) == hash(t2)
         assert len({t1, t2}) == 1
 
     def test_immutable(self) -> None:
+        """Tuple rejects attribute assignment."""
         t = Tuple_(name="Alice")
         try:
             t.x = 1  # type: ignore[attr-defined]
@@ -51,38 +58,45 @@ class TestTuple:
             pass
 
     def test_project(self) -> None:
+        """Project keeps only specified attributes."""
         t = Tuple_(name="Alice", salary=80000, dept_id=10)
         p = t.project(frozenset({"name", "salary"}))
         assert p == Tuple_(name="Alice", salary=80000)
 
     def test_extend(self) -> None:
+        """Extend adds new attributes."""
         t = Tuple_(name="Alice", salary=80000)
         e = t.extend({"bonus": 8000})
         assert e["bonus"] == 8000
         assert e["name"] == "Alice"
 
     def test_rename(self) -> None:
+        """Rename maps old attribute names to new ones."""
         t = Tuple_(pay=70000, name="Frank")
         r = t.rename({"pay": "salary"})
         assert r["salary"] == 70000
         assert "pay" not in r
 
     def test_matches_shared_attrs(self) -> None:
+        """Tuples match when shared attributes have equal values."""
         t1 = Tuple_(emp_id=1, name="Alice", dept_id=10)
         t2 = Tuple_(dept_id=10, dept_name="Engineering")
         assert t1.matches(t2)
 
     def test_matches_no_shared_attrs(self) -> None:
+        """Tuples with no shared attributes always match."""
         t1 = Tuple_(name="Alice")
         t2 = Tuple_(dept_name="Engineering")
         assert t1.matches(t2)
 
     def test_not_matches(self) -> None:
+        """Tuples with differing shared attribute values do not match."""
         t1 = Tuple_(dept_id=10)
         t2 = Tuple_(dept_id=20)
         assert not t1.matches(t2)
 
     def test_merge(self) -> None:
+        """Merge combines attributes from both tuples."""
         t1 = Tuple_(emp_id=1, dept_id=10)
         t2 = Tuple_(dept_id=10, dept_name="Engineering")
         m = t1.merge(t2)
@@ -91,15 +105,18 @@ class TestTuple:
         assert m["dept_id"] == 10
 
     def test_get(self) -> None:
+        """get() retrieves attribute value by name."""
         t = Tuple_(name="Alice")
         assert t.get("name") == "Alice"
 
     def test_contains(self) -> None:
+        """'in' operator checks attribute existence."""
         t = Tuple_(name="Alice", salary=80000)
         assert "name" in t
         assert "dept_id" not in t
 
     def test_repr(self) -> None:
+        """repr includes attribute values."""
         t = Tuple_(name="Alice", salary=80000)
         r = repr(t)
         assert "Alice" in r
@@ -147,16 +164,19 @@ class TestRelation:
         )
 
     def test_create_empty(self) -> None:
+        """Empty relation preserves declared attributes."""
         r = Relation(frozenset(), attributes=frozenset({"a", "b"}))
         assert len(r) == 0
         assert r.attributes == frozenset({"a", "b"})
 
     def test_deduplication(self) -> None:
+        """Duplicate tuples are collapsed to one."""
         t = Tuple_(name="Alice")
         r = Relation([t, t, t])
         assert len(r) == 1
 
     def test_project_single(self) -> None:
+        """Project to a single attribute."""
         e = self._employees()
         result = e.project(frozenset({"name"}))
         assert len(result) == 5
@@ -165,12 +185,14 @@ class TestRelation:
         assert names == {"Alice", "Bob", "Carol", "Dave", "Eve"}
 
     def test_project_multiple(self) -> None:
+        """Project to multiple attributes."""
         e = self._employees()
         result = e.project(frozenset({"name", "salary"}))
         assert result.attributes == frozenset({"name", "salary"})
         assert len(result) == 5
 
     def test_where(self) -> None:
+        """Where filters tuples by predicate."""
         e = self._employees()
         result = e.where(lambda t: t["salary"] > 50000)
         assert len(result) == 4
@@ -178,6 +200,7 @@ class TestRelation:
         assert "Eve" not in names
 
     def test_chained_where(self) -> None:
+        """Chained where narrows results incrementally."""
         e = self._employees()
         result = e.where(lambda t: t["dept_id"] == 10).where(
             lambda t: t["salary"] > 70000
@@ -187,6 +210,7 @@ class TestRelation:
         assert names == {"Alice", "Dave"}
 
     def test_natural_join(self) -> None:
+        """Natural join matches on shared attribute dept_id."""
         e = self._employees()
         d = self._departments()
         result = e.natural_join(d)
@@ -199,6 +223,7 @@ class TestRelation:
                 assert t["dept_name"] == "Sales"
 
     def test_nest_join(self) -> None:
+        """Nest join produces relation-valued attribute."""
         e = self._employees()
         p = self._phones()
         result = e.nest_join(p, "phones")
@@ -214,6 +239,7 @@ class TestRelation:
                 assert len(phones_rel) == 0
 
     def test_extend(self) -> None:
+        """Extend adds computed attribute to each tuple."""
         e = self._employees()
         result = e.extend(lambda t: {"bonus": t["salary"] * 0.1})
         assert "bonus" in result.attributes
@@ -221,6 +247,7 @@ class TestRelation:
             assert t["bonus"] == t["salary"] * 0.1
 
     def test_rename(self) -> None:
+        """Rename maps attribute names."""
         cp = Relation(frozenset({Tuple_(name="Frank", pay=70000)}))
         result = cp.rename({"pay": "salary"})
         assert "salary" in result.attributes
@@ -229,12 +256,14 @@ class TestRelation:
             assert t["salary"] == 70000
 
     def test_union(self) -> None:
+        """Union merges two compatible relations."""
         r1 = Relation(frozenset({Tuple_(name="Alice", salary=80000)}))
         r2 = Relation(frozenset({Tuple_(name="Frank", salary=70000)}))
         result = r1.union(r2)
         assert len(result) == 2
 
     def test_difference(self) -> None:
+        """Difference removes matching tuples."""
         e = self._employees()
         p = self._phones()
         e_ids = e.project(frozenset({"emp_id"}))
@@ -244,6 +273,7 @@ class TestRelation:
         assert ids == {2, 4, 5}
 
     def test_intersect(self) -> None:
+        """Intersect keeps only shared tuples."""
         e = self._employees()
         p = self._phones()
         e_ids = e.project(frozenset({"emp_id"}))
@@ -253,24 +283,28 @@ class TestRelation:
         assert ids == {1, 3}
 
     def test_union_heading_mismatch(self) -> None:
+        """Union rejects mismatched attributes."""
         r1 = Relation(frozenset({Tuple_(a=1)}))
         r2 = Relation(frozenset({Tuple_(b=2)}))
         with pytest.raises(ValueError, match="union requires matching attributes"):
             r1.union(r2)
 
     def test_difference_heading_mismatch(self) -> None:
+        """Difference rejects mismatched attributes."""
         e = self._employees()
         joined = e.natural_join(self._phones())
         with pytest.raises(ValueError, match="difference requires matching attributes"):
             e.difference(joined)
 
     def test_intersect_heading_mismatch(self) -> None:
+        """Intersect rejects mismatched attributes."""
         r1 = Relation(frozenset({Tuple_(a=1)}))
         r2 = Relation(frozenset({Tuple_(a=1, b=2)}))
         with pytest.raises(ValueError, match="intersect requires matching attributes"):
             r1.intersect(r2)
 
     def test_summarize(self) -> None:
+        """Summarize groups by dept_id and aggregates."""
         e = self._employees()
         result = e.summarize(
             frozenset({"dept_id"}),
@@ -289,6 +323,7 @@ class TestRelation:
                 assert t["total"] == 100000
 
     def test_summarize_all(self) -> None:
+        """Summarize-all computes aggregates over entire relation."""
         e = self._employees()
         result = e.summarize_all(
             {
@@ -302,6 +337,7 @@ class TestRelation:
         assert t["total"] == 330000
 
     def test_nest_by(self) -> None:
+        """Nest-by groups tuples into nested relations."""
         e = self._employees()
         result = e.nest_by(frozenset({"dept_id"}), "team")
         assert len(result) == 2
@@ -317,6 +353,7 @@ class TestRelation:
                 assert "dept_id" not in member
 
     def test_unnest(self) -> None:
+        """Unnest flattens relation-valued attribute."""
         e = self._employees()
         p = self._phones()
         nested = e.nest_join(p, "phones")
@@ -329,6 +366,7 @@ class TestRelation:
         assert emp_ids == {1, 3}
 
     def test_unnest_empty_rvas_dropped(self) -> None:
+        """Unnest drops tuples with empty nested relations."""
         # All RVAs empty -> empty result
         r = Relation(
             frozenset(
@@ -346,6 +384,7 @@ class TestRelation:
         assert len(result) == 0
 
     def test_unnest_multi_nested(self) -> None:
+        """Unnest expands multiple nested relations."""
         inner1 = Relation(frozenset({Tuple_(x=10), Tuple_(x=20)}))
         inner2 = Relation(frozenset({Tuple_(x=30)}))
         r = Relation(
@@ -362,6 +401,7 @@ class TestRelation:
         assert vals == {(1, 10), (1, 20), (2, 30)}
 
     def test_sort(self) -> None:
+        """Sort orders tuples by key function."""
         e = self._employees()
         projected = e.project(frozenset({"name", "salary"}))
         result = projected.sort(key_fn=lambda t: -t["salary"])
@@ -370,6 +410,7 @@ class TestRelation:
         assert result[-1]["name"] == "Eve"
 
     def test_sort_take(self) -> None:
+        """Sort then slice takes top N tuples."""
         e = self._employees()
         projected = e.project(frozenset({"name", "salary"}))
         result = projected.sort(key_fn=lambda t: -t["salary"])[:3]
@@ -378,6 +419,7 @@ class TestRelation:
         assert names == ["Dave", "Alice", "Bob"]
 
     def test_immutable(self) -> None:
+        """Relation rejects attribute assignment."""
         r = Relation(frozenset())
         try:
             r.x = 1  # type: ignore[attr-defined]
@@ -386,21 +428,25 @@ class TestRelation:
             pass
 
     def test_equality(self) -> None:
+        """Relations with same tuples are equal."""
         r1 = Relation(frozenset({Tuple_(a=1)}))
         r2 = Relation(frozenset({Tuple_(a=1)}))
         assert r1 == r2
 
     def test_hashable(self) -> None:
+        """Equal relations produce the same hash."""
         r1 = Relation(frozenset({Tuple_(a=1)}))
         r2 = Relation(frozenset({Tuple_(a=1)}))
         assert hash(r1) == hash(r2)
 
     def test_project_unknown_attribute(self) -> None:
+        """Project rejects unknown attribute names."""
         e = self._employees()
         with pytest.raises(ValueError, match="project references unknown attributes"):
             e.project(frozenset({"nonexistent"}))
 
     def test_extend_rejects_existing_attribute(self) -> None:
+        """Extend rejects overwriting existing attributes."""
         e = self._employees()
         with pytest.raises(
             ValueError, match="extend cannot overwrite existing attributes"
@@ -408,16 +454,19 @@ class TestRelation:
             e.extend(lambda t: {"name": t["name"].upper()})
 
     def test_modify_rejects_unknown_attribute(self) -> None:
+        """Modify rejects unknown attribute names."""
         e = self._employees()
         with pytest.raises(ValueError, match="modify references unknown attributes"):
             e.modify(lambda t: {"nonexistent": 1})
 
     def test_rename_unknown_attribute(self) -> None:
+        """Rename rejects unknown attribute names."""
         e = self._employees()
         with pytest.raises(ValueError, match="rename references unknown attributes"):
             e.rename({"nonexistent": "something"})
 
     def test_summarize_unknown_group_attr(self) -> None:
+        """Summarize rejects unknown group key attributes."""
         e = self._employees()
         with pytest.raises(
             ValueError, match="summarize group key references unknown attributes"
@@ -425,6 +474,7 @@ class TestRelation:
             e.summarize(frozenset({"nonexistent"}), {"n": lambda r: len(r)})
 
     def test_nest_by_unknown_group_attr(self) -> None:
+        """Nest-by rejects unknown group key attributes."""
         e = self._employees()
         with pytest.raises(
             ValueError, match="nest_by group key references unknown attributes"

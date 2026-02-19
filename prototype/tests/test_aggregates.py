@@ -29,9 +29,11 @@ class TestAggCount:
     """Tests for #. (count)."""
 
     def test_count(self) -> None:
+        """#. on 3-tuple relation returns 3."""
         assert agg_count(_sample()) == 3
 
     def test_empty(self) -> None:
+        """#. on empty relation returns 0."""
         empty = Relation(frozenset(), attributes=frozenset({"name"}))
         assert agg_count(empty) == 0
 
@@ -40,9 +42,11 @@ class TestAggSum:
     """Tests for +. (sum)."""
 
     def test_sum(self) -> None:
+        """+. salary -> 195000."""
         assert agg_sum(_sample(), "salary") == 195000
 
     def test_requires_attr(self) -> None:
+        """+. without attr raises ValueError."""
         with pytest.raises(ValueError):
             agg_sum(_sample())
 
@@ -51,9 +55,11 @@ class TestAggMax:
     """Tests for >. (max)."""
 
     def test_max(self) -> None:
+        """>. salary -> 80000."""
         assert agg_max(_sample(), "salary") == 80000
 
     def test_max_string(self) -> None:
+        """>. name -> "Carol" (lexicographic max)."""
         assert agg_max(_sample(), "name") == "Carol"
 
 
@@ -61,6 +67,7 @@ class TestAggMin:
     """Tests for <. (min)."""
 
     def test_min(self) -> None:
+        """<. salary -> 55000."""
         assert agg_min(_sample(), "salary") == 55000
 
 
@@ -68,9 +75,11 @@ class TestAggMean:
     """Tests for %. (mean)."""
 
     def test_mean_integer(self) -> None:
+        """%. salary -> 65000 (exact integer mean)."""
         assert agg_mean(_sample(), "salary") == 65000
 
     def test_mean_truncates(self) -> None:
+        """%. v -> 21 (63/3, integer truncation)."""
         # 80000 + 60000 + 55000 = 195000 / 3 = 65000 exact
         r = Relation(
             frozenset(

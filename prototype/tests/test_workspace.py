@@ -144,21 +144,25 @@ class TestIsWorkspaceFile:
     """Test workspace file sniffing."""
 
     def test_valid_workspace(self, tmp_path: Path) -> None:
+        """Valid .codd JSON with version key is recognized."""
         path = tmp_path / "test.codd"
         path.write_text('{"version": 1, "relations": {}}')
         assert is_workspace_file(path) is True
 
     def test_csv_file(self, tmp_path: Path) -> None:
+        """CSV file is not recognized as a workspace."""
         path = tmp_path / "test.csv"
         path.write_text("name,age\nAlice,30\n")
         assert is_workspace_file(path) is False
 
     def test_invalid_json(self, tmp_path: Path) -> None:
+        """Non-JSON content is not recognized as a workspace."""
         path = tmp_path / "test.codd"
         path.write_text("not json at all")
         assert is_workspace_file(path) is False
 
     def test_json_without_version(self, tmp_path: Path) -> None:
+        """JSON lacking a version key is not a workspace."""
         path = tmp_path / "test.json"
         path.write_text('{"data": [1, 2, 3]}')
         assert is_workspace_file(path) is False

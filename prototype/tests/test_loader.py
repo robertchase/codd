@@ -13,11 +13,13 @@ class TestInferTypes:
     """Test type inference from string values."""
 
     def test_all_ints(self) -> None:
+        """Integer string values are inferred as int."""
         rows = [{"age": "30", "id": "1"}, {"age": "25", "id": "2"}]
         types = infer_types(rows)
         assert types == {"age": int, "id": int}
 
     def test_all_decimals(self) -> None:
+        """Decimal string values are inferred as Decimal."""
         rows = [{"score": "3.5"}, {"score": "4.2"}]
         types = infer_types(rows)
         assert types == {"score": Decimal}
@@ -29,11 +31,13 @@ class TestInferTypes:
         assert types == {"val": Decimal}
 
     def test_all_bool(self) -> None:
+        """Boolean string values are inferred as bool."""
         rows = [{"active": "true"}, {"active": "false"}, {"active": "True"}]
         types = infer_types(rows)
         assert types == {"active": bool}
 
     def test_all_strings(self) -> None:
+        """Non-numeric, non-bool values are inferred as str."""
         rows = [{"name": "Alice"}, {"name": "Bob"}]
         types = infer_types(rows)
         assert types == {"name": str}
@@ -57,16 +61,19 @@ class TestInferTypes:
         assert types == {"x": str}
 
     def test_negative_ints(self) -> None:
+        """Negative integer strings are inferred as int."""
         rows = [{"val": "-1"}, {"val": "5"}]
         types = infer_types(rows)
         assert types == {"val": int}
 
     def test_negative_decimals(self) -> None:
+        """Negative decimal strings are inferred as Decimal."""
         rows = [{"val": "-1.5"}, {"val": "2.0"}]
         types = infer_types(rows)
         assert types == {"val": Decimal}
 
     def test_empty_rows(self) -> None:
+        """Empty row list returns empty type map."""
         types = infer_types([])
         assert types == {}
 
@@ -75,25 +82,30 @@ class TestCoerceRow:
     """Test row coercion."""
 
     def test_int_coercion(self) -> None:
+        """String value is coerced to int."""
         result = coerce_row({"age": "30"}, {"age": int})
         assert result == {"age": 30}
         assert isinstance(result["age"], int)
 
     def test_decimal_coercion(self) -> None:
+        """String value is coerced to Decimal."""
         result = coerce_row({"score": "3.5"}, {"score": Decimal})
         assert result == {"score": Decimal("3.5")}
         assert isinstance(result["score"], Decimal)
 
     def test_bool_coercion(self) -> None:
+        """String "true" is coerced to bool True."""
         result = coerce_row({"active": "true"}, {"active": bool})
         assert result == {"active": True}
         assert isinstance(result["active"], bool)
 
     def test_bool_false(self) -> None:
+        """String "false" is coerced to bool False."""
         result = coerce_row({"active": "false"}, {"active": bool})
         assert result == {"active": False}
 
     def test_str_passthrough(self) -> None:
+        """String values pass through unchanged when target type is str."""
         result = coerce_row({"name": "Alice"}, {"name": str})
         assert result == {"name": "Alice"}
 
@@ -107,6 +119,7 @@ class TestLoadCsv:
     """Test full CSV loading pipeline."""
 
     def test_basic(self) -> None:
+        """Load a simple two-column CSV into a Relation."""
         csv_data = "name,age\nAlice,30\nBob,25\n"
         result = load_csv(io.StringIO(csv_data), "people")
         assert isinstance(result, Relation)
@@ -116,6 +129,7 @@ class TestLoadCsv:
         assert ages == {30, 25}
 
     def test_type_inference(self) -> None:
+        """Columns are automatically typed during CSV load."""
         csv_data = "name,salary,active\nAlice,80000,true\nBob,60000,false\n"
         result = load_csv(io.StringIO(csv_data), "emp")
         for t in result:
@@ -124,6 +138,7 @@ class TestLoadCsv:
             assert isinstance(t["name"], str)
 
     def test_decimal_column(self) -> None:
+        """Decimal-valued columns are loaded as Decimal."""
         csv_data = "item,price\nApple,1.50\nBanana,0.75\n"
         result = load_csv(io.StringIO(csv_data), "prices")
         assert len(result) == 2
@@ -131,12 +146,14 @@ class TestLoadCsv:
             assert isinstance(t["price"], Decimal)
 
     def test_empty_file(self) -> None:
+        """Empty CSV produces an empty Relation with no attributes."""
         result = load_csv(io.StringIO(""), "empty")
         assert isinstance(result, Relation)
         assert len(result) == 0
         assert result.attributes == frozenset()
 
     def test_headers_only(self) -> None:
+        """CSV with only headers produces an empty Relation with attributes."""
         result = load_csv(io.StringIO("name,age\n"), "empty")
         assert isinstance(result, Relation)
         assert len(result) == 0
@@ -174,6 +191,7 @@ class TestGenkey:
     """Test --genkey: synthetic key column generation."""
 
     def test_genkey_adds_id_column(self) -> None:
+        """Genkey adds a sequential integer ID column."""
         csv_data = "name,age\nAlice,30\nBob,25\n"
         result = load_csv(io.StringIO(csv_data), "people", genkey="people")
         assert "people_id" in result.attributes
@@ -182,6 +200,7 @@ class TestGenkey:
         assert ids == {1, 2}
 
     def test_genkey_custom_name(self) -> None:
+        """Genkey column name is derived from the provided prefix."""
         csv_data = "name\nAlice\nBob\n"
         result = load_csv(io.StringIO(csv_data), "data", genkey="item")
         assert "item_id" in result.attributes
@@ -189,6 +208,7 @@ class TestGenkey:
         assert ids == {1, 2}
 
     def test_genkey_preserves_original_data(self) -> None:
+        """Original CSV columns are preserved when genkey is used."""
         csv_data = "name,age\nAlice,30\nBob,25\n"
         result = load_csv(io.StringIO(csv_data), "people", genkey="people")
         names = {t["name"] for t in result}

@@ -27,12 +27,14 @@ class TestEnvironmentUnbind:
     """Test Environment.unbind()."""
 
     def test_unbind_existing(self) -> None:
+        """Unbinding an existing name removes it from the environment."""
         env = Environment()
         env.bind("R", Relation(frozenset({Tuple_(x=1)})))
         env.unbind("R")
         assert "R" not in env
 
     def test_unbind_missing_raises(self) -> None:
+        """Unbinding a missing name raises KeyError."""
         env = Environment()
         with pytest.raises(KeyError, match="Unknown relation"):
             env.unbind("nope")
@@ -42,6 +44,7 @@ class TestLoadCommand:
     """Test \\load with file arguments."""
 
     def test_load_no_args_loads_sample(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Loading with no args loads the built-in sample data."""
         env = Environment()
         _handle_command("\\load", env)
         assert "E" in env
@@ -52,6 +55,7 @@ class TestLoadCommand:
     def test_load_csv_file(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        """Loading a CSV file binds a relation named after the file stem."""
         csv_file = tmp_path / "users.csv"
         csv_file.write_text("name,age\nAlice,30\nBob,25\n")
 
@@ -67,6 +71,7 @@ class TestLoadCommand:
     def test_load_csv_with_alias(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        """The --as flag overrides the default relation name."""
         csv_file = tmp_path / "data.csv"
         csv_file.write_text("x\n1\n2\n")
 
@@ -79,6 +84,7 @@ class TestLoadCommand:
         assert "Loaded MyData:" in out
 
     def test_load_missing_file(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Loading a nonexistent file prints an error."""
         env = Environment()
         _handle_command("\\load /nonexistent/file.csv", env)
         out = capsys.readouterr().out
@@ -87,6 +93,7 @@ class TestLoadCommand:
     def test_load_workspace_file(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        """Loading a .codd workspace file restores saved relations."""
         # Create a workspace file.
         src_env = Environment()
         src_env.bind("R", Relation(frozenset({Tuple_(val=42)})))
@@ -104,6 +111,7 @@ class TestLoadCommand:
     def test_load_workspace_rejects_alias(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        """The --as flag is rejected for workspace files."""
         ws_path = tmp_path / "test.codd"
         ws_path.write_text('{"version": 1, "relations": {}}')
 
@@ -115,6 +123,7 @@ class TestLoadCommand:
     def test_load_csv_with_genkey(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        """The --genkey flag adds a synthetic key column to CSV data."""
         csv_file = tmp_path / "items.csv"
         csv_file.write_text("name,price\nApple,1.50\nBanana,0.75\n")
 
@@ -156,6 +165,7 @@ class TestLoadCommand:
     def test_load_workspace_rejects_genkey(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        """The --genkey flag is rejected for workspace files."""
         ws_path = tmp_path / "test.codd"
         ws_path.write_text('{"version": 1, "relations": {}}')
 
@@ -171,6 +181,7 @@ class TestSaveCommand:
     def test_save_to_path(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        """Saving to a path creates the workspace file."""
         env = Environment()
         env.bind("T", Relation(frozenset({Tuple_(x=1)})))
 
@@ -184,6 +195,7 @@ class TestSaveCommand:
     def test_save_no_args_without_prior(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        """Saving with no args and no prior save prints an error."""
         env = Environment()
         _handle_command("\\save", env)
         out = capsys.readouterr().out
@@ -192,6 +204,7 @@ class TestSaveCommand:
     def test_save_no_args_reuses_last(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        """Saving with no args reuses the last save path."""
         env = Environment()
         env.bind("T", Relation(frozenset({Tuple_(x=1)})))
 
@@ -235,6 +248,7 @@ class TestDropCommand:
     """Test \\drop command."""
 
     def test_drop_existing(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Dropping an existing relation removes it from the environment."""
         env = Environment()
         env.bind("R", Relation(frozenset({Tuple_(x=1)})))
         _handle_command("\\drop R", env)
@@ -243,12 +257,14 @@ class TestDropCommand:
         assert "Dropped R" in out
 
     def test_drop_missing(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Dropping a missing relation prints an error."""
         env = Environment()
         _handle_command("\\drop nope", env)
         out = capsys.readouterr().out
         assert "unknown relation" in out
 
     def test_drop_no_args(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Dropping with no args prints a usage error."""
         env = Environment()
         _handle_command("\\drop", env)
         out = capsys.readouterr().out
@@ -259,12 +275,14 @@ class TestEnvCommand:
     """Test \\env command."""
 
     def test_env_empty(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Empty environment prints a no-relations message."""
         env = Environment()
         _handle_command("\\env", env)
         out = capsys.readouterr().out
         assert "no relations loaded" in out
 
     def test_env_with_relations(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Non-empty environment lists relation names and tuple counts."""
         env = Environment()
         env.bind("R", Relation(frozenset({Tuple_(x=1, y=2)})))
         _handle_command("\\env", env)

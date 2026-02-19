@@ -70,6 +70,7 @@ class TestProject:
     """Test # (project)."""
 
     def test_single_attr(self) -> None:
+        """Project a single attribute from a relation."""
         result = run("E # name")
         assert isinstance(result, Relation)
         assert len(result) == 5
@@ -77,6 +78,7 @@ class TestProject:
         assert names == {"Alice", "Bob", "Carol", "Dave", "Eve"}
 
     def test_multiple_attrs(self) -> None:
+        """Project multiple attributes using bracket syntax."""
         result = run("E # [name salary]")
         assert isinstance(result, Relation)
         assert result.attributes == frozenset({"name", "salary"})
@@ -86,30 +88,36 @@ class TestFilter:
     """Test ? (filter)."""
 
     def test_gt(self) -> None:
+        """Filter rows where salary exceeds a threshold."""
         result = run("E ? salary > 50000")
         assert isinstance(result, Relation)
         assert len(result) == 4
 
     def test_eq_string(self) -> None:
+        """Filter rows by string equality on name."""
         result = run('E ? name = "Alice"')
         assert len(result) == 1
 
     def test_negated(self) -> None:
+        """Negated filter excludes matching rows."""
         result = run('E ?! role = "engineer"')
         assert len(result) == 1
         assert next(iter(result))["name"] == "Bob"
 
     def test_or_condition(self) -> None:
+        """Filter with OR condition matches either branch."""
         result = run("E ? (dept_id = 20 | salary > 80000)")
         assert len(result) == 3
         names = {t["name"] for t in result}
         assert names == {"Carol", "Dave", "Eve"}
 
     def test_set_membership(self) -> None:
+        """Filter by set membership using curly-brace syntax."""
         result = run("E ? dept_id = {10, 20}")
         assert len(result) == 5
 
     def test_chained_filters(self) -> None:
+        """Chained filters apply sequentially as logical AND."""
         result = run("E ? dept_id = 10 ? salary > 70000")
         assert len(result) == 2
         names = {t["name"] for t in result}
@@ -120,6 +128,7 @@ class TestChaining:
     """Test chained operations."""
 
     def test_filter_project(self) -> None:
+        """Filter then project retains only selected attributes."""
         result = run("E ? salary > 50000 # [name salary]")
         assert isinstance(result, Relation)
         assert len(result) == 4
@@ -130,18 +139,21 @@ class TestJoin:
     """Test * and *: (join)."""
 
     def test_natural_join(self) -> None:
+        """Natural join matches on shared attribute dept_id."""
         result = run("E * D")
         assert isinstance(result, Relation)
         assert len(result) == 5
         assert "dept_name" in result.attributes
 
     def test_join_filter_project(self) -> None:
+        """Join, filter, and project compose correctly."""
         result = run('E * D ? dept_name = "Engineering" # [name salary]')
         assert len(result) == 3
         names = {t["name"] for t in result}
         assert names == {"Alice", "Bob", "Dave"}
 
     def test_nest_join(self) -> None:
+        """Nest join groups child tuples into a nested relation."""
         result = run("E *: Phone > phones")
         assert isinstance(result, Relation)
         assert len(result) == 5
@@ -158,6 +170,7 @@ class TestUnnest:
     """Test <: (unnest)."""
 
     def test_nest_then_unnest(self) -> None:
+        """Unnest reverses a nest join, flattening nested tuples."""
         result = run("E *: Phone > phones <: phones")
         assert isinstance(result, Relation)
         # Alice has 1 phone, Carol has 2 -> 3 tuples
@@ -172,6 +185,7 @@ class TestExtend:
     """Test + (extend)."""
 
     def test_single(self) -> None:
+        """Extend adds a computed attribute to each tuple."""
         result = run("E + bonus: salary * 0.1 # [name bonus]")
         assert isinstance(result, Relation)
         for t in result:
@@ -183,6 +197,7 @@ class TestRename:
     """Test @ (rename)."""
 
     def test_rename(self) -> None:
+        """Rename changes an attribute name in the relation."""
         result = run("ContractorPay @ [pay > salary]")
         assert isinstance(result, Relation)
         assert "salary" in result.attributes
@@ -193,17 +208,20 @@ class TestSetOps:
     """Test |, -, & (set operations)."""
 
     def test_union(self) -> None:
+        """Union combines tuples from two compatible relations."""
         result = run("ContractorPay @ [pay > salary] | (E # [name salary])")
         assert isinstance(result, Relation)
         assert len(result) == 6
 
     def test_difference(self) -> None:
+        """Difference removes tuples present in the right relation."""
         result = run("E # emp_id - (Phone # emp_id)")
         assert isinstance(result, Relation)
         ids = {t["emp_id"] for t in result}
         assert ids == {2, 4, 5}
 
     def test_intersect(self) -> None:
+        """Intersect keeps only tuples present in both relations."""
         result = run("(E # emp_id) & (Phone # emp_id)")
         assert isinstance(result, Relation)
         ids = {t["emp_id"] for t in result}
@@ -214,6 +232,7 @@ class TestSummarize:
     """Test / and /. (summarize)."""
 
     def test_summarize_by_key(self) -> None:
+        """Summarize groups by key with count and mean aggregates."""
         result = run("E / dept_id [n: #.  avg: %. salary]")
         assert isinstance(result, Relation)
         assert len(result) == 2
@@ -226,6 +245,7 @@ class TestSummarize:
                 assert t["avg"] == 50000
 
     def test_summarize_all(self) -> None:
+        """Summarize-all aggregates the entire relation."""
         result = run("E /. [n: #.  total: +. salary]")
         assert isinstance(result, Relation)
         assert len(result) == 1
@@ -238,6 +258,7 @@ class TestNestBy:
     """Test /: (nest by)."""
 
     def test_nest_by(self) -> None:
+        """Nest-by groups tuples into nested relations by key."""
         result = run("E /: dept_id > team")
         assert isinstance(result, Relation)
         assert len(result) == 2
@@ -253,6 +274,7 @@ class TestSort:
     """Test $ and ^ (sort and take)."""
 
     def test_sort_desc(self) -> None:
+        """Sort descending orders tuples by attribute value."""
         result = run("E # [name salary] $ salary-")
         assert isinstance(result, list)
         assert len(result) == 5
@@ -260,6 +282,7 @@ class TestSort:
         assert result[-1]["name"] == "Eve"
 
     def test_sort_take(self) -> None:
+        """Sort then take returns the top N tuples."""
         result = run("E # [name salary] $ salary- ^ 3")
         assert isinstance(result, list)
         assert len(result) == 3
@@ -283,6 +306,7 @@ class TestAssignment:
     """Test := (assignment)."""
 
     def test_simple_assignment(self) -> None:
+        """Assignment binds a query result to a name in the environment."""
         env = _make_env()
         result = run("high := E ? salary > 70000", env)
         assert isinstance(result, Relation)
@@ -292,6 +316,7 @@ class TestAssignment:
         assert env.lookup("high") == result
 
     def test_assignment_then_use(self) -> None:
+        """Assigned name can be used in subsequent queries."""
         env = _make_env()
         run("eng := E ? dept_id = 10", env)
         result = run("eng # name", env)
@@ -300,6 +325,7 @@ class TestAssignment:
         assert names == {"Alice", "Bob", "Dave"}
 
     def test_assignment_overwrites(self) -> None:
+        """Re-assignment overwrites the previously bound value."""
         env = _make_env()
         run("x := E ? salary > 80000", env)
         assert len(env.lookup("x")) == 1
@@ -548,28 +574,28 @@ class TestFilterAggregateLHS:
     """Test aggregate operators on the LHS of filter conditions."""
 
     def test_count_eq(self) -> None:
-        """#. phones = 1 keeps employees with exactly one phone."""
+        """Filter by #. phones = 1 keeps employees with exactly one phone."""
         result = run("E *: Phone > phones ? #. phones = 1")
         assert isinstance(result, Relation)
         names = {t["name"] for t in result}
         assert names == {"Alice"}
 
     def test_count_gt(self) -> None:
-        """#. phones > 1 keeps employees with more than one phone."""
+        """Filter by #. phones > 1 keeps employees with more than one phone."""
         result = run("E *: Phone > phones ? #. phones > 1")
         assert isinstance(result, Relation)
         names = {t["name"] for t in result}
         assert names == {"Carol"}
 
     def test_count_zero(self) -> None:
-        """#. phones = 0 keeps employees with no phones."""
+        """Filter by #. phones = 0 keeps employees with no phones."""
         result = run("E *: Phone > phones ? #. phones = 0")
         assert isinstance(result, Relation)
         names = {t["name"] for t in result}
         assert names == {"Bob", "Dave", "Eve"}
 
     def test_count_bool_combination(self) -> None:
-        """Boolean combination of aggregate conditions."""
+        """Boolean AND of aggregate count conditions."""
         result = run("E *: Phone > phones ? (#. phones >= 1 & #. phones <= 2)")
         assert isinstance(result, Relation)
         names = {t["name"] for t in result}
