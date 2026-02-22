@@ -111,6 +111,7 @@ codd> E # [name salary] $ salary- ^ 3
 @    rename            E @ [pay > salary]
 +    extend            E + bonus: salary * 0.1
 +  ? ternary (in +)    E + grp: ? dept_id = 10 "eng" "other"
++  f() function (in +)  E + pct: round(salary / 3.0, 2)
 -    difference        A - (B)
 |    union             A | (B)
 &    intersect         A & (B)
@@ -122,3 +123,5 @@ $    sort (terminal)   E $ salary-  or  E $ [salary- name]
 ```
 
 Expressions chain left-to-right. Each operator transforms the result of the previous step. `$` leaves the relational world (returns an ordered array); only `^` can follow it.
+
+Arithmetic inside `+` follows standard precedence (`*`/`/` before `+`/`-`) and supports chaining: `salary / 1000.0 * 2.0`. Available functions: `round(value, ndigits)`.

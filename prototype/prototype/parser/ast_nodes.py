@@ -98,6 +98,14 @@ class TernaryExpr:
     false_expr: Expr
 
 
+@dataclass(frozen=True)
+class FunctionCall:
+    """Function call: round(expr, 2)."""
+
+    name: str
+    args: tuple[Expr, ...]
+
+
 # Expr is the union of all expression types
 Expr = (
     IntLiteral
@@ -110,6 +118,7 @@ Expr = (
     | AggregateCall
     | SubqueryExpr
     | TernaryExpr
+    | FunctionCall
 )
 
 

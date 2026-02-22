@@ -193,6 +193,26 @@ class TestExtend:
                 assert t["bonus"] == 8000.0
 
 
+class TestArithmeticPrecedence:
+    """Test chained arithmetic and precedence in extend."""
+
+    def test_divide_then_multiply(self) -> None:
+        """salary / 1000 * 2 evaluates left-to-right as (salary / 1000) * 2."""
+        result = run("E + x: salary / 1000.0 * 2.0 # [name x]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["x"] == 160.0
+
+    def test_precedence(self) -> None:
+        """salary + 1000 * 2 evaluates as salary + (1000 * 2)."""
+        result = run("E + x: salary + 1000 * 2 # [name x]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["x"] == 82000
+
+
 class TestRename:
     """Test @ (rename)."""
 
@@ -568,6 +588,42 @@ class TestTernary:
                 assert t["n"] == 3
             else:
                 assert t["n"] == 2
+
+
+class TestFunctionCall:
+    """Test function calls in extend computations."""
+
+    def test_round(self) -> None:
+        """round(salary / 3.0, 2) produces correctly rounded values."""
+        result = run("E + bonus: round(salary / 3.0, 2) # [name bonus]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["bonus"] == 26666.67
+            elif t["name"] == "Eve":
+                assert t["bonus"] == 15000.0
+
+    def test_round_decimal_precision(self) -> None:
+        """round preserves Decimal type for Decimal inputs."""
+        from decimal import Decimal
+
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({Tuple_(val=Decimal("10.456"), tag="a")})
+            ),
+        )
+        result = run("R + r: round(val, 2)", env)
+        t = next(iter(result))
+        assert t["r"] == Decimal("10.46")
+
+    def test_unknown_function(self) -> None:
+        """Unknown function name raises ExecutionError."""
+        from prototype.executor.executor import ExecutionError
+
+        with pytest.raises(ExecutionError, match="Unknown function"):
+            run("E + x: nope(salary)")
 
 
 class TestFilterAggregateLHS:

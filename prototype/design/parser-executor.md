@@ -56,6 +56,14 @@ Recursive descent. The core is `_parse_postfix_chain`: parse an atom (relation n
 
 The parser knows which context it's in because extend computation parsing uses `_parse_computation_expr` (arithmetic context) while the main chain uses `_parse_postfix_chain` (relational context).
 
+### Arithmetic precedence
+
+Computation expressions use a two-level precedence parser: `_parse_additive_expr` handles `+` and `-` (lower precedence), `_parse_multiplicative_expr` handles `*` and `/` (higher precedence). Both loop to support chained operations. So `a + b * 2` parses as `a + (b * 2)` and `a / b * 2` parses as `(a / b) * 2`. Parentheses override precedence as expected.
+
+### Function calls
+
+Inside computation expressions, `IDENT LPAREN` is recognized as a function call rather than an attribute reference. The parser peeks ahead at the `IDENT` branch of `_parse_computation_atom` to disambiguate. Function arguments are comma-separated computation expressions, so full arithmetic and nesting are supported within arguments: `round(salary / 3.0, 2)`.
+
 ### Ternary branches
 
 `?` inside extend computations parses as a ternary (`? condition true_expr false_expr`). Branches are parsed by `_parse_ternary_branch`, which accepts atoms, aggregate calls, and nested ternaries — but not binary arithmetic. This prevents the branch parser from greedily consuming postfix operators like `/` (summarize) or `*` (join) as arithmetic. Binary arithmetic in branches requires parentheses.
@@ -74,7 +82,7 @@ For `*`, `*:`: the right operand is always a bare relation name (plus `> alias` 
 
 26 frozen dataclasses in two categories:
 
-- **Expressions** (scalar values): `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `AttrRef`, `BinOp`, `SetLiteral`, `AggregateCall`, `SubqueryExpr`, `TernaryExpr`
+- **Expressions** (scalar values): `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `AttrRef`, `BinOp`, `SetLiteral`, `AggregateCall`, `SubqueryExpr`, `TernaryExpr`, `FunctionCall`
 - **Relational expressions** (relations/arrays): `RelName`, `Filter`, `NegatedFilter`, `Project`, `NaturalJoin`, `NestJoin`, `Unnest`, `Extend`, `Rename`, `Union`, `Difference`, `Intersect`, `Summarize`, `SummarizeAll`, `NestBy`, `Sort`, `Take`
 
 Plus `Condition` types for filters: `Comparison`, `BoolCombination`.
@@ -91,6 +99,10 @@ Mutable mapping of relation names to `Relation` values. The REPL's `\load` comma
 
 Five implementations: `#.` (count), `+.` (sum), `>.` (max), `<.` (min), `%.` (mean). Mean uses integer floor division when all values are integers, matching the design doc examples (76666 not 76666.67).
 
+### Function registry
+
+A module-level `_FUNCTION_REGISTRY` dict maps function names to callables. The executor looks up the name from a `FunctionCall` AST node, evaluates the arguments, and calls the function. Currently registered: `round(value, ndigits)` — delegates to Python's `round()`, preserving `Decimal` type for `Decimal` inputs.
+
 ### Condition compilation
 
 Filter conditions are compiled into predicate functions (`Callable[[Tuple_], bool]`) with pre-evaluated constant right-hand sides. Set literals are converted to Python sets for O(1) membership testing.
@@ -103,7 +115,7 @@ For `/:` (nest by) + `+` (extend) chains like `E /: dept_id > team + [top: >. te
 
 ### Implemented
 
-`?`, `?!`, `#`, `*`, `*:`, `<:`, `@`, `+`, `-`, `|`, `&`, `/`, `/.`, `/:`, `$`, `^`, chained `?` (AND), `|`/`&` inside filter parens (OR/AND), bracket elision, set literals, aggregate functions (`#.`, `+.`, `>.`, `<.`, `%.`), ternary expressions (`? cond true false` inside `+`), REPL with sample data, `eval` CLI command.
+`?`, `?!`, `#`, `*`, `*:`, `<:`, `@`, `+`, `-`, `|`, `&`, `/`, `/.`, `/:`, `$`, `^`, chained `?` (AND), `|`/`&` inside filter parens (OR/AND), bracket elision, set literals, aggregate functions (`#.`, `+.`, `>.`, `<.`, `%.`), ternary expressions (`? cond true false` inside `+`), function calls (`round(expr, n)` inside `+`), arithmetic precedence (`*`/`/` before `+`/`-`), REPL with sample data, `eval` CLI command.
 
 ### Deferred
 
@@ -111,14 +123,14 @@ For `/:` (nest by) + `+` (extend) chains like `E /: dept_id > team + [top: >. te
 
 ## Testing
 
-299 tests across 10 files:
+315 tests across 10 files:
 
 | File | Tests | Scope |
 |------|-------|-------|
 | test_model.py | 50 | Tuple_ and Relation operations |
 | test_lexer.py | 44 | Tokenization, digraphs, literals, errors |
-| test_parser.py | 45 | AST construction for all operator types |
-| test_executor.py | 47 | Execution of individual operators |
+| test_parser.py | 54 | AST construction for all operator types |
+| test_executor.py | 53 | Execution of individual operators |
 | test_aggregates.py | 9 | Aggregate function implementations |
 | test_integration.py | 34 | End-to-end: parse + execute examples from algebra.md |
 | test_loader.py | 33 | CSV loading and type inference |

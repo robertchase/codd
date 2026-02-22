@@ -188,6 +188,53 @@ class TestExtend:
         assert result.computations[1].name == "tax"
 
 
+class TestArithmeticPrecedence:
+    """Test arithmetic chaining and operator precedence in extend."""
+
+    def test_chained_multiply_divide(self) -> None:
+        """a / b * 2 parses as (a / b) * 2 (left-to-right)."""
+        result = parse("R + x: a / b * 2")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.BinOp)
+        assert expr.op == "*"
+        assert isinstance(expr.left, ast.BinOp)
+        assert expr.left.op == "/"
+        assert isinstance(expr.right, ast.IntLiteral)
+        assert expr.right.value == 2
+
+    def test_multiply_before_add(self) -> None:
+        """a + b * 2 parses as a + (b * 2) (precedence)."""
+        result = parse("R + x: a + b * 2")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.BinOp)
+        assert expr.op == "+"
+        assert isinstance(expr.left, ast.AttrRef)
+        assert isinstance(expr.right, ast.BinOp)
+        assert expr.right.op == "*"
+
+    def test_chained_additive(self) -> None:
+        """a + b - c parses as (a + b) - c."""
+        result = parse("R + x: a + b - c")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.BinOp)
+        assert expr.op == "-"
+        assert isinstance(expr.left, ast.BinOp)
+        assert expr.left.op == "+"
+
+    def test_parens_override_precedence(self) -> None:
+        """(a + b) * 2 groups addition first via parentheses."""
+        result = parse("R + x: (a + b) * 2")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.BinOp)
+        assert expr.op == "*"
+        assert isinstance(expr.left, ast.BinOp)
+        assert expr.left.op == "+"
+
+
 class TestRename:
     """Test rename parsing."""
 
@@ -410,6 +457,43 @@ class TestTernaryParsing:
         inner = comp.expr.false_expr
         assert inner.true_expr.value == "mid"
         assert inner.false_expr.value == "low"
+
+
+class TestFunctionCall:
+    """Test function call parsing."""
+
+    def test_function_call_in_extend(self) -> None:
+        """Function call wrapping a binary expression parses correctly."""
+        result = parse("R + pct: round(value / total, 2)")
+        assert isinstance(result, ast.Extend)
+        comp = result.computations[0]
+        assert comp.name == "pct"
+        assert isinstance(comp.expr, ast.FunctionCall)
+        assert comp.expr.name == "round"
+        assert len(comp.expr.args) == 2
+        assert isinstance(comp.expr.args[0], ast.BinOp)
+        assert comp.expr.args[0].op == "/"
+        assert isinstance(comp.expr.args[1], ast.IntLiteral)
+        assert comp.expr.args[1].value == 2
+
+    def test_function_call_no_args(self) -> None:
+        """Function call with no arguments parses correctly."""
+        result = parse("R + x: foo()")
+        assert isinstance(result, ast.Extend)
+        comp = result.computations[0]
+        assert isinstance(comp.expr, ast.FunctionCall)
+        assert comp.expr.name == "foo"
+        assert comp.expr.args == ()
+
+    def test_function_call_single_arg(self) -> None:
+        """Function call with a single argument parses correctly."""
+        result = parse("R + x: abs(salary)")
+        assert isinstance(result, ast.Extend)
+        comp = result.computations[0]
+        assert isinstance(comp.expr, ast.FunctionCall)
+        assert comp.expr.name == "abs"
+        assert len(comp.expr.args) == 1
+        assert isinstance(comp.expr.args[0], ast.AttrRef)
 
 
 class TestErrors:

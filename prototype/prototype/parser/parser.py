@@ -526,10 +526,8 @@ class Parser:
     def _parse_computation_expr(self) -> ast.Expr:
         """Parse a computation expression (for extend).
 
-        This is the context where * means multiply and / means divide.
-        Supports: attr, literal, attr op attr, attr op literal.
-        Supports aggregate calls: #. or +. salary etc.
-        Supports ternary: ? condition true_expr false_expr.
+        Supports full arithmetic with standard precedence (* / before + -),
+        aggregate calls, and ternary expressions.
         """
         # Check for ternary expression
         if self._peek().type == TokenType.QUESTION:
@@ -543,20 +541,26 @@ class Parser:
         if self._peek().type in agg_types:
             return self._parse_aggregate_call()
 
-        left = self._parse_computation_atom()
+        return self._parse_additive_expr()
 
-        # Check for binary arithmetic
-        arith_ops = {
-            TokenType.STAR: "*",
-            TokenType.SLASH: "/",
-            TokenType.PLUS: "+",
-            TokenType.MINUS: "-",
-        }
-        if self._peek().type in arith_ops:
+    def _parse_additive_expr(self) -> ast.Expr:
+        """Parse additive expression: multiplicative ((+ | -) multiplicative)*."""
+        add_ops = {TokenType.PLUS: "+", TokenType.MINUS: "-"}
+        left = self._parse_multiplicative_expr()
+        while self._peek().type in add_ops:
+            op_tok = self._advance()
+            right = self._parse_multiplicative_expr()
+            left = ast.BinOp(left=left, op=add_ops[op_tok.type], right=right)
+        return left
+
+    def _parse_multiplicative_expr(self) -> ast.Expr:
+        """Parse multiplicative expression: atom ((* | /) atom)*."""
+        mul_ops = {TokenType.STAR: "*", TokenType.SLASH: "/"}
+        left = self._parse_computation_atom()
+        while self._peek().type in mul_ops:
             op_tok = self._advance()
             right = self._parse_computation_atom()
-            return ast.BinOp(left=left, op=arith_ops[op_tok.type], right=right)
-
+            left = ast.BinOp(left=left, op=mul_ops[op_tok.type], right=right)
         return left
 
     def _parse_ternary_expr(self) -> ast.TernaryExpr:
@@ -650,6 +654,8 @@ class Parser:
             self._advance()
             return ast.BoolLiteral(value=tok.value == "true")
         if tok.type == TokenType.IDENT:
+            if self._peek(1).type == TokenType.LPAREN:
+                return self._parse_function_call()
             return self._parse_attr_ref()
         if tok.type == TokenType.LPAREN:
             self._advance()
@@ -657,3 +663,16 @@ class Parser:
             self._expect(TokenType.RPAREN)
             return expr
         raise ParseError(f"Expected value in computation, got {tok.value!r}", tok)
+
+    def _parse_function_call(self) -> ast.FunctionCall:
+        """Parse: name(arg1, arg2, ...)."""
+        name_tok = self._expect(TokenType.IDENT)
+        self._expect(TokenType.LPAREN)
+        args: list[ast.Expr] = []
+        if self._peek().type != TokenType.RPAREN:
+            args.append(self._parse_computation_expr())
+            while self._peek().type == TokenType.COMMA:
+                self._advance()
+                args.append(self._parse_computation_expr())
+        self._expect(TokenType.RPAREN)
+        return ast.FunctionCall(name=name_tok.value, args=tuple(args))

@@ -19,6 +19,15 @@ class ExecutionError(Exception):
     """Raised on execution errors."""
 
 
+_FUNCTION_REGISTRY: dict[str, callable] = {
+    "round": lambda args: (
+        Decimal(str(round(float(args[0]), args[1])))
+        if isinstance(args[0], Decimal)
+        else round(args[0], args[1])
+    ),
+}
+
+
 class Executor:
     """Evaluates relational algebra AST nodes."""
 
@@ -284,6 +293,8 @@ class Executor:
             return self._as_relation(expr.query)
         if isinstance(expr, ast.TernaryExpr):
             return self._eval_ternary(expr, t)
+        if isinstance(expr, ast.FunctionCall):
+            return self._eval_function_call(expr, t)
         raise ExecutionError(f"Unknown expression type: {type(expr).__name__}")
 
     def _eval_attr_ref(self, ref: ast.AttrRef, t: Tuple_) -> Value:
@@ -336,6 +347,14 @@ class Executor:
         if predicate(t):
             return self._eval_expr(expr.true_expr, t)
         return self._eval_expr(expr.false_expr, t)
+
+    def _eval_function_call(self, expr: ast.FunctionCall, t: Tuple_) -> Value:
+        """Evaluate a function call expression."""
+        fn = _FUNCTION_REGISTRY.get(expr.name)
+        if fn is None:
+            raise ExecutionError(f"Unknown function: {expr.name!r}")
+        evaluated_args = [self._eval_expr(arg, t) for arg in expr.args]
+        return fn(evaluated_args)
 
     def _eval_aggregate_call(self, expr: ast.AggregateCall, t: Tuple_) -> Value:
         """Evaluate an aggregate function call in extend context."""
