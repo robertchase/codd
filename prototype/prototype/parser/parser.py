@@ -369,7 +369,7 @@ class Parser:
             return [self._parse_named_aggregate()]
 
     def _parse_named_aggregate(self) -> ast.NamedAggregate:
-        """Parse: name: agg_func [attr].
+        """Parse: name: agg_func [attr] or name: wrapper(agg_func [attr], extra_args).
 
         agg_func is one of: #., +., >., <., %.
         For #. the attr is optional (count tuples).
@@ -378,21 +378,62 @@ class Parser:
           name: #. (team ? cond)
         Or a dotted reference like:
           name: >. team.salary
+        A wrapper function can wrap the aggregate:
+          name: round(+. salary, 2)
         """
         name_tok = self._expect(TokenType.IDENT)
         self._expect(TokenType.COLON)
-        func_tok = self._advance()
+
         func_types = {
             TokenType.HASH_DOT, TokenType.PLUS_DOT,
             TokenType.GT_DOT, TokenType.LT_DOT, TokenType.PERCENT_DOT,
         }
+
+        # Check for wrapper: IDENT LPAREN before aggregate function
+        wrapper: str | None = None
+        wrapper_args: tuple[ast.Expr, ...] = ()
+        if (
+            self._peek().type == TokenType.IDENT
+            and self._peek(1).type == TokenType.LPAREN
+        ):
+            wrapper = self._advance().value  # function name
+            self._advance()  # (
+            # Now parse the inner aggregate
+            func_tok = self._advance()
+            if func_tok.type not in func_types:
+                raise ParseError(
+                    f"Expected aggregate function inside wrapper, got {func_tok.value!r}",
+                    func_tok,
+                )
+            func = func_tok.value
+            attr, source = self._parse_aggregate_attr_source()
+            # Parse extra comma-separated args
+            extra: list[ast.Expr] = []
+            while self._peek().type == TokenType.COMMA:
+                self._advance()
+                extra.append(self._parse_computation_expr())
+            self._expect(TokenType.RPAREN)
+            wrapper_args = tuple(extra)
+            return ast.NamedAggregate(
+                name=name_tok.value, func=func, attr=attr, source=source,
+                wrapper=wrapper, wrapper_args=wrapper_args,
+            )
+
+        func_tok = self._advance()
         if func_tok.type not in func_types:
             raise ParseError(
                 f"Expected aggregate function, got {func_tok.value!r}", func_tok
             )
         func = func_tok.value
+        attr, source = self._parse_aggregate_attr_source()
+        return ast.NamedAggregate(
+            name=name_tok.value, func=func, attr=attr, source=source
+        )
 
-        # Check for optional source/attr
+    def _parse_aggregate_attr_source(
+        self,
+    ) -> tuple[str | None, ast.RelExpr | None]:
+        """Parse optional attr and source after an aggregate function token."""
         attr: str | None = None
         source: ast.RelExpr | None = None
 
@@ -403,7 +444,6 @@ class Parser:
             self._expect(TokenType.RPAREN)
         elif self._peek().type == TokenType.IDENT:
             # Could be: attr, or dotted: team.salary
-            next_tok = self._peek()
             if self._peek(1).type == TokenType.DOT:
                 # Dotted: team.salary -> source=team, attr=salary
                 source_name = self._advance().value  # team
@@ -419,9 +459,7 @@ class Parser:
             else:
                 attr = self._advance().value
 
-        return ast.NamedAggregate(
-            name=name_tok.value, func=func, attr=attr, source=source
-        )
+        return attr, source
 
     def _parse_condition(self) -> ast.Condition:
         """Parse a filter condition.

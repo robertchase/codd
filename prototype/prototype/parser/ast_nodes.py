@@ -267,12 +267,14 @@ class Intersect:
 
 @dataclass(frozen=True)
 class NamedAggregate:
-    """A named aggregate: name: agg_func [attr]."""
+    """A named aggregate: name: agg_func [attr] or name: wrapper(agg_func [attr], args)."""
 
     name: str
     func: str  # "#.", "+.", ">.", "<.", "%."
     attr: str | None  # None for #. (count), attribute name for others
     source: RelExpr | None = None  # For conditional: #. (team ? cond)
+    wrapper: str | None = None  # Function name, e.g. "round"
+    wrapper_args: tuple[Expr, ...] = ()  # Extra args beyond the aggregate
 
 
 @dataclass(frozen=True)

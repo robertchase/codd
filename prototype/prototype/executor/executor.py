@@ -19,12 +19,15 @@ class ExecutionError(Exception):
     """Raised on execution errors."""
 
 
+def _fn_round(args: list) -> Decimal:
+    """Round a number to the specified decimal places, always returning Decimal."""
+    value, places = args[0], args[1]
+    rounded = round(float(value), places)
+    return Decimal(str(rounded)).quantize(Decimal(10) ** -places)
+
+
 _FUNCTION_REGISTRY: dict[str, callable] = {
-    "round": lambda args: (
-        Decimal(str(round(float(args[0]), args[1])))
-        if isinstance(args[0], Decimal)
-        else round(args[0], args[1])
-    ),
+    "round": _fn_round,
 }
 
 
@@ -205,24 +208,28 @@ class Executor:
         for agg in node.aggregates:
             agg_fn = get_aggregate(agg.func)
             attr = agg.attr
+            wrapper_fn, extra_args = self._resolve_wrapper(agg)
 
             if agg.source is not None:
                 # Conditional aggregation or dotted: source provides the relation
                 src_node = agg.source
-                def make_fn(fn, a, src):
+                def make_fn(fn, a, src, wfn, wargs):
                     def f(group_rel: Relation) -> Value:
-                        # In summarize context, the source is evaluated relative
-                        # to the group members, not the environment.
-                        # For simple summarize, we just use group_rel directly.
-                        return fn(group_rel, a)
+                        raw = fn(group_rel, a)
+                        if wfn is not None:
+                            return wfn([raw, *wargs])
+                        return raw
                     return f
-                agg_fns[agg.name] = make_fn(agg_fn, attr, src_node)
+                agg_fns[agg.name] = make_fn(agg_fn, attr, src_node, wrapper_fn, extra_args)
             else:
-                def make_fn(fn, a):
+                def make_fn(fn, a, wfn, wargs):
                     def f(group_rel: Relation) -> Value:
-                        return fn(group_rel, a)
+                        raw = fn(group_rel, a)
+                        if wfn is not None:
+                            return wfn([raw, *wargs])
+                        return raw
                     return f
-                agg_fns[agg.name] = make_fn(agg_fn, attr)
+                agg_fns[agg.name] = make_fn(agg_fn, attr, wrapper_fn, extra_args)
 
         return source.summarize(frozenset(node.group_attrs), agg_fns)
 
@@ -233,14 +240,44 @@ class Executor:
         for agg in node.aggregates:
             agg_fn = get_aggregate(agg.func)
             attr = agg.attr
+            wrapper_fn, extra_args = self._resolve_wrapper(agg)
 
-            def make_fn(fn, a):
+            def make_fn(fn, a, wfn, wargs):
                 def f(rel: Relation) -> Value:
-                    return fn(rel, a)
+                    raw = fn(rel, a)
+                    if wfn is not None:
+                        return wfn([raw, *wargs])
+                    return raw
                 return f
-            agg_fns[agg.name] = make_fn(agg_fn, attr)
+            agg_fns[agg.name] = make_fn(agg_fn, attr, wrapper_fn, extra_args)
 
         return source.summarize_all(agg_fns)
+
+    def _resolve_wrapper(
+        self, agg: ast.NamedAggregate
+    ) -> tuple[callable | None, list]:
+        """Resolve wrapper function and eagerly evaluate extra args."""
+        if agg.wrapper is None:
+            return None, []
+        fn = _FUNCTION_REGISTRY.get(agg.wrapper)
+        if fn is None:
+            raise ExecutionError(f"Unknown function: {agg.wrapper!r}")
+        extra = [self._eval_const_expr(e) for e in agg.wrapper_args]
+        return fn, extra
+
+    def _eval_const_expr(self, expr: ast.Expr) -> Value:
+        """Evaluate a constant expression (no tuple context)."""
+        if isinstance(expr, ast.IntLiteral):
+            return expr.value
+        if isinstance(expr, ast.FloatLiteral):
+            return expr.value
+        if isinstance(expr, ast.StringLiteral):
+            return expr.value
+        if isinstance(expr, ast.BoolLiteral):
+            return expr.value
+        raise ExecutionError(
+            f"Wrapper argument must be a constant, got {type(expr).__name__}"
+        )
 
     def _eval_nest_by(self, node: ast.NestBy) -> Relation:
         """Evaluate: source /: group_attrs > name."""
