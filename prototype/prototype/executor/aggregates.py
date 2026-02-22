@@ -33,11 +33,16 @@ def agg_count(rel: Relation, attr: str | None = None) -> int:
 
 
 def agg_sum(rel: Relation, attr: str | None = None) -> int | float:
-    """Sum an attribute across tuples (+.)."""
+    """Sum an attribute across tuples (+.).
+
+    Returns int when all values are int, float otherwise.
+    """
     if attr is None:
         raise ValueError("+. requires an attribute name")
     values = _extract_values(rel, attr)
-    return sum(values)
+    if all(isinstance(v, int) for v in values):
+        return sum(values)
+    return sum(float(v) for v in values)
 
 
 def agg_max(rel: Relation, attr: str | None = None) -> int | float | str:
