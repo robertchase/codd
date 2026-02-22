@@ -209,18 +209,20 @@ class TestSummarizeExamples:
     def test_summarize_by_dept(self) -> None:
         """E / dept_id [n: #.  avg: %. salary].
 
-        dept 10: n=3, avg=76666 (230000//3)
-        dept 20: n=2, avg=50000
+        dept 10: n=3, avg=76666.67
+        dept 20: n=2, avg=50000.0
         """
+        import pytest as pt
+
         result = run("E / dept_id [n: #.  avg: %. salary]")
         assert len(result) == 2
         for t in result:
             if t["dept_id"] == 10:
                 assert t["n"] == 3
-                assert t["avg"] == 76666
+                assert t["avg"] == pt.approx(76666.67, abs=0.01)
             elif t["dept_id"] == 20:
                 assert t["n"] == 2
-                assert t["avg"] == 50000
+                assert t["avg"] == 50000.0
 
     def test_summarize_all(self) -> None:
         """E /. [n: #.  total: +. salary] -> n=5, total=330000."""
@@ -341,15 +343,15 @@ class TestComplexChains:
         assert len(result) == 5
 
     def test_aggregates_of_aggregates(self) -> None:
-        """(E / dept_id [n: #.]) /. [avg_size: %. n] -> avg_size = 2.
+        """(E / dept_id [n: #.]) /. [avg_size: %. n] -> avg_size = 2.5.
 
-        dept 10: 3, dept 20: 2. Mean = (3+2)//2 = 2.
+        dept 10: 3, dept 20: 2. Mean = (3+2)/2 = 2.5.
         """
         result = run("(E / dept_id [n: #.]) /. [avg_size: %. n]")
         assert isinstance(result, Relation)
         assert len(result) == 1
         t = next(iter(result))
-        assert t["avg_size"] == 2  # (3+2)//2 = 2 (integer floor division)
+        assert t["avg_size"] == 2.5
 
 
 class TestCsvLoading:

@@ -282,10 +282,10 @@ class TestSummarize:
         for t in result:
             if t["dept_id"] == 10:
                 assert t["n"] == 3
-                assert t["avg"] == 76666  # (80000+60000+90000)//3
+                assert t["avg"] == pytest.approx(76666.67, abs=0.01)
             else:
                 assert t["n"] == 2
-                assert t["avg"] == 50000
+                assert t["avg"] == 50000.0
 
     def test_summarize_all(self) -> None:
         """Summarize-all aggregates the entire relation."""
@@ -510,7 +510,7 @@ class TestNumericPromotion:
         )
         result = run("data / grp avg: %. val", env)
         t = next(iter(result))
-        assert t["avg"] == 15
+        assert t["avg"] == 15.0
 
     def test_aggregate_error_is_execution_error(self) -> None:
         """TypeError from aggregates becomes ExecutionError, not a stack trace."""

@@ -56,22 +56,15 @@ def agg_min(rel: Relation, attr: str | None = None) -> int | float | str:
     return min(values)
 
 
-def agg_mean(rel: Relation, attr: str | None = None) -> int | float:
-    """Mean of an attribute across tuples (%.).
-
-    Returns an integer (floor division) when all values are integers,
-    matching the design doc examples (76667, not 76666.67).
-    """
+def agg_mean(rel: Relation, attr: str | None = None) -> float:
+    """Mean of an attribute across tuples (%.)."""
     if attr is None:
         raise ValueError("%. requires an attribute name")
     values = _extract_values(rel, attr)
-    total = sum(values)
     count = len(values)
     if count == 0:
         raise ValueError("%. on empty relation")
-    if all(isinstance(v, int) for v in values):
-        return total // count
-    return total / count
+    return sum(float(v) for v in values) / count
 
 
 AGGREGATE_FUNCTIONS: dict[str, type] = {}

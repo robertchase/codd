@@ -74,13 +74,13 @@ class TestAggMin:
 class TestAggMean:
     """Tests for %. (mean)."""
 
-    def test_mean_integer(self) -> None:
-        """%. salary -> 65000 (exact integer mean)."""
-        assert agg_mean(_sample(), "salary") == 65000
+    def test_mean_returns_float(self) -> None:
+        """%. salary -> 65000.0 (always returns float)."""
+        assert agg_mean(_sample(), "salary") == 65000.0
+        assert isinstance(agg_mean(_sample(), "salary"), float)
 
-    def test_mean_truncates(self) -> None:
-        """%. v -> 21 (63/3, integer truncation)."""
-        # 80000 + 60000 + 55000 = 195000 / 3 = 65000 exact
+    def test_mean_fractional(self) -> None:
+        """%. v -> 21.0 (63/3)."""
         r = Relation(
             frozenset(
                 {
@@ -90,5 +90,5 @@ class TestAggMean:
                 }
             )
         )
-        # 63 / 3 = 21
-        assert agg_mean(r, "v") == 21
+        assert agg_mean(r, "v") == 21.0
+        assert isinstance(agg_mean(r, "v"), float)
