@@ -34,7 +34,7 @@ Immutable set of tuples backed by `frozenset[Tuple_]` — automatic deduplicatio
 
 ## Lexer
 
-Hand-written single-pass lexer with two-character lookahead for digraph detection. Digraphs (`?!`, `*:`, `<:`, `/.`, `/:`, `#.`, `+.`, `>.`, `<.`, `%.`, `:=`, `|=`, `-=`, `?=`, `!=`, `>=`, `<=`, `!~`, `::`, `+:`) are checked before single-character operators. Line comments start with `--`.
+Hand-written single-pass lexer with two-character lookahead for digraph detection. Digraphs (`?!`, `*:`, `<:`, `/.`, `/:`, `#!`, `#.`, `+.`, `>.`, `<.`, `%.`, `:=`, `|=`, `-=`, `?=`, `!=`, `>=`, `<=`, `!~`, `::`, `+:`) are checked before single-character operators. Line comments start with `--`.
 
 50+ token types in the `TokenType` enum. Each `Token` carries type, value, line, and column.
 
@@ -80,10 +80,10 @@ For `*`, `*:`: the right operand is always a bare relation name (plus `> alias` 
 
 ## AST
 
-26 frozen dataclasses in two categories:
+27 frozen dataclasses in two categories:
 
 - **Expressions** (scalar values): `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `AttrRef`, `BinOp`, `SetLiteral`, `AggregateCall`, `SubqueryExpr`, `TernaryExpr`, `FunctionCall`
-- **Relational expressions** (relations/arrays): `RelName`, `Filter`, `NegatedFilter`, `Project`, `NaturalJoin`, `NestJoin`, `Unnest`, `Extend`, `Rename`, `Union`, `Difference`, `Intersect`, `Summarize`, `SummarizeAll`, `NestBy`, `Sort`, `Take`
+- **Relational expressions** (relations/arrays): `RelName`, `Filter`, `NegatedFilter`, `Project`, `Remove`, `NaturalJoin`, `NestJoin`, `Unnest`, `Extend`, `Rename`, `Union`, `Difference`, `Intersect`, `Summarize`, `SummarizeAll`, `NestBy`, `Sort`, `Take`
 
 Plus `Condition` types for filters: `Comparison`, `BoolCombination`.
 
@@ -115,7 +115,7 @@ For `/:` (nest by) + `+` (extend) chains like `E /: dept_id > team + [top: >. te
 
 ### Implemented
 
-`?`, `?!`, `#`, `*`, `*:`, `<:`, `@`, `+`, `-`, `|`, `&`, `/`, `/.`, `/:`, `$`, `^`, chained `?` (AND), `|`/`&` inside filter parens (OR/AND), bracket elision, set literals, aggregate functions (`#.`, `+.`, `>.`, `<.`, `%.`), ternary expressions (`? cond true false` inside `+`), function calls (`round(expr, n)` inside `+`), arithmetic precedence (`*`/`/` before `+`/`-`), REPL with sample data, `eval` CLI command.
+`?`, `?!`, `#`, `#!`, `*`, `*:`, `<:`, `@`, `+`, `-`, `|`, `&`, `/`, `/.`, `/:`, `$`, `^`, chained `?` (AND), `|`/`&` inside filter parens (OR/AND), bracket elision, set literals, aggregate functions (`#.`, `+.`, `>.`, `<.`, `%.`), ternary expressions (`? cond true false` inside `+`), function calls (`round(expr, n)` inside `+`), arithmetic precedence (`*`/`/` before `+`/`-`), REPL with sample data, `eval` CLI command.
 
 ### Deferred
 
@@ -123,14 +123,14 @@ For `/:` (nest by) + `+` (extend) chains like `E /: dept_id > team + [top: >. te
 
 ## Testing
 
-315 tests across 10 files:
+321 tests across 10 files:
 
 | File | Tests | Scope |
 |------|-------|-------|
-| test_model.py | 50 | Tuple_ and Relation operations |
+| test_model.py | 52 | Tuple_ and Relation operations |
 | test_lexer.py | 44 | Tokenization, digraphs, literals, errors |
-| test_parser.py | 54 | AST construction for all operator types |
-| test_executor.py | 53 | Execution of individual operators |
+| test_parser.py | 56 | AST construction for all operator types |
+| test_executor.py | 55 | Execution of individual operators |
 | test_aggregates.py | 9 | Aggregate function implementations |
 | test_integration.py | 34 | End-to-end: parse + execute examples from algebra.md |
 | test_loader.py | 33 | CSV loading and type inference |

@@ -84,6 +84,29 @@ class TestProject:
         assert result.attributes == frozenset({"name", "salary"})
 
 
+class TestRemove:
+    """Test #! (remove)."""
+
+    def test_single_attr(self) -> None:
+        """Remove a single attribute keeps all others."""
+        result = run("E #! salary")
+        assert isinstance(result, Relation)
+        assert "salary" not in result.attributes
+        expected = {"emp_id", "name", "dept_id", "role"}
+        assert result.attributes == frozenset(expected)
+        assert len(result) == 5
+
+    def test_chained_with_filter(self) -> None:
+        """Remove multiple attrs then filter on a remaining attr."""
+        result = run('E #! [emp_id dept_id] ? name = "Alice"')
+        assert isinstance(result, Relation)
+        assert "emp_id" not in result.attributes
+        assert "dept_id" not in result.attributes
+        assert len(result) == 1
+        t = next(iter(result))
+        assert t["name"] == "Alice"
+
+
 class TestFilter:
     """Test ? (filter)."""
 

@@ -83,6 +83,13 @@ class Relation:
         projected = frozenset(t.project(attrs) for t in self._tuples)
         return Relation(projected, attributes=attrs)
 
+    def remove(self, attrs: frozenset[str]) -> Relation:
+        """Remove: drop the specified attributes, keep the rest (#!)."""
+        unknown = attrs - self._attributes
+        if unknown:
+            raise ValueError(f"remove references unknown attributes: {sorted(unknown)}")
+        return self.project(self._attributes - attrs)
+
     def where(self, predicate: Callable[[Tuple_], bool]) -> Relation:
         """Filter: keep tuples matching the predicate (?)."""
         filtered = frozenset(t for t in self._tuples if predicate(t))

@@ -77,6 +77,8 @@ class Executor:
             return self._eval_negated_filter(node)
         if isinstance(node, ast.Project):
             return self._eval_project(node)
+        if isinstance(node, ast.Remove):
+            return self._eval_remove(node)
         if isinstance(node, ast.NaturalJoin):
             return self._eval_natural_join(node)
         if isinstance(node, ast.NestJoin):
@@ -137,6 +139,11 @@ class Executor:
         """Evaluate: source # attrs."""
         source = self._as_relation(node.source)
         return source.project(frozenset(node.attrs))
+
+    def _eval_remove(self, node: ast.Remove) -> Relation:
+        """Evaluate: source #! attrs."""
+        source = self._as_relation(node.source)
+        return source.remove(frozenset(node.attrs))
 
     def _eval_natural_join(self, node: ast.NaturalJoin) -> Relation:
         """Evaluate: source * right."""

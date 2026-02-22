@@ -123,6 +123,8 @@ class Parser:
                 left = self._parse_negated_filter(left)
             elif tok.type == TokenType.HASH:
                 left = self._parse_project(left)
+            elif tok.type == TokenType.HASH_BANG:
+                left = self._parse_remove(left)
             elif tok.type == TokenType.STAR:
                 left = self._parse_natural_join(left)
             elif tok.type == TokenType.STAR_COLON:
@@ -172,6 +174,12 @@ class Parser:
         self._advance()  # consume #
         attrs = self._parse_attr_list()
         return ast.Project(source=source, attrs=attrs)
+
+    def _parse_remove(self, source: ast.RelExpr) -> ast.Remove:
+        """Parse: #! attr or #! [attr1 attr2]."""
+        self._advance()  # consume #!
+        attrs = self._parse_attr_list()
+        return ast.Remove(source=source, attrs=attrs)
 
     def _parse_natural_join(self, source: ast.RelExpr) -> ast.NaturalJoin:
         """Parse: * RelName."""

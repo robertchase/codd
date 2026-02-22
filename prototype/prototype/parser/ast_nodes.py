@@ -185,6 +185,14 @@ class Project:
 
 
 @dataclass(frozen=True)
+class Remove:
+    """Remove: #! attr or #! [attr1 attr2]."""
+
+    source: RelExpr
+    attrs: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class NaturalJoin:
     """Natural join: * RelName."""
 
@@ -323,6 +331,7 @@ RelExpr = (
     | Filter
     | NegatedFilter
     | Project
+    | Remove
     | NaturalJoin
     | NestJoin
     | Unnest

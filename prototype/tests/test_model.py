@@ -400,6 +400,20 @@ class TestRelation:
         vals = {(t["a"], t["x"]) for t in result}
         assert vals == {(1, 10), (1, 20), (2, 30)}
 
+    def test_remove(self) -> None:
+        """Remove drops specified attributes, keeps the rest."""
+        e = self._employees()
+        result = e.remove(frozenset({"salary"}))
+        assert "salary" not in result.attributes
+        assert result.attributes == frozenset({"emp_id", "name", "dept_id", "role"})
+        assert len(result) == 5
+
+    def test_remove_unknown_attribute(self) -> None:
+        """Remove rejects unknown attribute names."""
+        e = self._employees()
+        with pytest.raises(ValueError, match="remove references unknown attributes"):
+            e.remove(frozenset({"nonexistent"}))
+
     def test_sort(self) -> None:
         """Sort orders tuples by key function."""
         e = self._employees()

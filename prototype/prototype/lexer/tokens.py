@@ -41,6 +41,7 @@ class TokenType(Enum):
     SLASH_DOT = auto()      # /.  summarize all
     SLASH_COLON = auto()    # /:  nest by
     PLUS_COLON = auto()     # +:  modify
+    HASH_BANG = auto()      # #!  remove (inverse project)
     HASH_DOT = auto()       # #.  count aggregate
     PLUS_DOT = auto()       # +.  sum aggregate
     GT_DOT = auto()         # >.  max aggregate

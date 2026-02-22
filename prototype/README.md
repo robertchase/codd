@@ -105,6 +105,7 @@ codd> E # [name salary] $ salary- ^ 3
 ?    filter            E ? salary > 50000
 ?!   negated filter    E ?! dept_id = 10
 #    project           E # name  or  E # [name salary]
+#!   remove            E #! salary  or  E #! [emp_id dept_id]
 *    natural join      E * D
 *:   nest join         E *: Phone > phones
 <:   unnest            E *: Phone > phones <: phones

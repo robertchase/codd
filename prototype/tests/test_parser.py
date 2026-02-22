@@ -44,6 +44,23 @@ class TestProject:
         assert result.attrs == ("name", "salary")
 
 
+class TestRemove:
+    """Test remove (#!) parsing."""
+
+    def test_single_attr(self) -> None:
+        """Remove a single attribute."""
+        result = parse("E #! salary")
+        assert isinstance(result, ast.Remove)
+        assert result.attrs == ("salary",)
+        assert isinstance(result.source, ast.RelName)
+
+    def test_multiple_attrs(self) -> None:
+        """Remove multiple bracketed attributes."""
+        result = parse("E #! [emp_id dept_id]")
+        assert isinstance(result, ast.Remove)
+        assert result.attrs == ("emp_id", "dept_id")
+
+
 class TestFilter:
     """Test filter parsing."""
 
