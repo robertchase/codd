@@ -683,11 +683,11 @@ class TestFilterAggregateLHS:
         assert names == {"Alice", "Carol"}
 
 
-class TestSummarizeWrapper:
-    """Test function wrappers in summarize aggregates."""
+class TestSummarizeExpressions:
+    """Test full expressions in summarize slots."""
 
-    def test_summarize_with_round_wrapper(self) -> None:
-        """Summarize with round wrapper produces rounded Decimal values."""
+    def test_summarize_with_round_function(self) -> None:
+        """Summarize with round(aggregate, n) produces rounded Decimal values."""
         from decimal import Decimal
 
         result = run("E / dept_id sum: round(+. salary, 2)")
@@ -700,8 +700,8 @@ class TestSummarizeWrapper:
             else:
                 assert t["sum"] == Decimal("100000.00")
 
-    def test_summarize_all_with_round_wrapper(self) -> None:
-        """Summarize-all with round wrapper works on the entire relation."""
+    def test_summarize_all_with_round_function(self) -> None:
+        """Summarize-all with round(aggregate, n) works on the entire relation."""
         from decimal import Decimal
 
         result = run("E /. avg: round(%. salary, 2)")
@@ -711,7 +711,38 @@ class TestSummarizeWrapper:
         assert isinstance(t["avg"], Decimal)
         assert t["avg"] == Decimal("66000.00")
 
-    def test_summarize_wrapper_unknown_function(self) -> None:
-        """Unknown wrapper function raises ExecutionError."""
+    def test_summarize_unknown_function(self) -> None:
+        """Unknown function in summarize raises ExecutionError."""
         with pytest.raises(ExecutionError, match="Unknown function"):
             run("E / dept_id sum: nope(+. salary, 2)")
+
+    def test_summarize_arithmetic_with_scalar_subquery(self) -> None:
+        """Summarize with aggregate / scalar subquery gives per-group percentages.
+
+        Uses * 1.0 to force float division (same as extend context).
+        """
+        result = run("E / dept_id pct: +. salary * 1.0 / (E /. total: +. salary)")
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        total = 330000
+        for t in result:
+            if t["dept_id"] == 10:
+                expected = 230000 / total
+                assert t["pct"] == pytest.approx(expected, rel=1e-6)
+            else:
+                expected = 100000 / total
+                assert t["pct"] == pytest.approx(expected, rel=1e-6)
+
+    def test_summarize_all_arithmetic(self) -> None:
+        """Summarize-all with aggregate arithmetic computes manual average."""
+        result = run("E /. avg: +. salary / #.")
+        assert isinstance(result, Relation)
+        assert len(result) == 1
+        t = next(iter(result))
+        assert t["avg"] == pytest.approx(66000.0, rel=1e-6)
+
+    def test_summarize_subquery_not_1x1_error(self) -> None:
+        """Scalar subquery that isn't 1x1 raises ExecutionError."""
+        with pytest.raises(ExecutionError, match="exactly 1"):
+            # E /. [a: #.  b: +. salary] returns 1 tuple with 2 attributes
+            run("E / dept_id x: (E /. [a: #.  b: +. salary])")

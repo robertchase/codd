@@ -296,36 +296,40 @@ class TestSummarize:
         result = parse("E / dept_id [n: #.  avg: %. salary]")
         assert isinstance(result, ast.Summarize)
         assert result.group_attrs == ("dept_id",)
-        assert len(result.aggregates) == 2
-        assert result.aggregates[0].name == "n"
-        assert result.aggregates[0].func == "#."
-        assert result.aggregates[1].name == "avg"
-        assert result.aggregates[1].func == "%."
-        assert result.aggregates[1].attr == "salary"
+        assert len(result.computations) == 2
+        assert result.computations[0].name == "n"
+        assert isinstance(result.computations[0].expr, ast.AggregateCall)
+        assert result.computations[0].expr.func == "#."
+        assert result.computations[1].name == "avg"
+        assert isinstance(result.computations[1].expr, ast.AggregateCall)
+        assert result.computations[1].expr.func == "%."
+        assert result.computations[1].expr.arg == ast.AttrRef(parts=("salary",))
 
     def test_single_aggregate_no_brackets(self) -> None:
         """Summarize with one aggregate without brackets."""
         result = parse("E / dept_id total: +. salary")
         assert isinstance(result, ast.Summarize)
         assert result.group_attrs == ("dept_id",)
-        assert len(result.aggregates) == 1
-        assert result.aggregates[0].name == "total"
-        assert result.aggregates[0].func == "+."
-        assert result.aggregates[0].attr == "salary"
+        assert len(result.computations) == 1
+        assert result.computations[0].name == "total"
+        assert isinstance(result.computations[0].expr, ast.AggregateCall)
+        assert result.computations[0].expr.func == "+."
+        assert result.computations[0].expr.arg == ast.AttrRef(parts=("salary",))
 
     def test_summarize_all_no_brackets(self) -> None:
         """Summarize-all with a single aggregate, no brackets."""
         result = parse("E /. n: #.")
         assert isinstance(result, ast.SummarizeAll)
-        assert len(result.aggregates) == 1
-        assert result.aggregates[0].name == "n"
-        assert result.aggregates[0].func == "#."
+        assert len(result.computations) == 1
+        assert result.computations[0].name == "n"
+        assert isinstance(result.computations[0].expr, ast.AggregateCall)
+        assert result.computations[0].expr.func == "#."
 
     def test_summarize_all(self) -> None:
         """Summarize-all with multiple bracketed aggregates."""
         result = parse("E /. [n: #.  total: +. salary]")
         assert isinstance(result, ast.SummarizeAll)
-        assert len(result.aggregates) == 2
+        assert len(result.computations) == 2
 
     def test_nest_by(self) -> None:
         """Nest-by groups and assigns a nest name."""

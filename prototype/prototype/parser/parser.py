@@ -232,21 +232,21 @@ class Parser:
         return ast.Intersect(source=source, right=right)
 
     def _parse_summarize(self, source: ast.RelExpr) -> ast.Summarize:
-        """Parse: / key [agg1: #. agg2: +. attr] or / [key1 key2] [aggs]."""
+        """Parse: / key [name1: expr1  name2: expr2] or / [key1 key2] [exprs]."""
         self._advance()  # consume /
         group_attrs = self._parse_attr_list()
-        aggregates = self._parse_aggregate_list()
+        computations = self._parse_named_expr_list()
         return ast.Summarize(
             source=source,
             group_attrs=group_attrs,
-            aggregates=tuple(aggregates),
+            computations=tuple(computations),
         )
 
     def _parse_summarize_all(self, source: ast.RelExpr) -> ast.SummarizeAll:
-        """Parse: /. [agg1: #. agg2: +. attr]."""
+        """Parse: /. [name1: expr1  name2: expr2]."""
         self._advance()  # consume /.
-        aggregates = self._parse_aggregate_list()
-        return ast.SummarizeAll(source=source, aggregates=tuple(aggregates))
+        computations = self._parse_named_expr_list()
+        return ast.SummarizeAll(source=source, computations=tuple(computations))
 
     def _parse_nest_by(self, source: ast.RelExpr) -> ast.NestBy:
         """Parse: /: key > name or /: [key1 key2] > name."""
@@ -354,112 +354,6 @@ class Parser:
         self._expect(TokenType.COLON)
         expr = self._parse_computation_expr()
         return ast.NamedExpr(name=name_tok.value, expr=expr)
-
-    def _parse_aggregate_list(self) -> list[ast.NamedAggregate]:
-        """Parse: name: agg_func [attr] or [name1: agg_func  name2: agg_func attr]."""
-        if self._peek().type == TokenType.LBRACKET:
-            self._advance()
-            aggregates: list[ast.NamedAggregate] = []
-            while self._peek().type != TokenType.RBRACKET:
-                agg = self._parse_named_aggregate()
-                aggregates.append(agg)
-            self._expect(TokenType.RBRACKET)
-            return aggregates
-        else:
-            return [self._parse_named_aggregate()]
-
-    def _parse_named_aggregate(self) -> ast.NamedAggregate:
-        """Parse: name: agg_func [attr] or name: wrapper(agg_func [attr], extra_args).
-
-        agg_func is one of: #., +., >., <., %.
-        For #. the attr is optional (count tuples).
-        For others, attr is required.
-        A parenthesized subquery can provide the source relation:
-          name: #. (team ? cond)
-        Or a dotted reference like:
-          name: >. team.salary
-        A wrapper function can wrap the aggregate:
-          name: round(+. salary, 2)
-        """
-        name_tok = self._expect(TokenType.IDENT)
-        self._expect(TokenType.COLON)
-
-        func_types = {
-            TokenType.HASH_DOT, TokenType.PLUS_DOT,
-            TokenType.GT_DOT, TokenType.LT_DOT, TokenType.PERCENT_DOT,
-        }
-
-        # Check for wrapper: IDENT LPAREN before aggregate function
-        wrapper: str | None = None
-        wrapper_args: tuple[ast.Expr, ...] = ()
-        if (
-            self._peek().type == TokenType.IDENT
-            and self._peek(1).type == TokenType.LPAREN
-        ):
-            wrapper = self._advance().value  # function name
-            self._advance()  # (
-            # Now parse the inner aggregate
-            func_tok = self._advance()
-            if func_tok.type not in func_types:
-                raise ParseError(
-                    f"Expected aggregate function inside wrapper, got {func_tok.value!r}",
-                    func_tok,
-                )
-            func = func_tok.value
-            attr, source = self._parse_aggregate_attr_source()
-            # Parse extra comma-separated args
-            extra: list[ast.Expr] = []
-            while self._peek().type == TokenType.COMMA:
-                self._advance()
-                extra.append(self._parse_computation_expr())
-            self._expect(TokenType.RPAREN)
-            wrapper_args = tuple(extra)
-            return ast.NamedAggregate(
-                name=name_tok.value, func=func, attr=attr, source=source,
-                wrapper=wrapper, wrapper_args=wrapper_args,
-            )
-
-        func_tok = self._advance()
-        if func_tok.type not in func_types:
-            raise ParseError(
-                f"Expected aggregate function, got {func_tok.value!r}", func_tok
-            )
-        func = func_tok.value
-        attr, source = self._parse_aggregate_attr_source()
-        return ast.NamedAggregate(
-            name=name_tok.value, func=func, attr=attr, source=source
-        )
-
-    def _parse_aggregate_attr_source(
-        self,
-    ) -> tuple[str | None, ast.RelExpr | None]:
-        """Parse optional attr and source after an aggregate function token."""
-        attr: str | None = None
-        source: ast.RelExpr | None = None
-
-        if self._peek().type == TokenType.LPAREN:
-            # Conditional aggregate: #. (team ? role = "engineer")
-            self._advance()  # (
-            source = self._parse_expr()
-            self._expect(TokenType.RPAREN)
-        elif self._peek().type == TokenType.IDENT:
-            # Could be: attr, or dotted: team.salary
-            if self._peek(1).type == TokenType.DOT:
-                # Dotted: team.salary -> source=team, attr=salary
-                source_name = self._advance().value  # team
-                self._advance()  # .
-                attr_name = self._expect(TokenType.IDENT).value  # salary
-                source = ast.RelName(name=source_name)
-                attr = attr_name
-            elif self._peek(1).type == TokenType.COLON:
-                # Next named aggregate starts, so this is just an attr for #.
-                # Actually the IDENT before COLON is the name of the next aggregate
-                # So this current aggregate has no attr (count).
-                pass
-            else:
-                attr = self._advance().value
-
-        return attr, source
 
     def _parse_condition(self) -> ast.Condition:
         """Parse a filter condition.
@@ -570,22 +464,14 @@ class Parser:
         return ast.SetLiteral(elements=tuple(elements))
 
     def _parse_computation_expr(self) -> ast.Expr:
-        """Parse a computation expression (for extend).
+        """Parse a computation expression.
 
         Supports full arithmetic with standard precedence (* / before + -),
-        aggregate calls, and ternary expressions.
+        aggregate calls, ternary expressions, and parenthesized subqueries.
         """
         # Check for ternary expression
         if self._peek().type == TokenType.QUESTION:
             return self._parse_ternary_expr()
-
-        # Check for aggregate calls first
-        agg_types = {
-            TokenType.HASH_DOT, TokenType.PLUS_DOT,
-            TokenType.GT_DOT, TokenType.LT_DOT, TokenType.PERCENT_DOT,
-        }
-        if self._peek().type in agg_types:
-            return self._parse_aggregate_call()
 
         return self._parse_additive_expr()
 
@@ -627,16 +513,14 @@ class Parser:
         """
         if self._peek().type == TokenType.QUESTION:
             return self._parse_ternary_expr()
-        agg_types = {
-            TokenType.HASH_DOT, TokenType.PLUS_DOT,
-            TokenType.GT_DOT, TokenType.LT_DOT, TokenType.PERCENT_DOT,
-        }
-        if self._peek().type in agg_types:
-            return self._parse_aggregate_call()
         return self._parse_computation_atom()
 
     def _parse_aggregate_call(self) -> ast.AggregateCall:
-        """Parse an aggregate call in extend context: #. or +. salary or >. team.salary."""
+        """Parse an aggregate call: #. or +. salary or >. team.salary.
+
+        Aggregates participate in arithmetic as atoms, so this is called from
+        _parse_computation_atom.
+        """
         func_tok = self._advance()
         func = func_tok.value
 
@@ -647,9 +531,14 @@ class Parser:
             self._expect(TokenType.RPAREN)
             return ast.AggregateCall(func=func, source=source)
 
-        # Check for dotted attr: team.salary
+        # Check for IDENT argument
         if self._peek().type == TokenType.IDENT:
+            # If the IDENT is followed by COLON, it's the name of the next
+            # named expression, not an argument to this aggregate.
+            if self._peek(1).type == TokenType.COLON:
+                return ast.AggregateCall(func=func)
             if self._peek(1).type == TokenType.DOT and self._peek(2).type == TokenType.IDENT:
+                # Dotted: team.salary -> source=team, attr=salary
                 source_name = self._advance().value
                 self._advance()  # .
                 attr_name = self._advance().value
@@ -675,7 +564,12 @@ class Parser:
         return ast.AggregateCall(func=func)
 
     def _parse_computation_atom(self) -> ast.Expr:
-        """Parse an atomic computation value."""
+        """Parse an atomic computation value.
+
+        Handles literals, attribute references, function calls, aggregate
+        calls, parenthesized expressions, and parenthesized relational
+        subqueries (with backtracking).
+        """
         tok = self._peek()
         if tok.type == TokenType.MINUS:
             # Unary minus for negative numeric literals
@@ -699,15 +593,28 @@ class Parser:
         if tok.type == TokenType.BOOLEAN:
             self._advance()
             return ast.BoolLiteral(value=tok.value == "true")
+        agg_types = {
+            TokenType.HASH_DOT, TokenType.PLUS_DOT,
+            TokenType.GT_DOT, TokenType.LT_DOT, TokenType.PERCENT_DOT,
+        }
+        if tok.type in agg_types:
+            return self._parse_aggregate_call()
         if tok.type == TokenType.IDENT:
             if self._peek(1).type == TokenType.LPAREN:
                 return self._parse_function_call()
             return self._parse_attr_ref()
         if tok.type == TokenType.LPAREN:
             self._advance()
-            expr = self._parse_computation_expr()
-            self._expect(TokenType.RPAREN)
-            return expr
+            saved_pos = self._pos
+            try:
+                expr = self._parse_computation_expr()
+                self._expect(TokenType.RPAREN)
+                return expr
+            except ParseError:
+                self._pos = saved_pos
+                query = self._parse_expr()
+                self._expect(TokenType.RPAREN)
+                return ast.SubqueryExpr(query=query)
         raise ParseError(f"Expected value in computation, got {tok.value!r}", tok)
 
     def _parse_function_call(self) -> ast.FunctionCall:

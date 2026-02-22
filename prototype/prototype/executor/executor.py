@@ -202,71 +202,46 @@ class Executor:
         return left.intersect(right)
 
     def _eval_summarize(self, node: ast.Summarize) -> Relation:
-        """Evaluate: source / group_attrs [aggregates]."""
+        """Evaluate: source / group_attrs [computations]."""
         source = self._as_relation(node.source)
         agg_fns: dict[str, callable] = {}
-        for agg in node.aggregates:
-            agg_fn = get_aggregate(agg.func)
-            attr = agg.attr
-            wrapper_fn, extra_args = self._resolve_wrapper(agg)
+        for comp in node.computations:
+            expr = comp.expr
 
-            if agg.source is not None:
-                # Conditional aggregation or dotted: source provides the relation
-                src_node = agg.source
-                def make_fn(fn, a, src, wfn, wargs):
-                    def f(group_rel: Relation) -> Value:
-                        raw = fn(group_rel, a)
-                        if wfn is not None:
-                            return wfn([raw, *wargs])
-                        return raw
-                    return f
-                agg_fns[agg.name] = make_fn(agg_fn, attr, src_node, wrapper_fn, extra_args)
-            else:
-                def make_fn(fn, a, wfn, wargs):
-                    def f(group_rel: Relation) -> Value:
-                        raw = fn(group_rel, a)
-                        if wfn is not None:
-                            return wfn([raw, *wargs])
-                        return raw
-                    return f
-                agg_fns[agg.name] = make_fn(agg_fn, attr, wrapper_fn, extra_args)
+            def make_fn(e: ast.Expr):
+                def f(group_rel: Relation) -> Value:
+                    return self._eval_summarize_expr(e, group_rel)
+                return f
+
+            agg_fns[comp.name] = make_fn(expr)
 
         return source.summarize(frozenset(node.group_attrs), agg_fns)
 
     def _eval_summarize_all(self, node: ast.SummarizeAll) -> Relation:
-        """Evaluate: source /. [aggregates]."""
+        """Evaluate: source /. [computations]."""
         source = self._as_relation(node.source)
         agg_fns: dict[str, callable] = {}
-        for agg in node.aggregates:
-            agg_fn = get_aggregate(agg.func)
-            attr = agg.attr
-            wrapper_fn, extra_args = self._resolve_wrapper(agg)
+        for comp in node.computations:
+            expr = comp.expr
 
-            def make_fn(fn, a, wfn, wargs):
+            def make_fn(e: ast.Expr):
                 def f(rel: Relation) -> Value:
-                    raw = fn(rel, a)
-                    if wfn is not None:
-                        return wfn([raw, *wargs])
-                    return raw
+                    return self._eval_summarize_expr(e, rel)
                 return f
-            agg_fns[agg.name] = make_fn(agg_fn, attr, wrapper_fn, extra_args)
+
+            agg_fns[comp.name] = make_fn(expr)
 
         return source.summarize_all(agg_fns)
 
-    def _resolve_wrapper(
-        self, agg: ast.NamedAggregate
-    ) -> tuple[callable | None, list]:
-        """Resolve wrapper function and eagerly evaluate extra args."""
-        if agg.wrapper is None:
-            return None, []
-        fn = _FUNCTION_REGISTRY.get(agg.wrapper)
-        if fn is None:
-            raise ExecutionError(f"Unknown function: {agg.wrapper!r}")
-        extra = [self._eval_const_expr(e) for e in agg.wrapper_args]
-        return fn, extra
+    def _eval_summarize_expr(self, expr: ast.Expr, group_rel: Relation) -> Value:
+        """Evaluate a scalar expression in summarize context.
 
-    def _eval_const_expr(self, expr: ast.Expr) -> Value:
-        """Evaluate a constant expression (no tuple context)."""
+        AggregateCall nodes are evaluated against group_rel.
+        SubqueryExpr nodes are evaluated as relational expressions and
+        unwrapped to a scalar (must be 1x1).
+        BinOp, FunctionCall, and literals recurse naturally.
+        AttrRef is an error (no tuple context in summarize).
+        """
         if isinstance(expr, ast.IntLiteral):
             return expr.value
         if isinstance(expr, ast.FloatLiteral):
@@ -275,9 +250,53 @@ class Executor:
             return expr.value
         if isinstance(expr, ast.BoolLiteral):
             return expr.value
+        if isinstance(expr, ast.AggregateCall):
+            agg_fn = get_aggregate(expr.func)
+            attr_name = expr.arg.parts[0] if expr.arg else None
+            return agg_fn(group_rel, attr_name)
+        if isinstance(expr, ast.SubqueryExpr):
+            result = self._as_relation(expr.query)
+            return self._unwrap_scalar(result)
+        if isinstance(expr, ast.BinOp):
+            left = _promote_numeric(
+                self._eval_summarize_expr(expr.left, group_rel)
+            )
+            right = _promote_numeric(
+                self._eval_summarize_expr(expr.right, group_rel)
+            )
+            return self._apply_binop(expr.op, left, right)
+        if isinstance(expr, ast.FunctionCall):
+            fn = _FUNCTION_REGISTRY.get(expr.name)
+            if fn is None:
+                raise ExecutionError(f"Unknown function: {expr.name!r}")
+            evaluated_args = [
+                self._eval_summarize_expr(arg, group_rel) for arg in expr.args
+            ]
+            return fn(evaluated_args)
+        if isinstance(expr, ast.AttrRef):
+            raise ExecutionError(
+                f"Cannot reference attribute {expr.name!r} in summarize context"
+                " (use an aggregate function)"
+            )
         raise ExecutionError(
-            f"Wrapper argument must be a constant, got {type(expr).__name__}"
+            f"Unsupported expression in summarize: {type(expr).__name__}"
         )
+
+    def _unwrap_scalar(self, rel: Relation) -> Value:
+        """Extract the single value from a 1x1 relation."""
+        if len(rel.attributes) != 1:
+            raise ExecutionError(
+                f"Scalar subquery must return exactly 1 attribute,"
+                f" got {len(rel.attributes)}"
+            )
+        if len(rel) != 1:
+            raise ExecutionError(
+                f"Scalar subquery must return exactly 1 tuple,"
+                f" got {len(rel)}"
+            )
+        t = next(iter(rel))
+        attr = next(iter(rel.attributes))
+        return t[attr]
 
     def _eval_nest_by(self, node: ast.NestBy) -> Relation:
         """Evaluate: source /: group_attrs > name."""
@@ -368,10 +387,13 @@ class Executor:
         """
         left = _promote_numeric(self._eval_expr(expr.left, t))
         right = _promote_numeric(self._eval_expr(expr.right, t))
+        return self._apply_binop(expr.op, left, right)
 
+    def _apply_binop(self, op: str, left: Value, right: Value) -> Value:
+        """Apply a binary arithmetic operator to two values."""
         if isinstance(left, str) or isinstance(right, str):
             raise ExecutionError(
-                f"Cannot apply {expr.op} to {left!r} and {right!r}"
+                f"Cannot apply {op} to {left!r} and {right!r}"
                 " (non-numeric string)"
             )
 
@@ -381,9 +403,9 @@ class Executor:
             "*": lambda a, b: a * b,
             "/": lambda a, b: a / b if isinstance(a, (float, Decimal)) or isinstance(b, (float, Decimal)) else a // b,
         }
-        if expr.op not in ops:
-            raise ExecutionError(f"Unknown operator: {expr.op}")
-        return ops[expr.op](left, right)
+        if op not in ops:
+            raise ExecutionError(f"Unknown operator: {op}")
+        return ops[op](left, right)
 
     def _eval_ternary(self, expr: ast.TernaryExpr, t: Tuple_) -> Value:
         """Evaluate a ternary (conditional) expression."""
