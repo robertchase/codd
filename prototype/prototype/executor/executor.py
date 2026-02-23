@@ -385,7 +385,7 @@ class Executor:
             "+": lambda a, b: a + b,
             "-": lambda a, b: a - b,
             "*": lambda a, b: a * b,
-            "/": lambda a, b: a / b if isinstance(a, (float, Decimal)) or isinstance(b, (float, Decimal)) else a // b,
+            "/": lambda a, b: a / b,
         }
         if op not in ops:
             raise ExecutionError(f"Unknown operator: {op}")
