@@ -1,0 +1,66 @@
+"""CLI subcommand: ops – display language primitives."""
+
+import click
+
+from prototype.repl.formatter import _build_table
+
+_RELATIONAL = [
+    ("?", "Filter", "E ? salary > 50000"),
+    ("?!", "Negated filter", 'E ?! role = "engineer"'),
+    ("#", "Project", "E # [name salary]"),
+    ("#!", "Remove", "E #! emp_id"),
+    ("*", "Natural join", "E * D"),
+    ("*:", "Nest join", "E *: Phone > phones"),
+    ("<:", "Unnest", "E <: phones"),
+    ("+", "Extend", "E + bonus: salary * 0.1"),
+    ("@", "Rename", "E @ [pay > salary]"),
+    ("|", "Union", "E | (D)"),
+    ("-", "Difference", "E - (D)"),
+    ("&", "Intersect", "E & (D)"),
+    ("/", "Summarize", "E / dept_id [n: #. avg: %. salary]"),
+    ("/.", "Summarize all", "E /. [n: #. total: +. salary]"),
+    ("/:", "Nest by", "E /: dept_id > team"),
+    ("$", "Sort", "E $ salary-"),
+    ("^", "Take", "E $ salary- ^ 3"),
+]
+
+_AGGREGATES = [
+    ("#.", "Count", "#."),
+    ("+.", "Sum", "+. salary"),
+    (">.", "Max", ">. salary"),
+    ("<.", "Min", "<. salary"),
+    ("%.", "Mean", "%. salary"),
+]
+
+_EXPRESSIONS = [
+    ("+ - * /", "Arithmetic", "salary * 0.1"),
+    ("~", "Precision", "%. salary ~ 2"),
+    ("?", "Ternary", '? dept_id = 10 "eng" "other"'),
+]
+
+_OTHER = [
+    (":=", "Assignment", "high := E ? salary > 70000"),
+]
+
+_HEADERS = ["Primitive", "Name", "Example"]
+
+
+def ops_output() -> str:
+    """Return formatted primitives reference as a string."""
+    sections = [
+        ("Relational", _RELATIONAL),
+        ("Aggregates", _AGGREGATES),
+        ("Expressions", _EXPRESSIONS),
+        ("Other", _OTHER),
+    ]
+    parts: list[str] = []
+    for title, rows in sections:
+        parts.append(title)
+        parts.append(_build_table(_HEADERS, [list(r) for r in rows]))
+    return "\n".join(parts)
+
+
+@click.command("ops")
+def ops_cmd() -> None:
+    """Display all language primitives."""
+    click.echo(ops_output())

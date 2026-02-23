@@ -13,6 +13,7 @@ from prototype.lexer.lexer import Lexer, LexError
 from prototype.model.relation import Relation
 from prototype.parser import ast_nodes as ast
 from prototype.parser.parser import Parser, ParseError
+from prototype.cli.ops_cmd import ops_output
 from prototype.repl.formatter import format_array, format_relation
 
 # Tracks the last-used save path for \save with no args.
@@ -34,7 +35,7 @@ def run_repl(env: Environment | None = None) -> None:
     print("Codd prototype REPL")
     print(
         "Commands: \\load [file], \\save [file], \\drop <name>, "
-        "\\env, \\quit"
+        "\\env, \\ops, \\quit"
     )
     print()
 
@@ -89,6 +90,8 @@ def _handle_command(line: str, env: Environment) -> None:
         _cmd_drop(args, env)
     elif cmd == "\\env":
         _cmd_env(env)
+    elif cmd == "\\ops":
+        print(ops_output())
     else:
         print(f"Unknown command: {cmd}")
 

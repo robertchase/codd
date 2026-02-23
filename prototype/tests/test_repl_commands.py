@@ -271,6 +271,20 @@ class TestDropCommand:
         assert "requires a relation name" in out
 
 
+class TestOpsCommand:
+    """Test \\ops command."""
+
+    def test_ops_prints_primitives(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """\\ops prints the primitives reference tables."""
+        env = Environment()
+        _handle_command("\\ops", env)
+        out = capsys.readouterr().out
+        assert "Relational" in out
+        assert "Aggregates" in out
+        assert "Filter" in out
+        assert "#." in out
+
+
 class TestEnvCommand:
     """Test \\env command."""
 
