@@ -734,3 +734,45 @@ class TestSummarizeExpressions:
         with pytest.raises(ExecutionError, match="exactly 1"):
             # E /. [a: #.  b: +. salary] returns 1 tuple with 2 attributes
             run("E / dept_id x: (E /. [a: #.  b: +. salary])")
+
+    # --- Auto-naming ---
+
+    def test_summarize_auto_name_count(self) -> None:
+        """Auto-named #. produces 'count' column."""
+        result = run("E / dept_id #.")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["dept_id"] == 10:
+                assert t["count"] == 3
+            else:
+                assert t["count"] == 2
+
+    def test_summarize_auto_name_aggregates(self) -> None:
+        """Multiple auto-named aggregates produce correctly named columns."""
+        result = run("E / dept_id [#.  +. salary  %. salary]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["dept_id"] == 10:
+                assert t["count"] == 3
+                assert t["sum_salary"] == 230000
+                assert t["mean_salary"] == pytest.approx(76666.67, abs=0.01)
+            else:
+                assert t["count"] == 2
+                assert t["sum_salary"] == 100000
+                assert t["mean_salary"] == 50000.0
+
+    def test_summarize_auto_name_mixed(self) -> None:
+        """Mix of auto-named and explicitly named columns."""
+        result = run("E / dept_id [#.  avg: %. salary]")
+        assert isinstance(result, Relation)
+        for t in result:
+            assert "count" in t
+            assert "avg" in t
+
+    def test_summarize_all_auto_name(self) -> None:
+        """Auto-naming works with summarize-all."""
+        result = run("E /. [#.  +. salary]")
+        assert isinstance(result, Relation)
+        t = next(iter(result))
+        assert t["count"] == 5
+        assert t["sum_salary"] == 330000

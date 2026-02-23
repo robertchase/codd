@@ -235,7 +235,7 @@ class Parser:
         """Parse: / key [name1: expr1  name2: expr2] or / [key1 key2] [exprs]."""
         self._advance()  # consume /
         group_attrs = self._parse_attr_list()
-        computations = self._parse_named_expr_list()
+        computations = self._parse_named_expr_list(allow_auto_name=True)
         return ast.Summarize(
             source=source,
             group_attrs=group_attrs,
@@ -245,7 +245,7 @@ class Parser:
     def _parse_summarize_all(self, source: ast.RelExpr) -> ast.SummarizeAll:
         """Parse: /. [name1: expr1  name2: expr2]."""
         self._advance()  # consume /.
-        computations = self._parse_named_expr_list()
+        computations = self._parse_named_expr_list(allow_auto_name=True)
         return ast.SummarizeAll(source=source, computations=tuple(computations))
 
     def _parse_nest_by(self, source: ast.RelExpr) -> ast.NestBy:
@@ -335,18 +335,61 @@ class Parser:
             desc = True
         return ast.SortKey(attr=tok.value, descending=desc)
 
-    def _parse_named_expr_list(self) -> list[ast.NamedExpr]:
-        """Parse: name: expr or [name1: expr1  name2: expr2]."""
+    _AGG_TOKENS = {
+        TokenType.HASH_DOT,
+        TokenType.PLUS_DOT,
+        TokenType.GT_DOT,
+        TokenType.LT_DOT,
+        TokenType.PERCENT_DOT,
+    }
+
+    _AGG_NAME_PREFIX: dict[str, str] = {
+        "#.": "count",
+        "+.": "sum",
+        ">.": "max",
+        "<.": "min",
+        "%.": "mean",
+    }
+
+    def _parse_named_expr_list(
+        self, *, allow_auto_name: bool = False
+    ) -> list[ast.NamedExpr]:
+        """Parse: name: expr or [name1: expr1  name2: expr2].
+
+        When allow_auto_name is True (summarize context), aggregate
+        expressions may omit the name: prefix and get auto-generated names.
+        """
         if self._peek().type == TokenType.LBRACKET:
             self._advance()
             exprs: list[ast.NamedExpr] = []
             while self._peek().type != TokenType.RBRACKET:
-                named = self._parse_named_expr()
+                named = self._parse_maybe_named_expr(allow_auto_name)
                 exprs.append(named)
             self._expect(TokenType.RBRACKET)
-            return exprs
         else:
-            return [self._parse_named_expr()]
+            exprs = [self._parse_maybe_named_expr(allow_auto_name)]
+        if allow_auto_name:
+            self._check_duplicate_names(exprs)
+        return exprs
+
+    def _parse_maybe_named_expr(
+        self, allow_auto_name: bool
+    ) -> ast.NamedExpr:
+        """Parse a named or auto-named computation expression.
+
+        If allow_auto_name is True and the next token is an aggregate,
+        parse the expression and derive a column name from it.
+        """
+        if allow_auto_name and self._peek().type in self._AGG_TOKENS:
+            tok = self._peek()
+            expr = self._parse_computation_expr()
+            if not isinstance(expr, ast.AggregateCall):
+                raise ParseError(
+                    "Complex expression requires an explicit name (name: expr)",
+                    tok,
+                )
+            return ast.NamedExpr(name=self._auto_name(expr), expr=expr)
+        return self._parse_named_expr()
 
     def _parse_named_expr(self) -> ast.NamedExpr:
         """Parse: name: expr."""
@@ -354,6 +397,26 @@ class Parser:
         self._expect(TokenType.COLON)
         expr = self._parse_computation_expr()
         return ast.NamedExpr(name=name_tok.value, expr=expr)
+
+    def _auto_name(self, expr: ast.AggregateCall) -> str:
+        """Derive a column name from a bare aggregate call."""
+        prefix = self._AGG_NAME_PREFIX[expr.func]
+        if expr.arg:
+            return f"{prefix}_{expr.arg.name}"
+        if expr.source and isinstance(expr.source, ast.RelName):
+            return f"{prefix}_{expr.source.name}"
+        return prefix
+
+    def _check_duplicate_names(self, exprs: list[ast.NamedExpr]) -> None:
+        """Raise on duplicate column names in a computation list."""
+        seen: set[str] = set()
+        for ne in exprs:
+            if ne.name in seen:
+                raise ParseError(
+                    f"Duplicate column name {ne.name!r} in summarize",
+                    self._peek(),
+                )
+            seen.add(ne.name)
 
     def _parse_condition(self) -> ast.Condition:
         """Parse a filter condition.

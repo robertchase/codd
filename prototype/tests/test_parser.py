@@ -331,6 +331,86 @@ class TestSummarize:
         assert isinstance(result, ast.SummarizeAll)
         assert len(result.computations) == 2
 
+    # --- Auto-naming ---
+
+    def test_auto_name_count(self) -> None:
+        """Bare #. gets auto-named 'count'."""
+        result = parse("E / dept_id #.")
+        assert isinstance(result, ast.Summarize)
+        assert result.computations[0].name == "count"
+        assert result.computations[0].expr.func == "#."
+
+    def test_auto_name_sum(self) -> None:
+        """Bare +. salary gets auto-named 'sum_salary'."""
+        result = parse("E / dept_id +. salary")
+        assert isinstance(result, ast.Summarize)
+        assert result.computations[0].name == "sum_salary"
+
+    def test_auto_name_max(self) -> None:
+        """Bare >. salary gets auto-named 'max_salary'."""
+        result = parse("E / dept_id >. salary")
+        assert isinstance(result, ast.Summarize)
+        assert result.computations[0].name == "max_salary"
+
+    def test_auto_name_min(self) -> None:
+        """Bare <. salary gets auto-named 'min_salary'."""
+        result = parse("E / dept_id <. salary")
+        assert isinstance(result, ast.Summarize)
+        assert result.computations[0].name == "min_salary"
+
+    def test_auto_name_mean(self) -> None:
+        """Bare %. salary gets auto-named 'mean_salary'."""
+        result = parse("E / dept_id %. salary")
+        assert isinstance(result, ast.Summarize)
+        assert result.computations[0].name == "mean_salary"
+
+    def test_auto_name_count_rva(self) -> None:
+        """#. with RVA source gets auto-named 'count_phones'."""
+        result = parse("E / dept_id #. phones")
+        assert isinstance(result, ast.Summarize)
+        assert result.computations[0].name == "count_phones"
+
+    def test_auto_name_bracketed_multiple(self) -> None:
+        """Multiple auto-named aggregates in brackets."""
+        result = parse("E / dept_id [#.  +. salary  %. salary]")
+        assert isinstance(result, ast.Summarize)
+        assert len(result.computations) == 3
+        assert result.computations[0].name == "count"
+        assert result.computations[1].name == "sum_salary"
+        assert result.computations[2].name == "mean_salary"
+
+    def test_auto_name_mixed_with_explicit(self) -> None:
+        """Mix of auto-named and explicitly named aggregates."""
+        result = parse("E / dept_id [#.  avg: %. salary  +. bonus]")
+        assert isinstance(result, ast.Summarize)
+        assert len(result.computations) == 3
+        assert result.computations[0].name == "count"
+        assert result.computations[1].name == "avg"
+        assert result.computations[2].name == "sum_bonus"
+
+    def test_auto_name_summarize_all(self) -> None:
+        """Auto-naming works with summarize-all (/.)."""
+        result = parse("E /. [#.  +. salary]")
+        assert isinstance(result, ast.SummarizeAll)
+        assert result.computations[0].name == "count"
+        assert result.computations[1].name == "sum_salary"
+
+    def test_auto_name_summarize_all_single(self) -> None:
+        """Auto-naming works with summarize-all, single aggregate, no brackets."""
+        result = parse("E /. #.")
+        assert isinstance(result, ast.SummarizeAll)
+        assert result.computations[0].name == "count"
+
+    def test_auto_name_duplicate_error(self) -> None:
+        """Duplicate auto-generated names are a parse error."""
+        with pytest.raises(ParseError, match="Duplicate column name"):
+            parse("E / dept_id [+. salary  +. salary]")
+
+    def test_auto_name_complex_expr_requires_name(self) -> None:
+        """Complex expression starting with aggregate requires explicit name."""
+        with pytest.raises(ParseError, match="Complex expression requires an explicit name"):
+            parse("E / dept_id +. salary * 2")
+
     def test_nest_by(self) -> None:
         """Nest-by groups and assigns a nest name."""
         result = parse("E /: dept_id > team")
