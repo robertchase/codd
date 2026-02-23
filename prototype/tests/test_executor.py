@@ -613,14 +613,14 @@ class TestTernary:
                 assert t["n"] == 2
 
 
-class TestFunctionCall:
-    """Test function calls in extend computations."""
+class TestRound:
+    """Test ~ (precision) in extend computations."""
 
     def test_round(self) -> None:
-        """round(salary / 3.0, 2) produces correctly rounded Decimal values."""
+        """salary / 3.0 ~ 2 produces correctly rounded Decimal values."""
         from decimal import Decimal
 
-        result = run("E + bonus: round(salary / 3.0, 2) # [name bonus]")
+        result = run("E + bonus: salary / 3.0 ~ 2 # [name bonus]")
         assert isinstance(result, Relation)
         for t in result:
             if t["name"] == "Alice":
@@ -629,7 +629,7 @@ class TestFunctionCall:
                 assert t["bonus"] == Decimal("15000.00")
 
     def test_round_decimal_precision(self) -> None:
-        """round preserves Decimal type for Decimal inputs."""
+        """~ preserves Decimal type for Decimal inputs."""
         from decimal import Decimal
 
         env = Environment()
@@ -639,16 +639,9 @@ class TestFunctionCall:
                 frozenset({Tuple_(val=Decimal("10.456"), tag="a")})
             ),
         )
-        result = run("R + r: round(val, 2)", env)
+        result = run("R + r: val ~ 2", env)
         t = next(iter(result))
         assert t["r"] == Decimal("10.46")
-
-    def test_unknown_function(self) -> None:
-        """Unknown function name raises ExecutionError."""
-        from prototype.executor.executor import ExecutionError
-
-        with pytest.raises(ExecutionError, match="Unknown function"):
-            run("E + x: nope(salary)")
 
 
 class TestFilterAggregateLHS:
@@ -686,11 +679,11 @@ class TestFilterAggregateLHS:
 class TestSummarizeExpressions:
     """Test full expressions in summarize slots."""
 
-    def test_summarize_with_round_function(self) -> None:
-        """Summarize with round(aggregate, n) produces rounded Decimal values."""
+    def test_summarize_with_round(self) -> None:
+        """Summarize with ~ produces rounded Decimal values."""
         from decimal import Decimal
 
-        result = run("E / dept_id sum: round(+. salary, 2)")
+        result = run("E / dept_id sum: +. salary ~ 2")
         assert isinstance(result, Relation)
         assert len(result) == 2
         for t in result:
@@ -700,21 +693,16 @@ class TestSummarizeExpressions:
             else:
                 assert t["sum"] == Decimal("100000.00")
 
-    def test_summarize_all_with_round_function(self) -> None:
-        """Summarize-all with round(aggregate, n) works on the entire relation."""
+    def test_summarize_all_with_round(self) -> None:
+        """Summarize-all with ~ works on the entire relation."""
         from decimal import Decimal
 
-        result = run("E /. avg: round(%. salary, 2)")
+        result = run("E /. avg: %. salary ~ 2")
         assert isinstance(result, Relation)
         assert len(result) == 1
         t = next(iter(result))
         assert isinstance(t["avg"], Decimal)
         assert t["avg"] == Decimal("66000.00")
-
-    def test_summarize_unknown_function(self) -> None:
-        """Unknown function in summarize raises ExecutionError."""
-        with pytest.raises(ExecutionError, match="Unknown function"):
-            run("E / dept_id sum: nope(+. salary, 2)")
 
     def test_summarize_arithmetic_with_scalar_subquery(self) -> None:
         """Summarize with aggregate / scalar subquery gives per-group percentages.

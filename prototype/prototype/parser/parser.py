@@ -467,13 +467,26 @@ class Parser:
         """Parse a computation expression.
 
         Supports full arithmetic with standard precedence (* / before + -),
-        aggregate calls, ternary expressions, and parenthesized subqueries.
+        precision (~), aggregate calls, ternary expressions, and
+        parenthesized subqueries.
         """
         # Check for ternary expression
         if self._peek().type == TokenType.QUESTION:
             return self._parse_ternary_expr()
 
-        return self._parse_additive_expr()
+        return self._parse_precision_expr()
+
+    def _parse_precision_expr(self) -> ast.Expr:
+        """Parse precision expression: additive (TILDE INTEGER)?
+
+        Lowest arithmetic precedence so a / b ~ 2 = (a / b) ~ 2.
+        """
+        left = self._parse_additive_expr()
+        if self._peek().type == TokenType.TILDE:
+            self._advance()  # consume ~
+            tok = self._expect(TokenType.INTEGER)
+            return ast.Round(expr=left, places=int(tok.value))
+        return left
 
     def _parse_additive_expr(self) -> ast.Expr:
         """Parse additive expression: multiplicative ((+ | -) multiplicative)*."""
@@ -600,8 +613,6 @@ class Parser:
         if tok.type in agg_types:
             return self._parse_aggregate_call()
         if tok.type == TokenType.IDENT:
-            if self._peek(1).type == TokenType.LPAREN:
-                return self._parse_function_call()
             return self._parse_attr_ref()
         if tok.type == TokenType.LPAREN:
             self._advance()
@@ -617,15 +628,3 @@ class Parser:
                 return ast.SubqueryExpr(query=query)
         raise ParseError(f"Expected value in computation, got {tok.value!r}", tok)
 
-    def _parse_function_call(self) -> ast.FunctionCall:
-        """Parse: name(arg1, arg2, ...)."""
-        name_tok = self._expect(TokenType.IDENT)
-        self._expect(TokenType.LPAREN)
-        args: list[ast.Expr] = []
-        if self._peek().type != TokenType.RPAREN:
-            args.append(self._parse_computation_expr())
-            while self._peek().type == TokenType.COMMA:
-                self._advance()
-                args.append(self._parse_computation_expr())
-        self._expect(TokenType.RPAREN)
-        return ast.FunctionCall(name=name_tok.value, args=tuple(args))

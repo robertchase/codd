@@ -480,41 +480,38 @@ class TestTernaryParsing:
         assert inner.false_expr.value == "low"
 
 
-class TestFunctionCall:
-    """Test function call parsing."""
+class TestRound:
+    """Test ~ (precision) parsing."""
 
-    def test_function_call_in_extend(self) -> None:
-        """Function call wrapping a binary expression parses correctly."""
-        result = parse("R + pct: round(value / total, 2)")
+    def test_round_in_extend(self) -> None:
+        """Precision primitive on a binary expression parses correctly."""
+        result = parse("R + pct: value / total ~ 2")
         assert isinstance(result, ast.Extend)
         comp = result.computations[0]
         assert comp.name == "pct"
-        assert isinstance(comp.expr, ast.FunctionCall)
-        assert comp.expr.name == "round"
-        assert len(comp.expr.args) == 2
-        assert isinstance(comp.expr.args[0], ast.BinOp)
-        assert comp.expr.args[0].op == "/"
-        assert isinstance(comp.expr.args[1], ast.IntLiteral)
-        assert comp.expr.args[1].value == 2
+        assert isinstance(comp.expr, ast.Round)
+        assert comp.expr.places == 2
+        assert isinstance(comp.expr.expr, ast.BinOp)
+        assert comp.expr.expr.op == "/"
 
-    def test_function_call_no_args(self) -> None:
-        """Function call with no arguments parses correctly."""
-        result = parse("R + x: foo()")
+    def test_round_simple_attr(self) -> None:
+        """Precision primitive on a single attribute reference."""
+        result = parse("R + x: salary ~ 0")
         assert isinstance(result, ast.Extend)
         comp = result.computations[0]
-        assert isinstance(comp.expr, ast.FunctionCall)
-        assert comp.expr.name == "foo"
-        assert comp.expr.args == ()
+        assert isinstance(comp.expr, ast.Round)
+        assert comp.expr.places == 0
+        assert isinstance(comp.expr.expr, ast.AttrRef)
 
-    def test_function_call_single_arg(self) -> None:
-        """Function call with a single argument parses correctly."""
-        result = parse("R + x: abs(salary)")
-        assert isinstance(result, ast.Extend)
+    def test_round_with_aggregate(self) -> None:
+        """Precision primitive wrapping an aggregate expression."""
+        result = parse("R /. avg: %. salary ~ 2")
+        assert isinstance(result, ast.SummarizeAll)
         comp = result.computations[0]
-        assert isinstance(comp.expr, ast.FunctionCall)
-        assert comp.expr.name == "abs"
-        assert len(comp.expr.args) == 1
-        assert isinstance(comp.expr.args[0], ast.AttrRef)
+        assert isinstance(comp.expr, ast.Round)
+        assert comp.expr.places == 2
+        assert isinstance(comp.expr.expr, ast.AggregateCall)
+        assert comp.expr.expr.func == "%."
 
 
 class TestErrors:

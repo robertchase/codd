@@ -99,11 +99,11 @@ class TernaryExpr:
 
 
 @dataclass(frozen=True)
-class FunctionCall:
-    """Function call: round(expr, 2)."""
+class Round:
+    """Precision primitive: expr ~ N."""
 
-    name: str
-    args: tuple[Expr, ...]
+    expr: Expr
+    places: int
 
 
 # Expr is the union of all expression types
@@ -118,7 +118,7 @@ Expr = (
     | AggregateCall
     | SubqueryExpr
     | TernaryExpr
-    | FunctionCall
+    | Round
 )
 
 

@@ -19,18 +19,6 @@ class ExecutionError(Exception):
     """Raised on execution errors."""
 
 
-def _fn_round(args: list) -> Decimal:
-    """Round a number to the specified decimal places, always returning Decimal."""
-    value, places = args[0], args[1]
-    rounded = round(float(value), places)
-    return Decimal(str(rounded)).quantize(Decimal(10) ** -places)
-
-
-_FUNCTION_REGISTRY: dict[str, callable] = {
-    "round": _fn_round,
-}
-
-
 class Executor:
     """Evaluates relational algebra AST nodes."""
 
@@ -239,7 +227,7 @@ class Executor:
         AggregateCall nodes are evaluated against group_rel.
         SubqueryExpr nodes are evaluated as relational expressions and
         unwrapped to a scalar (must be 1x1).
-        BinOp, FunctionCall, and literals recurse naturally.
+        BinOp, Round, and literals recurse naturally.
         AttrRef is an error (no tuple context in summarize).
         """
         if isinstance(expr, ast.IntLiteral):
@@ -265,14 +253,9 @@ class Executor:
                 self._eval_summarize_expr(expr.right, group_rel)
             )
             return self._apply_binop(expr.op, left, right)
-        if isinstance(expr, ast.FunctionCall):
-            fn = _FUNCTION_REGISTRY.get(expr.name)
-            if fn is None:
-                raise ExecutionError(f"Unknown function: {expr.name!r}")
-            evaluated_args = [
-                self._eval_summarize_expr(arg, group_rel) for arg in expr.args
-            ]
-            return fn(evaluated_args)
+        if isinstance(expr, ast.Round):
+            value = self._eval_summarize_expr(expr.expr, group_rel)
+            return self._apply_round(value, expr.places)
         if isinstance(expr, ast.AttrRef):
             raise ExecutionError(
                 f"Cannot reference attribute {expr.name!r} in summarize context"
@@ -356,8 +339,9 @@ class Executor:
             return self._as_relation(expr.query)
         if isinstance(expr, ast.TernaryExpr):
             return self._eval_ternary(expr, t)
-        if isinstance(expr, ast.FunctionCall):
-            return self._eval_function_call(expr, t)
+        if isinstance(expr, ast.Round):
+            value = self._eval_expr(expr.expr, t)
+            return self._apply_round(value, expr.places)
         raise ExecutionError(f"Unknown expression type: {type(expr).__name__}")
 
     def _eval_attr_ref(self, ref: ast.AttrRef, t: Tuple_) -> Value:
@@ -414,13 +398,10 @@ class Executor:
             return self._eval_expr(expr.true_expr, t)
         return self._eval_expr(expr.false_expr, t)
 
-    def _eval_function_call(self, expr: ast.FunctionCall, t: Tuple_) -> Value:
-        """Evaluate a function call expression."""
-        fn = _FUNCTION_REGISTRY.get(expr.name)
-        if fn is None:
-            raise ExecutionError(f"Unknown function: {expr.name!r}")
-        evaluated_args = [self._eval_expr(arg, t) for arg in expr.args]
-        return fn(evaluated_args)
+    def _apply_round(self, value: Value, places: int) -> Decimal:
+        """Round a number to the specified decimal places, returning Decimal."""
+        rounded = round(float(value), places)
+        return Decimal(str(rounded)).quantize(Decimal(10) ** -places)
 
     def _eval_aggregate_call(self, expr: ast.AggregateCall, t: Tuple_) -> Value:
         """Evaluate an aggregate function call in extend context."""

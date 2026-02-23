@@ -60,9 +60,9 @@ The parser knows which context it's in because extend computation parsing uses `
 
 Computation expressions use a two-level precedence parser: `_parse_additive_expr` handles `+` and `-` (lower precedence), `_parse_multiplicative_expr` handles `*` and `/` (higher precedence). Both loop to support chained operations. So `a + b * 2` parses as `a + (b * 2)` and `a / b * 2` parses as `(a / b) * 2`. Parentheses override precedence as expected.
 
-### Function calls
+### Precision primitive (~)
 
-Inside computation expressions, `IDENT LPAREN` is recognized as a function call rather than an attribute reference. The parser peeks ahead at the `IDENT` branch of `_parse_computation_atom` to disambiguate. Function arguments are comma-separated computation expressions, so full arithmetic and nesting are supported within arguments: `round(salary / 3.0, 2)`.
+The `~` operator rounds an expression to N decimal places: `expr ~ N`. It has the lowest arithmetic precedence, so `a / b ~ 2` parses as `(a / b) ~ 2`. Parsed by `_parse_precision_expr`, which sits between `_parse_computation_expr` and `_parse_additive_expr` in the precedence chain. Produces a `Round(expr, places)` AST node.
 
 ### Ternary branches
 
@@ -82,7 +82,7 @@ For `*`, `*:`: the right operand is always a bare relation name (plus `> alias` 
 
 27 frozen dataclasses in two categories:
 
-- **Expressions** (scalar values): `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `AttrRef`, `BinOp`, `SetLiteral`, `AggregateCall`, `SubqueryExpr`, `TernaryExpr`, `FunctionCall`
+- **Expressions** (scalar values): `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `AttrRef`, `BinOp`, `SetLiteral`, `AggregateCall`, `SubqueryExpr`, `TernaryExpr`, `Round`
 - **Relational expressions** (relations/arrays): `RelName`, `Filter`, `NegatedFilter`, `Project`, `Remove`, `NaturalJoin`, `NestJoin`, `Unnest`, `Extend`, `Rename`, `Union`, `Difference`, `Intersect`, `Summarize`, `SummarizeAll`, `NestBy`, `Sort`, `Take`
 
 Plus `Condition` types for filters: `Comparison`, `BoolCombination`.
@@ -99,9 +99,9 @@ Mutable mapping of relation names to `Relation` values. The REPL's `\load` comma
 
 Five implementations: `#.` (count), `+.` (sum), `>.` (max), `<.` (min), `%.` (mean). Mean uses integer floor division when all values are integers, matching the design doc examples (76666 not 76666.67).
 
-### Function registry
+### Precision (~)
 
-A module-level `_FUNCTION_REGISTRY` dict maps function names to callables. The executor looks up the name from a `FunctionCall` AST node, evaluates the arguments, and calls the function. Currently registered: `round(value, ndigits)` — delegates to Python's `round()`, preserving `Decimal` type for `Decimal` inputs.
+The `Round` AST node is evaluated by `_apply_round`, which rounds to N decimal places and returns `Decimal`. Used in both `_eval_expr` (extend context) and `_eval_summarize_expr` (summarize context).
 
 ### Condition compilation
 
@@ -115,11 +115,11 @@ For `/:` (nest by) + `+` (extend) chains like `E /: dept_id > team + [top: >. te
 
 ### Implemented
 
-`?`, `?!`, `#`, `#!`, `*`, `*:`, `<:`, `@`, `+`, `-`, `|`, `&`, `/`, `/.`, `/:`, `$`, `^`, chained `?` (AND), `|`/`&` inside filter parens (OR/AND), bracket elision, set literals, aggregate functions (`#.`, `+.`, `>.`, `<.`, `%.`), ternary expressions (`? cond true false` inside `+`), function calls (`round(expr, n)` inside `+`), arithmetic precedence (`*`/`/` before `+`/`-`), REPL with sample data, `eval` CLI command.
+`?`, `?!`, `#`, `#!`, `*`, `*:`, `<:`, `@`, `+`, `-`, `|`, `&`, `/`, `/.`, `/:`, `$`, `^`, chained `?` (AND), `|`/`&` inside filter parens (OR/AND), bracket elision, set literals, aggregate functions (`#.`, `+.`, `>.`, `<.`, `%.`), ternary expressions (`? cond true false` inside `+`), precision primitive (`expr ~ N`), arithmetic precedence (`*`/`/` before `+`/`-`), REPL with sample data, `eval` CLI command.
 
 ### Deferred
 
-`+:` (modify), mutation operators (`:=`, `|=`, `-=`, `?=`), regex (`~`, `!~`), type predicates (`::`), transactions, DDL, file storage, the prose layer.
+`+:` (modify), mutation operators (`:=`, `|=`, `-=`, `?=`), regex (`!~`), type predicates (`::`), transactions, DDL, file storage, the prose layer.
 
 ## Testing
 
