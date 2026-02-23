@@ -336,7 +336,8 @@ class Executor:
         if isinstance(expr, ast.AggregateCall):
             return self._eval_aggregate_call(expr, t)
         if isinstance(expr, ast.SubqueryExpr):
-            return self._as_relation(expr.query)
+            result = self._as_relation(expr.query)
+            return self._unwrap_scalar(result)
         if isinstance(expr, ast.TernaryExpr):
             return self._eval_ternary(expr, t)
         if isinstance(expr, ast.Round):
