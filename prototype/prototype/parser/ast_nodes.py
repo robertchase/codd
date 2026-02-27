@@ -267,7 +267,7 @@ class Intersect:
 
 @dataclass(frozen=True)
 class Summarize:
-    """Summarize: / key [name1: expr1  name2: expr2]."""
+    """Summarize: / key [name1: expr1  name2: expr2] or / [key1 key2] [exprs]."""
 
     source: RelExpr
     group_attrs: tuple[str, ...]
@@ -284,7 +284,7 @@ class SummarizeAll:
 
 @dataclass(frozen=True)
 class NestBy:
-    """Nest by: /: key > name."""
+    """Nest by: /: key > name or /: [key1 key2] > name."""
 
     source: RelExpr
     group_attrs: tuple[str, ...]

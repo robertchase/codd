@@ -413,10 +413,11 @@ Employees with no phone on file. The left side builds up freely; only the right 
 
 ### Summarize: `/`
 
-`/` groups tuples by a key and collapses each group with aggregate functions.
+`/` groups tuples by one or more keys and collapses each group with aggregate functions. A single key is bare; multiple keys use brackets.
 
 ```
 E / dept_id [n: #.  avg: %. salary]
+E / [dept_id role] #.
 ```
 
 | Step | What happens |
@@ -453,10 +454,11 @@ Result:
 
 ### Nest by: `/:`
 
-`/:` groups like `/` but doesn't collapse — it produces a nested relation you can operate on. Name it with `>`.
+`/:` groups like `/` but doesn't collapse — it produces a nested relation you can operate on. Name it with `>`. Like `/`, a single key is bare; multiple keys use brackets.
 
 ```
 E /: dept_id > team + [top: >. team.salary] # [dept_id top]
+E /: [dept_id role] > team
 ```
 
 | Step | What happens |
@@ -651,9 +653,9 @@ E *: Phone > phones + n: #. phones ? n = 0 # emp_id
 -    difference        A - (B)
 |    union             A | (B)
 &    intersect         A & (B)
-/    summarize         E / dept_id [n: #.  avg: %. salary]
+/    summarize         E / dept_id [n: #.  avg: %. salary]  or  E / [dept_id role] #.
 /.   summarize all     E /. [n: #.  total: +. salary]
-/:   nest by           E /: dept_id > team
+/:   nest by           E /: dept_id > team  or  E /: [dept_id role] > team
 $    sort → array      E $ salary-  /  E $ [salary- name]
 ^    take N            E $ salary- ^ 5
 ```

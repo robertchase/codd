@@ -116,9 +116,9 @@ codd> E # [name salary] $ salary- ^ 3
 -    difference        A - (B)
 |    union             A | (B)
 &    intersect         A & (B)
-/    summarize         E / dept_id [n: #.  avg: %. salary]
+/    summarize         E / dept_id [n: #.  avg: %. salary]  or  E / [dept_id role] #.
 /.   summarize all     E /. [n: #.  total: +. salary]
-/:   nest by           E /: dept_id > team
+/:   nest by           E /: dept_id > team  or  E /: [dept_id role] > team
 $    sort (terminal)   E $ salary-  or  E $ [salary- name]
 ^    take N            E $ salary- ^ 5
 ```

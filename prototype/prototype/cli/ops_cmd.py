@@ -17,9 +17,9 @@ _RELATIONAL = [
     ("|", "Union", "E | (D)"),
     ("-", "Difference", "E - (D)"),
     ("&", "Intersect", "E & (D)"),
-    ("/", "Summarize", "E / dept_id [n: #. avg: %. salary]"),
+    ("/", "Summarize", "E / dept_id [n: #. avg: %. salary]  or  E / [dept_id role] #."),
     ("/.", "Summarize all", "E /. [n: #. total: +. salary]"),
-    ("/:", "Nest by", "E /: dept_id > team"),
+    ("/:", "Nest by", "E /: dept_id > team  or  E /: [dept_id role] > team"),
     ("$", "Sort", "E $ salary-"),
     ("^", "Take", "E $ salary- ^ 3"),
 ]

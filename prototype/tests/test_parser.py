@@ -411,11 +411,35 @@ class TestSummarize:
         with pytest.raises(ParseError, match="Complex expression requires an explicit name"):
             parse("E / dept_id +. salary * 2")
 
+    def test_multi_key(self) -> None:
+        """Summarize with multiple grouping keys."""
+        result = parse("E / [dept_id region] +. salary")
+        assert isinstance(result, ast.Summarize)
+        assert result.group_attrs == ("dept_id", "region")
+        assert len(result.computations) == 1
+        assert result.computations[0].name == "sum_salary"
+
+    def test_multi_key_multi_agg(self) -> None:
+        """Summarize with multiple keys and multiple aggregates."""
+        result = parse("E / [dept_id region] [n: #.  total: +. salary]")
+        assert isinstance(result, ast.Summarize)
+        assert result.group_attrs == ("dept_id", "region")
+        assert len(result.computations) == 2
+        assert result.computations[0].name == "n"
+        assert result.computations[1].name == "total"
+
     def test_nest_by(self) -> None:
         """Nest-by groups and assigns a nest name."""
         result = parse("E /: dept_id > team")
         assert isinstance(result, ast.NestBy)
         assert result.group_attrs == ("dept_id",)
+        assert result.nest_name == "team"
+
+    def test_nest_by_multi_key(self) -> None:
+        """Nest-by with multiple grouping keys."""
+        result = parse("E /: [dept_id region] > team")
+        assert isinstance(result, ast.NestBy)
+        assert result.group_attrs == ("dept_id", "region")
         assert result.nest_name == "team"
 
 

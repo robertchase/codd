@@ -287,6 +287,24 @@ class TestSummarize:
                 assert t["n"] == 2
                 assert t["avg"] == 50000.0
 
+    def test_summarize_multi_key(self) -> None:
+        """Summarize groups by multiple keys."""
+        result = run("E / [dept_id role] [n: #.  total: +. salary]")
+        assert isinstance(result, Relation)
+        assert len(result) == 3
+        for t in result:
+            if t["dept_id"] == 10 and t["role"] == "engineer":
+                assert t["n"] == 2
+                assert t["total"] == 170000  # Alice 80k + Dave 90k
+            elif t["dept_id"] == 10 and t["role"] == "manager":
+                assert t["n"] == 1
+                assert t["total"] == 60000  # Bob
+            elif t["dept_id"] == 20 and t["role"] == "engineer":
+                assert t["n"] == 2
+                assert t["total"] == 100000  # Carol 55k + Eve 45k
+            else:
+                pytest.fail(f"Unexpected group: dept_id={t['dept_id']}, role={t['role']}")
+
     def test_summarize_all(self) -> None:
         """Summarize-all aggregates the entire relation."""
         result = run("E /. [n: #.  total: +. salary]")
@@ -311,6 +329,22 @@ class TestNestBy:
                 assert len(team) == 3
             else:
                 assert len(team) == 2
+
+    def test_nest_by_multi_key(self) -> None:
+        """Nest-by groups by multiple keys."""
+        result = run("E /: [dept_id role] > team")
+        assert isinstance(result, Relation)
+        assert len(result) == 3
+        for t in result:
+            team = t["team"]
+            if t["dept_id"] == 10 and t["role"] == "engineer":
+                assert len(team) == 2  # Alice, Dave
+            elif t["dept_id"] == 10 and t["role"] == "manager":
+                assert len(team) == 1  # Bob
+            elif t["dept_id"] == 20 and t["role"] == "engineer":
+                assert len(team) == 2  # Carol, Eve
+            else:
+                pytest.fail(f"Unexpected group: dept_id={t['dept_id']}, role={t['role']}")
 
 
 class TestSort:
