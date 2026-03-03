@@ -1,1 +1,0 @@
-"""Codd relational algebra prototype."""
