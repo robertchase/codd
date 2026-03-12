@@ -159,25 +159,25 @@ class TestChaining:
 
 
 class TestJoin:
-    """Test * and *: (join)."""
+    """Test *. and *: (join)."""
 
     def test_natural_join(self) -> None:
         """Natural join matches on shared attribute dept_id."""
-        result = run("E * D")
+        result = run("E *. D")
         assert isinstance(result, Relation)
         assert len(result) == 5
         assert "dept_name" in result.attributes
 
     def test_join_filter_project(self) -> None:
         """Join, filter, and project compose correctly."""
-        result = run('E * D ? dept_name = "Engineering" # [name salary]')
+        result = run('E *. D ? dept_name = "Engineering" # [name salary]')
         assert len(result) == 3
         names = {t["name"] for t in result}
         assert names == {"Alice", "Bob", "Dave"}
 
     def test_nest_join(self) -> None:
         """Nest join groups child tuples into a nested relation."""
-        result = run("E *: Phone > phones")
+        result = run("E *: Phone -> phones")
         assert isinstance(result, Relation)
         assert len(result) == 5
         for t in result:
@@ -194,7 +194,7 @@ class TestUnnest:
 
     def test_nest_then_unnest(self) -> None:
         """Unnest reverses a nest join, flattening nested tuples."""
-        result = run("E *: Phone > phones <: phones")
+        result = run("E *: Phone -> phones <: phones")
         assert isinstance(result, Relation)
         # Alice has 1 phone, Carol has 2 -> 3 tuples
         assert len(result) == 3
@@ -205,11 +205,11 @@ class TestUnnest:
 
 
 class TestExtend:
-    """Test + (extend)."""
+    """Test +: (extend)."""
 
     def test_single(self) -> None:
         """Extend adds a computed attribute to each tuple."""
-        result = run("E + bonus: salary * 0.1 # [name bonus]")
+        result = run("E +: bonus: salary * 0.1 # [name bonus]")
         assert isinstance(result, Relation)
         for t in result:
             if t["name"] == "Alice":
@@ -221,7 +221,7 @@ class TestArithmeticPrecedence:
 
     def test_divide_then_multiply(self) -> None:
         """salary / 1000 * 2 evaluates left-to-right as (salary / 1000) * 2."""
-        result = run("E + x: salary / 1000.0 * 2.0 # [name x]")
+        result = run("E +: x: salary / 1000.0 * 2.0 # [name x]")
         assert isinstance(result, Relation)
         for t in result:
             if t["name"] == "Alice":
@@ -229,7 +229,7 @@ class TestArithmeticPrecedence:
 
     def test_precedence(self) -> None:
         """salary + 1000 * 2 evaluates as salary + (1000 * 2)."""
-        result = run("E + x: salary + 1000 * 2 # [name x]")
+        result = run("E +: x: salary + 1000 * 2 # [name x]")
         assert isinstance(result, Relation)
         for t in result:
             if t["name"] == "Alice":
@@ -241,42 +241,42 @@ class TestRename:
 
     def test_rename(self) -> None:
         """Rename changes an attribute name in the relation."""
-        result = run("ContractorPay @ [pay > salary]")
+        result = run("ContractorPay @ [pay -> salary]")
         assert isinstance(result, Relation)
         assert "salary" in result.attributes
         assert "pay" not in result.attributes
 
 
 class TestSetOps:
-    """Test |, -, & (set operations)."""
+    """Test |., -., &. (set operations)."""
 
     def test_union(self) -> None:
         """Union combines tuples from two compatible relations."""
-        result = run("ContractorPay @ [pay > salary] | (E # [name salary])")
+        result = run("ContractorPay @ [pay -> salary] |. (E # [name salary])")
         assert isinstance(result, Relation)
         assert len(result) == 6
 
     def test_difference(self) -> None:
         """Difference removes tuples present in the right relation."""
-        result = run("E # emp_id - (Phone # emp_id)")
+        result = run("E # emp_id -. (Phone # emp_id)")
         assert isinstance(result, Relation)
         ids = {t["emp_id"] for t in result}
         assert ids == {2, 4, 5}
 
     def test_intersect(self) -> None:
         """Intersect keeps only tuples present in both relations."""
-        result = run("(E # emp_id) & (Phone # emp_id)")
+        result = run("(E # emp_id) &. (Phone # emp_id)")
         assert isinstance(result, Relation)
         ids = {t["emp_id"] for t in result}
         assert ids == {1, 3}
 
 
 class TestSummarize:
-    """Test / and /. (summarize)."""
+    """Test /. (summarize)."""
 
     def test_summarize_by_key(self) -> None:
         """Summarize groups by key with count and mean aggregates."""
-        result = run("E / dept_id [n: #.  avg: %. salary]")
+        result = run("E /. dept_id [n: #.  avg: %. salary]")
         assert isinstance(result, Relation)
         assert len(result) == 2
         for t in result:
@@ -289,7 +289,7 @@ class TestSummarize:
 
     def test_summarize_multi_key(self) -> None:
         """Summarize groups by multiple keys."""
-        result = run("E / [dept_id role] [n: #.  total: +. salary]")
+        result = run("E /. [dept_id role] [n: #.  total: +. salary]")
         assert isinstance(result, Relation)
         assert len(result) == 3
         for t in result:
@@ -320,7 +320,7 @@ class TestNestBy:
 
     def test_nest_by(self) -> None:
         """Nest-by groups tuples into nested relations by key."""
-        result = run("E /: dept_id > team")
+        result = run("E /: dept_id -> team")
         assert isinstance(result, Relation)
         assert len(result) == 2
         for t in result:
@@ -332,7 +332,7 @@ class TestNestBy:
 
     def test_nest_by_multi_key(self) -> None:
         """Nest-by groups by multiple keys."""
-        result = run("E /: [dept_id role] > team")
+        result = run("E /: [dept_id role] -> team")
         assert isinstance(result, Relation)
         assert len(result) == 3
         for t in result:
@@ -435,7 +435,7 @@ class TestNumericPromotion:
     def test_arithmetic_on_str_values(self) -> None:
         """Extend with arithmetic on string values that are numeric."""
         env = self._make_mixed_env()
-        result = run("data + doubled: val * 2", env)
+        result = run("data +: doubled: val * 2", env)
         assert isinstance(result, Relation)
         for t in result:
             assert isinstance(t["doubled"], int)
@@ -475,7 +475,7 @@ class TestNumericPromotion:
             Relation(frozenset({Tuple_(name="a", val="hello")})),
         )
         with pytest.raises(ExecutionError):
-            run("data + doubled: val * 2", env)
+            run("data +: doubled: val * 2", env)
 
     def test_filter_then_arithmetic(self) -> None:
         """The user's scenario: mixed column, filter to numeric, do math."""
@@ -493,7 +493,7 @@ class TestNumericPromotion:
             ),
         )
         # Filter to numeric rows, then do arithmetic
-        result = run('data ? kind = "num" + doubled: val * 2', env)
+        result = run('data ? kind = "num" +: doubled: val * 2', env)
         assert isinstance(result, Relation)
         assert len(result) == 2
         for t in result:
@@ -518,7 +518,7 @@ class TestNumericPromotion:
             ),
         )
         result = run(
-            'R ? type = "F" / category amt: +. amount', env
+            'R ? type = "F" /. category amt: +. amount', env
         )
         assert isinstance(result, Relation)
         assert len(result) == 2
@@ -542,7 +542,7 @@ class TestNumericPromotion:
                 )
             ),
         )
-        result = run("data / grp avg: %. val", env)
+        result = run("data /. grp avg: %. val", env)
         t = next(iter(result))
         assert t["avg"] == 15.0
 
@@ -561,15 +561,15 @@ class TestNumericPromotion:
             ),
         )
         with pytest.raises(ExecutionError):
-            run("data / grp total: +. val", env)
+            run("data /. grp total: +. val", env)
 
 
 class TestTernary:
-    """Test ? (ternary/conditional) in extend computations."""
+    """Test ?: (ternary/conditional) in extend computations."""
 
     def test_simple_remap(self) -> None:
         """Remap dept_id 10 to 'eng', others to 'other'."""
-        result = run('E + [grp: ? dept_id = 10 "eng" "other"]')
+        result = run('E +: [grp: ?: dept_id = 10 "eng" "other"]')
         assert isinstance(result, Relation)
         for t in result:
             if t["dept_id"] == 10:
@@ -579,7 +579,7 @@ class TestTernary:
 
     def test_numeric_threshold(self) -> None:
         """Bucket by salary threshold."""
-        result = run("E + [big: ? salary > 70000 true false]")
+        result = run("E +: [big: ?: salary > 70000 true false]")
         assert isinstance(result, Relation)
         for t in result:
             expected = t["salary"] > 70000
@@ -587,7 +587,7 @@ class TestTernary:
 
     def test_passthrough(self) -> None:
         """Cap salary at 80000."""
-        result = run("E + [capped: ? salary > 80000 80000 salary]")
+        result = run("E +: [capped: ?: salary > 80000 80000 salary]")
         assert isinstance(result, Relation)
         for t in result:
             if t["salary"] > 80000:
@@ -598,7 +598,7 @@ class TestTernary:
     def test_nested_ternary(self) -> None:
         """Nested ternary for tier classification."""
         result = run(
-            'E + [tier: ? salary >= 80000 "high" (? salary >= 60000 "mid" "low")]'
+            'E +: [tier: ?: salary >= 80000 "high" (?: salary >= 60000 "mid" "low")]'
         )
         assert isinstance(result, Relation)
         for t in result:
@@ -611,7 +611,7 @@ class TestTernary:
 
     def test_with_summarize(self) -> None:
         """Ternary followed by summarize."""
-        result = run('E + [grp: ? dept_id = 10 "A" "B"] / grp [n: #.]')
+        result = run('E +: [grp: ?: dept_id = 10 "A" "B"] /. grp [n: #.]')
         assert isinstance(result, Relation)
         assert len(result) == 2
         for t in result:
@@ -623,11 +623,11 @@ class TestTernary:
     def test_unknown_attr_in_branch(self) -> None:
         """Unknown attribute in ternary branch raises ExecutionError, not KeyError."""
         with pytest.raises(ExecutionError, match="Unknown attribute"):
-            run('D + x: ? dept_id = 10 100 asdf')
+            run('D +: x: ?: dept_id = 10 100 asdf')
 
     def test_negative_literal_in_branch(self) -> None:
         """Negative numeric literal in ternary branch."""
-        result = run("D + x: ? dept_id = 10 100 -1")
+        result = run("D +: x: ?: dept_id = 10 100 -1")
         assert isinstance(result, Relation)
         for t in result:
             if t["dept_id"] == 10:
@@ -637,7 +637,7 @@ class TestTernary:
 
     def test_unbracketed_extend_then_summarize(self) -> None:
         """Unbracketed ternary extend followed by summarize (no bracket ambiguity)."""
-        result = run('E + grp: ? dept_id = 10 "A" "B" / grp n: #.')
+        result = run('E +: grp: ?: dept_id = 10 "A" "B" /. grp n: #.')
         assert isinstance(result, Relation)
         assert len(result) == 2
         for t in result:
@@ -654,7 +654,7 @@ class TestRound:
         """salary / 3.0 ~ 2 produces correctly rounded Decimal values."""
         from decimal import Decimal
 
-        result = run("E + bonus: salary / 3.0 ~ 2 # [name bonus]")
+        result = run("E +: bonus: salary / 3.0 ~ 2 # [name bonus]")
         assert isinstance(result, Relation)
         for t in result:
             if t["name"] == "Alice":
@@ -673,7 +673,7 @@ class TestRound:
                 frozenset({Tuple_(val=Decimal("10.456"), tag="a")})
             ),
         )
-        result = run("R + r: val ~ 2", env)
+        result = run("R +: r: val ~ 2", env)
         t = next(iter(result))
         assert t["r"] == Decimal("10.46")
 
@@ -683,28 +683,28 @@ class TestFilterAggregateLHS:
 
     def test_count_eq(self) -> None:
         """Filter by #. phones = 1 keeps employees with exactly one phone."""
-        result = run("E *: Phone > phones ? #. phones = 1")
+        result = run("E *: Phone -> phones ? #. phones = 1")
         assert isinstance(result, Relation)
         names = {t["name"] for t in result}
         assert names == {"Alice"}
 
     def test_count_gt(self) -> None:
         """Filter by #. phones > 1 keeps employees with more than one phone."""
-        result = run("E *: Phone > phones ? #. phones > 1")
+        result = run("E *: Phone -> phones ? #. phones > 1")
         assert isinstance(result, Relation)
         names = {t["name"] for t in result}
         assert names == {"Carol"}
 
     def test_count_zero(self) -> None:
         """Filter by #. phones = 0 keeps employees with no phones."""
-        result = run("E *: Phone > phones ? #. phones = 0")
+        result = run("E *: Phone -> phones ? #. phones = 0")
         assert isinstance(result, Relation)
         names = {t["name"] for t in result}
         assert names == {"Bob", "Dave", "Eve"}
 
     def test_count_bool_combination(self) -> None:
         """Boolean AND of aggregate count conditions."""
-        result = run("E *: Phone > phones ? (#. phones >= 1 & #. phones <= 2)")
+        result = run("E *: Phone -> phones ? (#. phones >= 1 & #. phones <= 2)")
         assert isinstance(result, Relation)
         names = {t["name"] for t in result}
         assert names == {"Alice", "Carol"}
@@ -717,7 +717,7 @@ class TestSummarizeExpressions:
         """Summarize with ~ produces rounded Decimal values."""
         from decimal import Decimal
 
-        result = run("E / dept_id sum: +. salary ~ 2")
+        result = run("E /. dept_id sum: +. salary ~ 2")
         assert isinstance(result, Relation)
         assert len(result) == 2
         for t in result:
@@ -743,7 +743,7 @@ class TestSummarizeExpressions:
 
         Uses * 1.0 to force float division (same as extend context).
         """
-        result = run("E / dept_id pct: +. salary * 1.0 / (E /. total: +. salary)")
+        result = run("E /. dept_id pct: +. salary * 1.0 / (E /. total: +. salary)")
         assert isinstance(result, Relation)
         assert len(result) == 2
         total = 330000
@@ -767,13 +767,13 @@ class TestSummarizeExpressions:
         """Scalar subquery that isn't 1x1 raises ExecutionError."""
         with pytest.raises(ExecutionError, match="exactly 1"):
             # E /. [a: #.  b: +. salary] returns 1 tuple with 2 attributes
-            run("E / dept_id x: (E /. [a: #.  b: +. salary])")
+            run("E /. dept_id x: (E /. [a: #.  b: +. salary])")
 
     # --- Auto-naming ---
 
     def test_summarize_auto_name_count(self) -> None:
         """Auto-named #. produces 'count' column."""
-        result = run("E / dept_id #.")
+        result = run("E /. dept_id #.")
         assert isinstance(result, Relation)
         for t in result:
             if t["dept_id"] == 10:
@@ -783,7 +783,7 @@ class TestSummarizeExpressions:
 
     def test_summarize_auto_name_aggregates(self) -> None:
         """Multiple auto-named aggregates produce correctly named columns."""
-        result = run("E / dept_id [#.  +. salary  %. salary]")
+        result = run("E /. dept_id [#.  +. salary  %. salary]")
         assert isinstance(result, Relation)
         for t in result:
             if t["dept_id"] == 10:
@@ -797,7 +797,7 @@ class TestSummarizeExpressions:
 
     def test_summarize_auto_name_mixed(self) -> None:
         """Mix of auto-named and explicitly named columns."""
-        result = run("E / dept_id [#.  avg: %. salary]")
+        result = run("E /. dept_id [#.  avg: %. salary]")
         assert isinstance(result, Relation)
         for t in result:
             assert "count" in t

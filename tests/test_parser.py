@@ -141,7 +141,7 @@ class TestChaining:
 
     def test_join_filter_project(self) -> None:
         """Join then filter then project chains correctly."""
-        result = parse('E * D ? dept_name = "Engineering" # [name salary]')
+        result = parse('E *. D ? dept_name = "Engineering" # [name salary]')
         assert isinstance(result, ast.Project)
         assert isinstance(result.source, ast.Filter)
         assert isinstance(result.source.source, ast.NaturalJoin)
@@ -152,14 +152,14 @@ class TestJoin:
 
     def test_natural_join(self) -> None:
         """Natural join between two relations."""
-        result = parse("E * D")
+        result = parse("E *. D")
         assert isinstance(result, ast.NaturalJoin)
         assert isinstance(result.right, ast.RelName)
         assert result.right.name == "D"
 
     def test_nest_join(self) -> None:
         """Nest join with target nest name."""
-        result = parse("E *: Phone > phones")
+        result = parse("E *: Phone -> phones")
         assert isinstance(result, ast.NestJoin)
         assert isinstance(result.right, ast.RelName)
         assert result.nest_name == "phones"
@@ -177,7 +177,7 @@ class TestUnnest:
 
     def test_unnest_after_nest_join(self) -> None:
         """Unnest chains after a nest join."""
-        result = parse("E *: Phone > phones <: phones")
+        result = parse("E *: Phone -> phones <: phones")
         assert isinstance(result, ast.Unnest)
         assert result.nest_attr == "phones"
         assert isinstance(result.source, ast.NestJoin)
@@ -188,7 +188,7 @@ class TestExtend:
 
     def test_single(self) -> None:
         """Single computed column with arithmetic expression."""
-        result = parse("E + bonus: salary * 0.1")
+        result = parse("E +: bonus: salary * 0.1")
         assert isinstance(result, ast.Extend)
         assert len(result.computations) == 1
         comp = result.computations[0]
@@ -198,7 +198,7 @@ class TestExtend:
 
     def test_multiple(self) -> None:
         """Multiple bracketed computed columns."""
-        result = parse("E + [bonus: salary * 0.1  tax: salary * 0.3]")
+        result = parse("E +: [bonus: salary * 0.1  tax: salary * 0.3]")
         assert isinstance(result, ast.Extend)
         assert len(result.computations) == 2
         assert result.computations[0].name == "bonus"
@@ -210,7 +210,7 @@ class TestArithmeticPrecedence:
 
     def test_chained_multiply_divide(self) -> None:
         """a / b * 2 parses as (a / b) * 2 (left-to-right)."""
-        result = parse("R + x: a / b * 2")
+        result = parse("R +: x: a / b * 2")
         assert isinstance(result, ast.Extend)
         expr = result.computations[0].expr
         assert isinstance(expr, ast.BinOp)
@@ -222,7 +222,7 @@ class TestArithmeticPrecedence:
 
     def test_multiply_before_add(self) -> None:
         """a + b * 2 parses as a + (b * 2) (precedence)."""
-        result = parse("R + x: a + b * 2")
+        result = parse("R +: x: a + b * 2")
         assert isinstance(result, ast.Extend)
         expr = result.computations[0].expr
         assert isinstance(expr, ast.BinOp)
@@ -233,7 +233,7 @@ class TestArithmeticPrecedence:
 
     def test_chained_additive(self) -> None:
         """a + b - c parses as (a + b) - c."""
-        result = parse("R + x: a + b - c")
+        result = parse("R +: x: a + b - c")
         assert isinstance(result, ast.Extend)
         expr = result.computations[0].expr
         assert isinstance(expr, ast.BinOp)
@@ -243,7 +243,7 @@ class TestArithmeticPrecedence:
 
     def test_parens_override_precedence(self) -> None:
         """(a + b) * 2 groups addition first via parentheses."""
-        result = parse("R + x: (a + b) * 2")
+        result = parse("R +: x: (a + b) * 2")
         assert isinstance(result, ast.Extend)
         expr = result.computations[0].expr
         assert isinstance(expr, ast.BinOp)
@@ -257,13 +257,13 @@ class TestRename:
 
     def test_single(self) -> None:
         """Single attribute rename mapping."""
-        result = parse("E @ pay > salary")
+        result = parse("E @ pay -> salary")
         assert isinstance(result, ast.Rename)
         assert result.mappings == (("pay", "salary"),)
 
     def test_multiple(self) -> None:
         """Multiple bracketed rename mappings."""
-        result = parse("E @ [pay > salary  dept > department]")
+        result = parse("E @ [pay -> salary  dept -> department]")
         assert isinstance(result, ast.Rename)
         assert len(result.mappings) == 2
 
@@ -273,18 +273,18 @@ class TestSetOps:
 
     def test_union(self) -> None:
         """Union of two relations."""
-        result = parse("E | (D)")
+        result = parse("E |. (D)")
         assert isinstance(result, ast.Union)
 
     def test_difference(self) -> None:
         """Set difference of two projected relations."""
-        result = parse("E # emp_id - (Phone # emp_id)")
+        result = parse("E # emp_id -. (Phone # emp_id)")
         assert isinstance(result, ast.Difference)
         assert isinstance(result.source, ast.Project)
 
     def test_intersect(self) -> None:
         """Set intersection of two projected relations."""
-        result = parse("(E # emp_id) & (Phone # emp_id)")
+        result = parse("(E # emp_id) &. (Phone # emp_id)")
         assert isinstance(result, ast.Intersect)
 
 
@@ -293,7 +293,7 @@ class TestSummarize:
 
     def test_single_key(self) -> None:
         """Summarize with one group key and two aggregates."""
-        result = parse("E / dept_id [n: #.  avg: %. salary]")
+        result = parse("E /. dept_id [n: #.  avg: %. salary]")
         assert isinstance(result, ast.Summarize)
         assert result.group_attrs == ("dept_id",)
         assert len(result.computations) == 2
@@ -307,7 +307,7 @@ class TestSummarize:
 
     def test_single_aggregate_no_brackets(self) -> None:
         """Summarize with one aggregate without brackets."""
-        result = parse("E / dept_id total: +. salary")
+        result = parse("E /. dept_id total: +. salary")
         assert isinstance(result, ast.Summarize)
         assert result.group_attrs == ("dept_id",)
         assert len(result.computations) == 1
@@ -335,44 +335,44 @@ class TestSummarize:
 
     def test_auto_name_count(self) -> None:
         """Bare #. gets auto-named 'count'."""
-        result = parse("E / dept_id #.")
+        result = parse("E /. dept_id #.")
         assert isinstance(result, ast.Summarize)
         assert result.computations[0].name == "count"
         assert result.computations[0].expr.func == "#."
 
     def test_auto_name_sum(self) -> None:
         """Bare +. salary gets auto-named 'sum_salary'."""
-        result = parse("E / dept_id +. salary")
+        result = parse("E /. dept_id +. salary")
         assert isinstance(result, ast.Summarize)
         assert result.computations[0].name == "sum_salary"
 
     def test_auto_name_max(self) -> None:
         """Bare >. salary gets auto-named 'max_salary'."""
-        result = parse("E / dept_id >. salary")
+        result = parse("E /. dept_id >. salary")
         assert isinstance(result, ast.Summarize)
         assert result.computations[0].name == "max_salary"
 
     def test_auto_name_min(self) -> None:
         """Bare <. salary gets auto-named 'min_salary'."""
-        result = parse("E / dept_id <. salary")
+        result = parse("E /. dept_id <. salary")
         assert isinstance(result, ast.Summarize)
         assert result.computations[0].name == "min_salary"
 
     def test_auto_name_mean(self) -> None:
         """Bare %. salary gets auto-named 'mean_salary'."""
-        result = parse("E / dept_id %. salary")
+        result = parse("E /. dept_id %. salary")
         assert isinstance(result, ast.Summarize)
         assert result.computations[0].name == "mean_salary"
 
     def test_auto_name_count_rva(self) -> None:
         """#. with RVA source gets auto-named 'count_phones'."""
-        result = parse("E / dept_id #. phones")
+        result = parse("E /. dept_id #. phones")
         assert isinstance(result, ast.Summarize)
         assert result.computations[0].name == "count_phones"
 
     def test_auto_name_bracketed_multiple(self) -> None:
         """Multiple auto-named aggregates in brackets."""
-        result = parse("E / dept_id [#.  +. salary  %. salary]")
+        result = parse("E /. dept_id [#.  +. salary  %. salary]")
         assert isinstance(result, ast.Summarize)
         assert len(result.computations) == 3
         assert result.computations[0].name == "count"
@@ -381,7 +381,7 @@ class TestSummarize:
 
     def test_auto_name_mixed_with_explicit(self) -> None:
         """Mix of auto-named and explicitly named aggregates."""
-        result = parse("E / dept_id [#.  avg: %. salary  +. bonus]")
+        result = parse("E /. dept_id [#.  avg: %. salary  +. bonus]")
         assert isinstance(result, ast.Summarize)
         assert len(result.computations) == 3
         assert result.computations[0].name == "count"
@@ -404,16 +404,16 @@ class TestSummarize:
     def test_auto_name_duplicate_error(self) -> None:
         """Duplicate auto-generated names are a parse error."""
         with pytest.raises(ParseError, match="Duplicate column name"):
-            parse("E / dept_id [+. salary  +. salary]")
+            parse("E /. dept_id [+. salary  +. salary]")
 
     def test_auto_name_complex_expr_requires_name(self) -> None:
         """Complex expression starting with aggregate requires explicit name."""
         with pytest.raises(ParseError, match="Complex expression requires an explicit name"):
-            parse("E / dept_id +. salary * 2")
+            parse("E /. dept_id +. salary * 2")
 
     def test_multi_key(self) -> None:
         """Summarize with multiple grouping keys."""
-        result = parse("E / [dept_id region] +. salary")
+        result = parse("E /. [dept_id region] +. salary")
         assert isinstance(result, ast.Summarize)
         assert result.group_attrs == ("dept_id", "region")
         assert len(result.computations) == 1
@@ -421,7 +421,7 @@ class TestSummarize:
 
     def test_multi_key_multi_agg(self) -> None:
         """Summarize with multiple keys and multiple aggregates."""
-        result = parse("E / [dept_id region] [n: #.  total: +. salary]")
+        result = parse("E /. [dept_id region] [n: #.  total: +. salary]")
         assert isinstance(result, ast.Summarize)
         assert result.group_attrs == ("dept_id", "region")
         assert len(result.computations) == 2
@@ -430,14 +430,14 @@ class TestSummarize:
 
     def test_nest_by(self) -> None:
         """Nest-by groups and assigns a nest name."""
-        result = parse("E /: dept_id > team")
+        result = parse("E /: dept_id -> team")
         assert isinstance(result, ast.NestBy)
         assert result.group_attrs == ("dept_id",)
         assert result.nest_name == "team"
 
     def test_nest_by_multi_key(self) -> None:
         """Nest-by with multiple grouping keys."""
-        result = parse("E /: [dept_id region] > team")
+        result = parse("E /: [dept_id region] -> team")
         assert isinstance(result, ast.NestBy)
         assert result.group_attrs == ("dept_id", "region")
         assert result.nest_name == "team"
@@ -479,7 +479,7 @@ class TestComplexExpressions:
 
     def test_union_with_rename(self) -> None:
         """Union where the left side has a rename."""
-        result = parse("ContractorPay @ [pay > salary] | (E # [name salary])")
+        result = parse("ContractorPay @ [pay -> salary] |. (E # [name salary])")
         assert isinstance(result, ast.Union)
         assert isinstance(result.source, ast.Rename)
 
@@ -492,7 +492,7 @@ class TestComplexExpressions:
 
     def test_nest_by_extend(self) -> None:
         """Extend with aggregate call after nest-by."""
-        result = parse("E /: dept_id > team + [top: >. team.salary]")
+        result = parse("E /: dept_id -> team +: [top: >. team.salary]")
         assert isinstance(result, ast.Extend)
         assert isinstance(result.source, ast.NestBy)
         comp = result.computations[0]
@@ -539,7 +539,7 @@ class TestTernaryParsing:
 
     def test_basic_ternary(self) -> None:
         """Basic ternary with comparison, true, and false branches."""
-        result = parse('E + [grp: ? dept_id = 10 "eng" "other"]')
+        result = parse('E +: [grp: ?: dept_id = 10 "eng" "other"]')
         assert isinstance(result, ast.Extend)
         comp = result.computations[0]
         assert comp.name == "grp"
@@ -554,7 +554,7 @@ class TestTernaryParsing:
     def test_nested_ternary_parenthesized(self) -> None:
         """Nested ternary in parenthesized false branch."""
         result = parse(
-            'E + [tier: ? salary >= 80000 "high" (? salary >= 60000 "mid" "low")]'
+            'E +: [tier: ?: salary >= 80000 "high" (?: salary >= 60000 "mid" "low")]'
         )
         assert isinstance(result, ast.Extend)
         comp = result.computations[0]
@@ -572,7 +572,7 @@ class TestTernaryParsing:
     def test_nested_ternary_bare(self) -> None:
         """Nested ternary without parentheses."""
         result = parse(
-            'E + [tier: ? salary >= 80000 "high" ? salary >= 60000 "mid" "low"]'
+            'E +: [tier: ?: salary >= 80000 "high" ?: salary >= 60000 "mid" "low"]'
         )
         assert isinstance(result, ast.Extend)
         comp = result.computations[0]
@@ -589,7 +589,7 @@ class TestRound:
 
     def test_round_in_extend(self) -> None:
         """Precision primitive on a binary expression parses correctly."""
-        result = parse("R + pct: value / total ~ 2")
+        result = parse("R +: pct: value / total ~ 2")
         assert isinstance(result, ast.Extend)
         comp = result.computations[0]
         assert comp.name == "pct"
@@ -600,7 +600,7 @@ class TestRound:
 
     def test_round_simple_attr(self) -> None:
         """Precision primitive on a single attribute reference."""
-        result = parse("R + x: salary ~ 0")
+        result = parse("R +: x: salary ~ 0")
         assert isinstance(result, ast.Extend)
         comp = result.computations[0]
         assert isinstance(comp.expr, ast.Round)

@@ -85,17 +85,25 @@ class Lexer:
 
         # --- Digraph detection (two-char lookahead) ---
 
-        # ?! and ?=
+        # ?! ?= ?:
         if ch == "?" and ch2 == "!":
             self._advance()
             self._advance()
             return self._make_token(TokenType.QUESTION_BANG, "?!", line, col)
+        if ch == "?" and ch2 == ":":
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.QUESTION_COLON, "?:", line, col)
         if ch == "?" and ch2 == "=":
             self._advance()
             self._advance()
             return self._make_token(TokenType.QUESTION_EQ, "?=", line, col)
 
-        # *:
+        # *. *:
+        if ch == "*" and ch2 == ".":
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.STAR_DOT, "*.", line, col)
         if ch == "*" and ch2 == ":":
             self._advance()
             self._advance()
@@ -172,17 +180,35 @@ class Lexer:
             self._advance()
             return self._make_token(TokenType.COLON_COLON, "::", line, col)
 
-        # |=
+        # |. |=
+        if ch == "|" and ch2 == ".":
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.PIPE_DOT, "|.", line, col)
         if ch == "|" and ch2 == "=":
             self._advance()
             self._advance()
             return self._make_token(TokenType.PIPE_EQ, "|=", line, col)
 
-        # -=
+        # -. -> -=
+        if ch == "-" and ch2 == ".":
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.MINUS_DOT, "-.", line, col)
+        if ch == "-" and ch2 == ">":
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.ARROW, "->", line, col)
         if ch == "-" and ch2 == "=":
             self._advance()
             self._advance()
             return self._make_token(TokenType.MINUS_EQ, "-=", line, col)
+
+        # &.
+        if ch == "&" and ch2 == ".":
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.AMPERSAND_DOT, "&.", line, col)
 
         # != !~
         if ch == "!" and ch2 == "=":

@@ -21,26 +21,28 @@ class TokenType(Enum):
     # Single-char operators
     QUESTION = auto()       # ?   filter
     HASH = auto()           # #   project
-    STAR = auto()           # *   natural join
+    STAR = auto()           # *   multiply
     AT = auto()             # @   rename
-    PLUS = auto()           # +   extend
-    MINUS = auto()          # -   difference / descending sort / negation
-    PIPE = auto()           # |   union / OR in filter
-    AMPERSAND = auto()      # &   intersect / AND in filter
-    SLASH = auto()          # /   summarize
+    PLUS = auto()           # +   add
+    MINUS = auto()          # -   subtract / descending sort / negation
+    PIPE = auto()           # |   OR in filter
+    AMPERSAND = auto()      # &   AND in filter
+    SLASH = auto()          # /   divide
     DOLLAR = auto()         # $   sort
     CARET = auto()          # ^   take
-    GT = auto()             # >   greater than / rename arrow / nest name
+    GT = auto()             # >   greater than
     LT = auto()             # <   less than
     EQ = auto()             # =   equality
 
     # Digraph operators
     QUESTION_BANG = auto()  # ?!  negated filter
+    QUESTION_COLON = auto() # ?:  ternary
+    STAR_DOT = auto()       # *.  natural join
     STAR_COLON = auto()     # *:  nest join
     LT_COLON = auto()       # <:  unnest
-    SLASH_DOT = auto()      # /.  summarize all
+    SLASH_DOT = auto()      # /.  summarize
     SLASH_COLON = auto()    # /:  nest by
-    PLUS_COLON = auto()     # +:  modify
+    PLUS_COLON = auto()     # +:  extend
     HASH_BANG = auto()      # #!  remove (inverse project)
     HASH_DOT = auto()       # #.  count aggregate
     PLUS_DOT = auto()       # +.  sum aggregate
@@ -48,8 +50,12 @@ class TokenType(Enum):
     LT_DOT = auto()         # <.  min aggregate
     PERCENT_DOT = auto()    # %.  mean aggregate
     COLON_EQ = auto()       # :=  assign
+    PIPE_DOT = auto()       # |.  union
     PIPE_EQ = auto()        # |=  insert
+    MINUS_DOT = auto()      # -.  difference
     MINUS_EQ = auto()       # -=  delete
+    AMPERSAND_DOT = auto()  # &.  intersect
+    ARROW = auto()          # ->  rename/alias arrow
     QUESTION_EQ = auto()    # ?=  update
     BANG_EQ = auto()        # !=  not equal
     GT_EQ = auto()          # >=  greater or equal

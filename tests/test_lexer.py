@@ -119,6 +119,30 @@ class TestDigraphOperators:
         """Tokenize :: as COLON_COLON."""
         assert types("::") == [TokenType.COLON_COLON]
 
+    def test_star_dot(self) -> None:
+        """Tokenize *. as STAR_DOT."""
+        assert types("*.") == [TokenType.STAR_DOT]
+
+    def test_minus_dot(self) -> None:
+        """Tokenize -. as MINUS_DOT."""
+        assert types("-.") == [TokenType.MINUS_DOT]
+
+    def test_pipe_dot(self) -> None:
+        """Tokenize |. as PIPE_DOT."""
+        assert types("|.") == [TokenType.PIPE_DOT]
+
+    def test_ampersand_dot(self) -> None:
+        """Tokenize &. as AMPERSAND_DOT."""
+        assert types("&.") == [TokenType.AMPERSAND_DOT]
+
+    def test_question_colon(self) -> None:
+        """Tokenize ?: as QUESTION_COLON."""
+        assert types("?:") == [TokenType.QUESTION_COLON]
+
+    def test_arrow(self) -> None:
+        """Tokenize -> as ARROW."""
+        assert types("->") == [TokenType.ARROW]
+
 
 class TestLiterals:
     """Test literal tokens."""
@@ -198,10 +222,10 @@ class TestComplexExpressions:
 
     def test_summarize(self) -> None:
         """Summarize with aggregates tokenizes correctly."""
-        src = "E / dept_id [n: #.  avg: %. salary]"
+        src = "E /. dept_id [n: #.  avg: %. salary]"
         result = types(src)
         expected = [
-            TokenType.IDENT, TokenType.SLASH, TokenType.IDENT,
+            TokenType.IDENT, TokenType.SLASH_DOT, TokenType.IDENT,
             TokenType.LBRACKET, TokenType.IDENT, TokenType.COLON,
             TokenType.HASH_DOT, TokenType.IDENT, TokenType.COLON,
             TokenType.PERCENT_DOT, TokenType.IDENT, TokenType.RBRACKET,
@@ -209,12 +233,12 @@ class TestComplexExpressions:
         assert result == expected
 
     def test_nest_join(self) -> None:
-        """Nest join tokenizes *: and > correctly."""
-        src = "E *: Phone > phones"
+        """Nest join tokenizes *: and -> correctly."""
+        src = "E *: Phone -> phones"
         result = types(src)
         expected = [
             TokenType.IDENT, TokenType.STAR_COLON, TokenType.IDENT,
-            TokenType.GT, TokenType.IDENT,
+            TokenType.ARROW, TokenType.IDENT,
         ]
         assert result == expected
 
@@ -237,10 +261,10 @@ class TestComplexExpressions:
 
     def test_extend_computation(self) -> None:
         """Extend with arithmetic tokenizes correctly."""
-        src = "E + bonus: salary * 0.1"
+        src = "E +: bonus: salary * 0.1"
         result = types(src)
         expected = [
-            TokenType.IDENT, TokenType.PLUS, TokenType.IDENT,
+            TokenType.IDENT, TokenType.PLUS_COLON, TokenType.IDENT,
             TokenType.COLON, TokenType.IDENT, TokenType.STAR,
             TokenType.FLOAT,
         ]

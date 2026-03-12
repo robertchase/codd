@@ -5,7 +5,7 @@ Grammar overview (informal):
   expr       := atom postfix*
   atom       := IDENT | '(' expr ')'
   postfix    := filter | project | join | nest_join | extend | rename
-              | union | difference | intersect | summarize | summarize_all
+              | union | difference | intersect | summarize
               | nest_by | sort | take
 
 The core loop is _parse_postfix_chain: parse an atom, then keep consuming
@@ -125,26 +125,24 @@ class Parser:
                 left = self._parse_project(left)
             elif tok.type == TokenType.HASH_BANG:
                 left = self._parse_remove(left)
-            elif tok.type == TokenType.STAR:
+            elif tok.type == TokenType.STAR_DOT:
                 left = self._parse_natural_join(left)
             elif tok.type == TokenType.STAR_COLON:
                 left = self._parse_nest_join(left)
             elif tok.type == TokenType.LT_COLON:
                 left = self._parse_unnest(left)
-            elif tok.type == TokenType.PLUS:
+            elif tok.type == TokenType.PLUS_COLON:
                 left = self._parse_extend(left)
             elif tok.type == TokenType.AT:
                 left = self._parse_rename(left)
-            elif tok.type == TokenType.PIPE:
+            elif tok.type == TokenType.PIPE_DOT:
                 left = self._parse_union(left)
-            elif tok.type == TokenType.MINUS:
+            elif tok.type == TokenType.MINUS_DOT:
                 left = self._parse_difference(left)
-            elif tok.type == TokenType.AMPERSAND:
+            elif tok.type == TokenType.AMPERSAND_DOT:
                 left = self._parse_intersect(left)
-            elif tok.type == TokenType.SLASH:
-                left = self._parse_summarize(left)
             elif tok.type == TokenType.SLASH_DOT:
-                left = self._parse_summarize_all(left)
+                left = self._parse_summarize(left)
             elif tok.type == TokenType.SLASH_COLON:
                 left = self._parse_nest_by(left)
             elif tok.type == TokenType.DOLLAR:
@@ -182,16 +180,16 @@ class Parser:
         return ast.Remove(source=source, attrs=attrs)
 
     def _parse_natural_join(self, source: ast.RelExpr) -> ast.NaturalJoin:
-        """Parse: * RelName."""
-        self._advance()  # consume *
+        """Parse: *. RelName."""
+        self._advance()  # consume *.
         right = self._parse_atom()
         return ast.NaturalJoin(source=source, right=right)
 
     def _parse_nest_join(self, source: ast.RelExpr) -> ast.NestJoin:
-        """Parse: *: RelName > nest_name."""
+        """Parse: *: RelName -> nest_name."""
         self._advance()  # consume *:
         right = self._parse_atom()
-        self._expect(TokenType.GT)
+        self._expect(TokenType.ARROW)
         name_tok = self._expect(TokenType.IDENT)
         return ast.NestJoin(source=source, right=right, nest_name=name_tok.value)
 
@@ -202,38 +200,52 @@ class Parser:
         return ast.Unnest(source=source, nest_attr=name_tok.value)
 
     def _parse_extend(self, source: ast.RelExpr) -> ast.Extend:
-        """Parse: + name: expr or + [name1: expr1  name2: expr2]."""
-        self._advance()  # consume +
+        """Parse: +: name: expr or +: [name1: expr1  name2: expr2]."""
+        self._advance()  # consume +:
         computations = self._parse_named_expr_list()
         return ast.Extend(source=source, computations=tuple(computations))
 
     def _parse_rename(self, source: ast.RelExpr) -> ast.Rename:
-        """Parse: @ old > new or @ [old1 > new1  old2 > new2]."""
+        """Parse: @ old -> new or @ [old1 -> new1  old2 -> new2]."""
         self._advance()  # consume @
         mappings = self._parse_rename_list()
         return ast.Rename(source=source, mappings=tuple(mappings))
 
     def _parse_union(self, source: ast.RelExpr) -> ast.Union:
-        """Parse: | (right_expr)."""
-        self._advance()  # consume |
+        """Parse: |. (right_expr)."""
+        self._advance()  # consume |.
         right = self._parse_binary_right()
         return ast.Union(source=source, right=right)
 
     def _parse_difference(self, source: ast.RelExpr) -> ast.Difference:
-        """Parse: - (right_expr)."""
-        self._advance()  # consume -
+        """Parse: -. (right_expr)."""
+        self._advance()  # consume -.
         right = self._parse_binary_right()
         return ast.Difference(source=source, right=right)
 
     def _parse_intersect(self, source: ast.RelExpr) -> ast.Intersect:
-        """Parse: & (right_expr)."""
-        self._advance()  # consume &
+        """Parse: &. (right_expr)."""
+        self._advance()  # consume &.
         right = self._parse_binary_right()
         return ast.Intersect(source=source, right=right)
 
-    def _parse_summarize(self, source: ast.RelExpr) -> ast.Summarize:
-        """Parse: / key [name1: expr1  name2: expr2] or / [key1 key2] [exprs]."""
-        self._advance()  # consume /
+    def _parse_summarize(
+        self, source: ast.RelExpr
+    ) -> ast.Summarize | ast.SummarizeAll:
+        """Parse: /. key [aggs] or /. [aggs] (summarize-all).
+
+        After consuming /., determines if grouping keys are present:
+        - Next is aggregate token -> no key (summarize-all)
+        - Next is IDENT followed by COLON -> named aggregate, no key
+        - Next is LBRACKET with aggregate or IDENT COLON inside -> no key
+        - Otherwise -> grouping keys present
+        """
+        self._advance()  # consume /.
+        if self._is_summarize_all():
+            computations = self._parse_named_expr_list(allow_auto_name=True)
+            return ast.SummarizeAll(
+                source=source, computations=tuple(computations)
+            )
         group_attrs = self._parse_attr_list()
         computations = self._parse_named_expr_list(allow_auto_name=True)
         return ast.Summarize(
@@ -242,17 +254,33 @@ class Parser:
             computations=tuple(computations),
         )
 
-    def _parse_summarize_all(self, source: ast.RelExpr) -> ast.SummarizeAll:
-        """Parse: /. [name1: expr1  name2: expr2]."""
-        self._advance()  # consume /.
-        computations = self._parse_named_expr_list(allow_auto_name=True)
-        return ast.SummarizeAll(source=source, computations=tuple(computations))
+    def _is_summarize_all(self) -> bool:
+        """Determine whether the current position starts aggregates (no grouping key)."""
+        tok = self._peek()
+        # Direct aggregate token -> summarize-all
+        if tok.type in self._AGG_TOKENS:
+            return True
+        # IDENT followed by COLON -> named aggregate (summarize-all)
+        if tok.type == TokenType.IDENT and self._peek(1).type == TokenType.COLON:
+            return True
+        # LBRACKET -> peek inside
+        if tok.type == TokenType.LBRACKET:
+            inner = self._peek(1)
+            if inner.type in self._AGG_TOKENS:
+                return True
+            if (
+                inner.type == TokenType.IDENT
+                and self._peek(2).type == TokenType.COLON
+            ):
+                return True
+            return False
+        return False
 
     def _parse_nest_by(self, source: ast.RelExpr) -> ast.NestBy:
-        """Parse: /: key > name or /: [key1 key2] > name."""
+        """Parse: /: key -> name or /: [key1 key2] -> name."""
         self._advance()  # consume /:
         group_attrs = self._parse_attr_list()
-        self._expect(TokenType.GT)
+        self._expect(TokenType.ARROW)
         name_tok = self._expect(TokenType.IDENT)
         return ast.NestBy(
             source=source,
@@ -296,20 +324,20 @@ class Parser:
             return (tok.value,)
 
     def _parse_rename_list(self) -> list[tuple[str, str]]:
-        """Parse: old > new or [old1 > new1  old2 > new2]."""
+        """Parse: old -> new or [old1 -> new1  old2 -> new2]."""
         if self._peek().type == TokenType.LBRACKET:
             self._advance()
             mappings: list[tuple[str, str]] = []
             while self._peek().type != TokenType.RBRACKET:
                 old = self._expect(TokenType.IDENT).value
-                self._expect(TokenType.GT)
+                self._expect(TokenType.ARROW)
                 new = self._expect(TokenType.IDENT).value
                 mappings.append((old, new))
             self._expect(TokenType.RBRACKET)
             return mappings
         else:
             old = self._expect(TokenType.IDENT).value
-            self._expect(TokenType.GT)
+            self._expect(TokenType.ARROW)
             new = self._expect(TokenType.IDENT).value
             return [(old, new)]
 
@@ -534,7 +562,7 @@ class Parser:
         parenthesized subqueries.
         """
         # Check for ternary expression
-        if self._peek().type == TokenType.QUESTION:
+        if self._peek().type == TokenType.QUESTION_COLON:
             return self._parse_ternary_expr()
 
         return self._parse_precision_expr()
@@ -572,8 +600,8 @@ class Parser:
         return left
 
     def _parse_ternary_expr(self) -> ast.TernaryExpr:
-        """Parse: ? condition true_expr false_expr."""
-        self._advance()  # consume ?
+        """Parse: ?: condition true_expr false_expr."""
+        self._advance()  # consume ?:
         condition = self._parse_comparison()
         true_expr = self._parse_ternary_branch()
         false_expr = self._parse_ternary_branch()
@@ -587,7 +615,7 @@ class Parser:
         Handles atoms, aggregate calls, and nested ternaries.
         Binary arithmetic in branches requires parentheses.
         """
-        if self._peek().type == TokenType.QUESTION:
+        if self._peek().type == TokenType.QUESTION_COLON:
             return self._parse_ternary_expr()
         return self._parse_computation_atom()
 

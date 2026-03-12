@@ -9,17 +9,16 @@ _RELATIONAL = [
     ("?!", "Negated filter", 'E ?! role = "engineer"'),
     ("#", "Project", "E # [name salary]"),
     ("#!", "Remove", "E #! emp_id"),
-    ("*", "Natural join", "E * D"),
-    ("*:", "Nest join", "E *: Phone > phones"),
+    ("*.", "Natural join", "E *. D"),
+    ("*:", "Nest join", "E *: Phone -> phones"),
     ("<:", "Unnest", "E <: phones"),
-    ("+", "Extend", "E + bonus: salary * 0.1"),
-    ("@", "Rename", "E @ [pay > salary]"),
-    ("|", "Union", "E | (D)"),
-    ("-", "Difference", "E - (D)"),
-    ("&", "Intersect", "E & (D)"),
-    ("/", "Summarize", "E / dept_id [n: #. avg: %. salary]  or  E / [dept_id role] #."),
-    ("/.", "Summarize all", "E /. [n: #. total: +. salary]"),
-    ("/:", "Nest by", "E /: dept_id > team  or  E /: [dept_id role] > team"),
+    ("+:", "Extend", "E +: bonus: salary * 0.1"),
+    ("@", "Rename", "E @ [pay -> salary]"),
+    ("|.", "Union", "E |. (D)"),
+    ("-.", "Difference", "E -. (D)"),
+    ("&.", "Intersect", "E &. (D)"),
+    ("/.", "Summarize", "E /. dept_id [n: #. avg: %. salary]  or  E /. [n: #.]"),
+    ("/:", "Nest by", "E /: dept_id -> team  or  E /: [dept_id role] -> team"),
     ("$", "Sort", "E $ salary-"),
     ("^", "Take", "E $ salary- ^ 3"),
 ]
@@ -35,7 +34,7 @@ _AGGREGATES = [
 _EXPRESSIONS = [
     ("+ - * /", "Arithmetic", "salary * 0.1"),
     ("~", "Precision", "%. salary ~ 2"),
-    ("?", "Ternary", '? dept_id = 10 "eng" "other"'),
+    ("?:", "Ternary", '?: dept_id = 10 "eng" "other"'),
 ]
 
 _OTHER = [

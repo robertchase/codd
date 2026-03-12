@@ -92,8 +92,8 @@ class TestJoinExamples:
     """Test join examples from algebra.md."""
 
     def test_natural_join(self) -> None:
-        """E * D -> 5 tuples with dept_name."""
-        result = run("E * D")
+        """E *. D -> 5 tuples with dept_name."""
+        result = run("E *. D")
         assert len(result) == 5
         for t in result:
             if t["dept_id"] == 10:
@@ -102,8 +102,8 @@ class TestJoinExamples:
                 assert t["dept_name"] == "Sales"
 
     def test_join_filter_project(self) -> None:
-        """E * D ? dept_name = "Engineering" # [name salary] -> 3 tuples."""
-        result = run('E * D ? dept_name = "Engineering" # [name salary]')
+        """E *. D ? dept_name = "Engineering" # [name salary] -> 3 tuples."""
+        result = run('E *. D ? dept_name = "Engineering" # [name salary]')
         assert len(result) == 3
         names = {t["name"] for t in result}
         assert names == {"Alice", "Bob", "Dave"}
@@ -111,8 +111,8 @@ class TestJoinExamples:
         assert salaries == {"Alice": 80000, "Bob": 60000, "Dave": 90000}
 
     def test_nest_join(self) -> None:
-        """E *: Phone > phones -> 5 tuples, nested phone relations."""
-        result = run("E *: Phone > phones")
+        """E *: Phone -> phones -> 5 tuples, nested phone relations."""
+        result = run("E *: Phone -> phones")
         assert len(result) == 5
         for t in result:
             phones = t["phones"]
@@ -134,9 +134,9 @@ class TestUnnestExamples:
     """Test unnest examples from algebra.md."""
 
     def test_nest_then_unnest_roundtrip(self) -> None:
-        """E *: Phone > phones <: phones -> same shape as E * Phone."""
-        unnested = run("E *: Phone > phones <: phones")
-        joined = run("E * Phone")
+        """E *: Phone -> phones <: phones -> same shape as E *. Phone."""
+        unnested = run("E *: Phone -> phones <: phones")
+        joined = run("E *. Phone")
         assert isinstance(unnested, Relation)
         assert isinstance(joined, Relation)
         assert len(unnested) == len(joined)
@@ -145,7 +145,7 @@ class TestUnnestExamples:
 
     def test_unnest_drops_empty_rvas(self) -> None:
         """Unnest drops tuples with empty RVAs (no phones)."""
-        result = run("E *: Phone > phones <: phones")
+        result = run("E *: Phone -> phones <: phones")
         assert isinstance(result, Relation)
         # Only Alice (1 phone) and Carol (2 phones) survive
         names = {t["name"] for t in result}
@@ -157,8 +157,8 @@ class TestExtendExamples:
     """Test extend examples from algebra.md."""
 
     def test_extend_bonus(self) -> None:
-        """E + bonus: salary * 0.1 # [name salary bonus]."""
-        result = run("E + bonus: salary * 0.1 # [name salary bonus]")
+        """E +: bonus: salary * 0.1 # [name salary bonus]."""
+        result = run("E +: bonus: salary * 0.1 # [name salary bonus]")
         assert len(result) == 5
         for t in result:
             expected_bonus = t["salary"] * 0.1
@@ -169,16 +169,16 @@ class TestRenameExamples:
     """Test rename examples from algebra.md."""
 
     def test_rename(self) -> None:
-        """ContractorPay @ [pay > salary] -> (name: Frank, salary: 70000)."""
-        result = run("ContractorPay @ [pay > salary]")
+        """ContractorPay @ [pay -> salary] -> (name: Frank, salary: 70000)."""
+        result = run("ContractorPay @ [pay -> salary]")
         assert len(result) == 1
         t = next(iter(result))
         assert t["name"] == "Frank"
         assert t["salary"] == 70000
 
     def test_rename_then_union(self) -> None:
-        """ContractorPay @ [pay > salary] | (E # [name salary]) -> 6 tuples."""
-        result = run("ContractorPay @ [pay > salary] | (E # [name salary])")
+        """ContractorPay @ [pay -> salary] |. (E # [name salary]) -> 6 tuples."""
+        result = run("ContractorPay @ [pay -> salary] |. (E # [name salary])")
         assert len(result) == 6
         names = {t["name"] for t in result}
         assert "Frank" in names
@@ -189,15 +189,15 @@ class TestSetOpExamples:
     """Test set operation examples from algebra.md."""
 
     def test_difference(self) -> None:
-        """E # emp_id - (Phone # emp_id) -> emp_ids {2, 4, 5}."""
-        result = run("E # emp_id - (Phone # emp_id)")
+        """E # emp_id -. (Phone # emp_id) -> emp_ids {2, 4, 5}."""
+        result = run("E # emp_id -. (Phone # emp_id)")
         assert len(result) == 3
         ids = {t["emp_id"] for t in result}
         assert ids == {2, 4, 5}
 
     def test_intersect(self) -> None:
-        """(E # emp_id) & (Phone # emp_id) -> emp_ids {1, 3}."""
-        result = run("(E # emp_id) & (Phone # emp_id)")
+        """(E # emp_id) &. (Phone # emp_id) -> emp_ids {1, 3}."""
+        result = run("(E # emp_id) &. (Phone # emp_id)")
         assert len(result) == 2
         ids = {t["emp_id"] for t in result}
         assert ids == {1, 3}
@@ -207,14 +207,14 @@ class TestSummarizeExamples:
     """Test summarize examples from algebra.md."""
 
     def test_summarize_by_dept(self) -> None:
-        """E / dept_id [n: #.  avg: %. salary].
+        """E /. dept_id [n: #.  avg: %. salary].
 
         dept 10: n=3, avg=76666.67
         dept 20: n=2, avg=50000.0
         """
         import pytest as pt
 
-        result = run("E / dept_id [n: #.  avg: %. salary]")
+        result = run("E /. dept_id [n: #.  avg: %. salary]")
         assert len(result) == 2
         for t in result:
             if t["dept_id"] == 10:
@@ -237,8 +237,8 @@ class TestNestByExamples:
     """Test nest by examples from algebra.md."""
 
     def test_nest_by(self) -> None:
-        """E /: dept_id > team -> 2 groups."""
-        result = run("E /: dept_id > team")
+        """E /: dept_id -> team -> 2 groups."""
+        result = run("E /: dept_id -> team")
         assert len(result) == 2
         for t in result:
             team = t["team"]
@@ -249,11 +249,11 @@ class TestNestByExamples:
                 assert len(team) == 2
 
     def test_nest_by_with_aggregate(self) -> None:
-        """E /: dept_id > team + [top: >. team.salary] # [dept_id top].
+        """E /: dept_id -> team +: [top: >. team.salary] # [dept_id top].
 
         dept 10: top=90000, dept 20: top=55000.
         """
-        result = run("E /: dept_id > team + [top: >. team.salary] # [dept_id top]")
+        result = run("E /: dept_id -> team +: [top: >. team.salary] # [dept_id top]")
         assert len(result) == 2
         for t in result:
             if t["dept_id"] == 10:
@@ -311,8 +311,8 @@ class TestComplexChains:
     """Test complex multi-operator chains from the design doc."""
 
     def test_join_filter_project_sort(self) -> None:
-        """E * D ? dept_name = "Engineering" # [name salary] $ salary-."""
-        result = run('E * D ? dept_name = "Engineering" # [name salary] $ salary-')
+        """E *. D ? dept_name = "Engineering" # [name salary] $ salary-."""
+        result = run('E *. D ? dept_name = "Engineering" # [name salary] $ salary-')
         assert isinstance(result, list)
         assert len(result) == 3
         assert result[0]["name"] == "Dave"
@@ -320,9 +320,9 @@ class TestComplexChains:
         assert result[2]["name"] == "Bob"
 
     def test_filter_nest_join_project(self) -> None:
-        """E ? dept_id = 10 ? salary > 50000 *: Phone > phones # [name salary phones]."""
+        """E ? dept_id = 10 ? salary > 50000 *: Phone -> phones # [name salary phones]."""
         result = run(
-            "E ? dept_id = 10 ? salary > 50000 *: Phone > phones # [name salary phones]"
+            "E ? dept_id = 10 ? salary > 50000 *: Phone -> phones # [name salary phones]"
         )
         assert isinstance(result, Relation)
         assert len(result) == 3
@@ -347,7 +347,7 @@ class TestComplexChains:
 
         dept 10: 3, dept 20: 2. Mean = (3+2)/2 = 2.5.
         """
-        result = run("(E / dept_id [n: #.]) /. [avg_size: %. n]")
+        result = run("(E /. dept_id [n: #.]) /. [avg_size: %. n]")
         assert isinstance(result, Relation)
         assert len(result) == 1
         t = next(iter(result))
@@ -394,7 +394,7 @@ class TestCsvLoading:
         env.bind("emp", load_csv(io.StringIO(emp_csv), "emp"))
         env.bind("dept", load_csv(io.StringIO(dept_csv), "dept"))
 
-        tokens = Lexer("emp * dept").tokenize()
+        tokens = Lexer("emp *. dept").tokenize()
         tree = Parser(tokens).parse()
         result = Executor(env).execute(tree)
         assert len(result) == 2
