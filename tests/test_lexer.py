@@ -79,6 +79,18 @@ class TestDigraphOperators:
         """Tokenize %. as PERCENT_DOT."""
         assert types("%.") == [TokenType.PERCENT_DOT]
 
+    def test_n_dot(self) -> None:
+        """Tokenize n. as N_DOT."""
+        assert types("n.") == [TokenType.N_DOT]
+
+    def test_n_dot_with_arg(self) -> None:
+        """Tokenize n. followed by identifier."""
+        assert types("n. salary") == [TokenType.N_DOT, TokenType.IDENT]
+
+    def test_n_ident_not_n_dot(self) -> None:
+        """Multi-char identifier starting with n is not N_DOT."""
+        assert types("name") == [TokenType.IDENT]
+
     def test_colon_eq(self) -> None:
         """Tokenize := as COLON_EQ."""
         assert types(":=") == [TokenType.COLON_EQ]

@@ -369,6 +369,7 @@ class Parser:
         TokenType.GT_DOT,
         TokenType.LT_DOT,
         TokenType.PERCENT_DOT,
+        TokenType.N_DOT,
     }
 
     _AGG_NAME_PREFIX: dict[str, str] = {
@@ -377,6 +378,7 @@ class Parser:
         ">.": "max",
         "<.": "min",
         "%.": "mean",
+        "n.": "collect",
     }
 
     def _parse_named_expr_list(
@@ -472,6 +474,7 @@ class Parser:
         agg_types = {
             TokenType.HASH_DOT, TokenType.PLUS_DOT,
             TokenType.GT_DOT, TokenType.LT_DOT, TokenType.PERCENT_DOT,
+            TokenType.N_DOT,
         }
         if self._peek().type in agg_types:
             left: ast.AttrRef | ast.AggregateCall = self._parse_aggregate_call()
@@ -700,6 +703,7 @@ class Parser:
         agg_types = {
             TokenType.HASH_DOT, TokenType.PLUS_DOT,
             TokenType.GT_DOT, TokenType.LT_DOT, TokenType.PERCENT_DOT,
+            TokenType.N_DOT,
         }
         if tok.type in agg_types:
             return self._parse_aggregate_call()

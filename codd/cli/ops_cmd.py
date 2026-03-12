@@ -29,6 +29,7 @@ _AGGREGATES = [
     (">.", "Max", ">. salary"),
     ("<.", "Min", "<. salary"),
     ("%.", "Mean", "%. salary"),
+    ("n.", "Collect", "n. activity"),
 ]
 
 _EXPRESSIONS = [

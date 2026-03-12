@@ -304,8 +304,11 @@ class Lexer:
         value = self._source[start : self._pos]
         return self._make_token(TokenType.INTEGER, value, line, col)
 
+    # Alphabetic operators: single letter + '.' (extensible for p., d., etc.)
+    _ALPHA_OPS: dict[str, TokenType] = {"n": TokenType.N_DOT}
+
     def _read_ident(self, line: int, col: int) -> Token:
-        """Read an identifier or boolean keyword."""
+        """Read an identifier, boolean keyword, or alphabetic operator."""
         start = self._pos
         while self._pos < len(self._source) and (
             self._peek().isalnum() or self._peek() == "_"
@@ -314,4 +317,7 @@ class Lexer:
         value = self._source[start : self._pos]
         if value in ("true", "false"):
             return self._make_token(TokenType.BOOLEAN, value, line, col)
+        if len(value) == 1 and self._peek() == "." and value in self._ALPHA_OPS:
+            self._advance()  # consume '.'
+            return self._make_token(self._ALPHA_OPS[value], value + ".", line, col)
         return self._make_token(TokenType.IDENT, value, line, col)

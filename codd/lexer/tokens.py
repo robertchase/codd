@@ -49,6 +49,7 @@ class TokenType(Enum):
     GT_DOT = auto()         # >.  max aggregate
     LT_DOT = auto()         # <.  min aggregate
     PERCENT_DOT = auto()    # %.  mean aggregate
+    N_DOT = auto()          # n.  collect aggregate
     COLON_EQ = auto()       # :=  assign
     PIPE_DOT = auto()       # |.  union
     PIPE_EQ = auto()        # |=  insert

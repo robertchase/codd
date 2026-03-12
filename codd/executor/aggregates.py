@@ -1,4 +1,4 @@
-"""Aggregate function implementations: #. +. >. <. %."""
+"""Aggregate function implementations: #. +. >. <. %. n."""
 
 from __future__ import annotations
 
@@ -72,7 +72,15 @@ def agg_mean(rel: Relation, attr: str | None = None) -> float:
     return sum(float(v) for v in values) / count
 
 
-AGGREGATE_FUNCTIONS: dict[str, type] = {}
+def agg_collect(rel: Relation, attr: str | None = None) -> Relation:
+    """Collect values into a nested relation (n.).
+
+    With attr: project to a single-column relation of that attribute's values.
+    Without attr: return the entire group relation as-is.
+    """
+    if attr is not None:
+        return rel.project(frozenset({attr}))
+    return rel
 
 
 def get_aggregate(func_name: str):
@@ -83,6 +91,7 @@ def get_aggregate(func_name: str):
         ">.": agg_max,
         "<.": agg_min,
         "%.": agg_mean,
+        "n.": agg_collect,
     }
     if func_name not in dispatch:
         raise ValueError(f"Unknown aggregate function: {func_name!r}")

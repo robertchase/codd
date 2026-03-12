@@ -364,6 +364,18 @@ class TestSummarize:
         assert isinstance(result, ast.Summarize)
         assert result.computations[0].name == "mean_salary"
 
+    def test_auto_name_collect(self) -> None:
+        """Bare n. gets auto-named 'collect'."""
+        result = parse("E /. dept_id n.")
+        assert isinstance(result, ast.Summarize)
+        assert result.computations[0].name == "collect"
+
+    def test_auto_name_collect_attr(self) -> None:
+        """Bare n. name gets auto-named 'collect_name'."""
+        result = parse("E /. dept_id n. name")
+        assert isinstance(result, ast.Summarize)
+        assert result.computations[0].name == "collect_name"
+
     def test_auto_name_count_rva(self) -> None:
         """#. with RVA source gets auto-named 'count_phones'."""
         result = parse("E /. dept_id #. phones")

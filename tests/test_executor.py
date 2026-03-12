@@ -810,3 +810,60 @@ class TestSummarizeExpressions:
         t = next(iter(result))
         assert t["count"] == 5
         assert t["sum_salary"] == 330000
+
+
+class TestCollectAggregate:
+    """Test n. (collect) aggregate."""
+
+    def test_collect_attr_in_summarize(self) -> None:
+        """Collect a single attribute into a nested relation per group."""
+        result = run("E /. dept_id [names: n. name]")
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        for t in result:
+            names_rel = t["names"]
+            assert isinstance(names_rel, Relation)
+            assert names_rel.attributes == frozenset({"name"})
+            name_set = {nt["name"] for nt in names_rel}
+            if t["dept_id"] == 10:
+                assert name_set == {"Alice", "Bob", "Dave"}
+            else:
+                assert name_set == {"Carol", "Eve"}
+
+    def test_collect_no_arg_in_summarize(self) -> None:
+        """Collect entire group tuples into a nested relation."""
+        result = run("E /. dept_id [team: n.]")
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        for t in result:
+            team = t["team"]
+            assert isinstance(team, Relation)
+            if t["dept_id"] == 10:
+                assert len(team) == 3
+            else:
+                assert len(team) == 2
+
+    def test_collect_mixed_with_scalar(self) -> None:
+        """Collect mixed with scalar aggregates in the same summarize."""
+        result = run("E /. dept_id [count: #.  names: n. name]")
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        for t in result:
+            assert isinstance(t["names"], Relation)
+            if t["dept_id"] == 10:
+                assert t["count"] == 3
+                assert len(t["names"]) == 3
+            else:
+                assert t["count"] == 2
+                assert len(t["names"]) == 2
+
+    def test_collect_in_summarize_all(self) -> None:
+        """Collect in summarize-all gathers all values."""
+        result = run("E /. [names: n. name]")
+        assert isinstance(result, Relation)
+        assert len(result) == 1
+        t = next(iter(result))
+        names_rel = t["names"]
+        assert isinstance(names_rel, Relation)
+        name_set = {nt["name"] for nt in names_rel}
+        assert name_set == {"Alice", "Bob", "Carol", "Dave", "Eve"}

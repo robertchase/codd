@@ -3,6 +3,7 @@
 import pytest
 
 from codd.executor.aggregates import (
+    agg_collect,
     agg_count,
     agg_max,
     agg_mean,
@@ -92,3 +93,22 @@ class TestAggMean:
         )
         assert agg_mean(r, "v") == 21.0
         assert isinstance(agg_mean(r, "v"), float)
+
+
+class TestAggCollect:
+    """Tests for n. (collect)."""
+
+    def test_collect_attr(self) -> None:
+        """n. name -> single-column relation of names."""
+        result = agg_collect(_sample(), "name")
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"name"})
+        names = {t["name"] for t in result}
+        assert names == {"Alice", "Bob", "Carol"}
+
+    def test_collect_no_arg(self) -> None:
+        """n. without attr -> entire relation."""
+        result = agg_collect(_sample())
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"name", "salary"})
+        assert len(result) == 3
