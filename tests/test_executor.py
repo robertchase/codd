@@ -677,6 +677,27 @@ class TestRound:
         t = next(iter(result))
         assert t["r"] == Decimal("10.46")
 
+    def test_float_decimal_arithmetic(self) -> None:
+        """Mixing float (from %.) and Decimal (from ~) works in binop."""
+        from decimal import Decimal
+
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset(
+                    {
+                        Tuple_(a=1.5, b=Decimal("3.00")),
+                    }
+                )
+            ),
+        )
+        # a (float) * b (Decimal) should not raise TypeError
+        result = run("R +: c: a * b", env)
+        t = next(iter(result))
+        assert isinstance(t["c"], float)
+        assert t["c"] == 4.5
+
 
 class TestFilterAggregateLHS:
     """Test aggregate operators on the LHS of filter conditions."""

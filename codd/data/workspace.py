@@ -17,6 +17,7 @@ WORKSPACE_VERSION = 1
 # Type tag strings used in the serialized format.
 _TYPE_STR = "str"
 _TYPE_INT = "int"
+_TYPE_FLOAT = "float"
 _TYPE_BOOL = "bool"
 _TYPE_DECIMAL = "Decimal"
 _TYPE_RELATION = "Relation"
@@ -77,14 +78,20 @@ def _serialize_relation(rel: Relation) -> dict[str, Any]:
 
 
 def _infer_attr_types(rel: Relation) -> dict[str, str]:
-    """Infer the type tag for each attribute by inspecting tuple values."""
+    """Infer the type tag for each attribute by inspecting tuple values.
+
+    Skips empty strings (CSV missing-value sentinels) when sampling,
+    since they don't represent the column's real type.
+    """
     attr_types: dict[str, str] = {}
     for attr in sorted(rel.attributes):
         attr_types[attr] = _TYPE_STR  # default
         for t in rel:
             val = t[attr]
+            if val == "":
+                continue  # skip missing values
             attr_types[attr] = _value_type_tag(val)
-            break  # one sample is enough; types are uniform within a relation
+            break
     return attr_types
 
 
@@ -94,6 +101,8 @@ def _value_type_tag(value: Value) -> str:
         return _TYPE_BOOL
     if isinstance(value, int):
         return _TYPE_INT
+    if isinstance(value, float):
+        return _TYPE_FLOAT
     if isinstance(value, Decimal):
         return _TYPE_DECIMAL
     if isinstance(value, Relation):
@@ -106,7 +115,7 @@ def _serialize_tuple(tup: Tuple_, attr_types: dict[str, str]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for attr, type_tag in attr_types.items():
         val = tup[attr]
-        if type_tag == _TYPE_DECIMAL:
+        if type_tag in (_TYPE_DECIMAL, _TYPE_FLOAT):
             result[attr] = str(val)
         elif type_tag == _TYPE_RELATION:
             assert isinstance(val, Relation)
@@ -144,7 +153,12 @@ def _deserialize_value(val: Any, type_tag: str) -> Value:
     """Deserialize a single value given its type tag."""
     if type_tag == _TYPE_INT:
         return int(val)
+    if type_tag == _TYPE_FLOAT:
+        return float(val)
     if type_tag == _TYPE_DECIMAL:
+        # Empty strings come from CSV columns with missing values.
+        if val == "":
+            return val
         return Decimal(val)
     if type_tag == _TYPE_BOOL:
         return bool(val)

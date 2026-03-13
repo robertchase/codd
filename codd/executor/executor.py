@@ -382,6 +382,12 @@ class Executor:
                 " (non-numeric string)"
             )
 
+        # Harmonise float/Decimal: once a float is involved, go float.
+        if isinstance(left, Decimal) and isinstance(right, float):
+            left = float(left)
+        elif isinstance(right, Decimal) and isinstance(left, float):
+            right = float(right)
+
         ops = {
             "+": lambda a, b: a + b,
             "-": lambda a, b: a - b,

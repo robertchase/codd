@@ -109,6 +109,52 @@ class TestSaveLoadRoundtrip:
         assert len(loaded["empty"]) == 0
         assert loaded["empty"].attributes == frozenset({"name", "age"})
 
+    def test_float_roundtrip(self, tmp_path: Path) -> None:
+        """Float values survive serialization and come back as floats."""
+        env = Environment()
+        rel = Relation(
+            frozenset(
+                {
+                    Tuple_(name="Alice", ratio=0.333333),
+                    Tuple_(name="Bob", ratio=1.5),
+                }
+            )
+        )
+        env.bind("data", rel)
+
+        path = tmp_path / "test.codd"
+        save_workspace(env, path)
+        loaded = load_workspace(path)
+
+        assert "data" in loaded
+        for t in loaded["data"]:
+            assert isinstance(t["ratio"], float)
+        assert loaded["data"] == rel
+
+    def test_decimal_with_empty_strings(self, tmp_path: Path) -> None:
+        """Decimal columns with empty-string values (from CSV) roundtrip."""
+        env = Environment()
+        rel = Relation(
+            frozenset(
+                {
+                    Tuple_(name="Alice", amount=Decimal("10.50")),
+                    Tuple_(name="Bob", amount=""),
+                }
+            )
+        )
+        env.bind("mixed", rel)
+
+        path = tmp_path / "test.codd"
+        save_workspace(env, path)
+        loaded = load_workspace(path)
+
+        assert "mixed" in loaded
+        for t in loaded["mixed"]:
+            if t["name"] == "Alice":
+                assert t["amount"] == Decimal("10.50")
+            else:
+                assert t["amount"] == ""
+
     def test_rva_roundtrip(self, tmp_path: Path) -> None:
         """Relation-valued attributes (nested relations) roundtrip."""
         phones = Relation(
