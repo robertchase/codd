@@ -72,11 +72,15 @@ def eval_cmd(
         else:
             _load_file(env, path, name, genkey=_genkey_for(name))
 
-    # Load positional files (stem becomes name, - means stdin)
+    # Load positional files (stem becomes name, - means stdin).
+    # Supports name=path syntax for explicit naming: p=prices.csv
     for filepath in files:
         if filepath == "-":
             stdin_consumed = True
             _load_stdin(env, "stdin", genkey=_genkey_for("stdin"))
+        elif "=" in filepath:
+            name, path = filepath.split("=", 1)
+            _load_file(env, path, name, genkey=_genkey_for(name))
         else:
             p = pathlib.Path(filepath)
             name = p.stem

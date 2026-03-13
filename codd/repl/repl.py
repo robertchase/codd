@@ -118,6 +118,8 @@ def _cmd_load(args: list[str], env: Environment) -> None:
             genkey = arg[len("--genkey="):]
         elif file_arg is None:
             file_arg = arg
+        elif alias is None:
+            alias = arg
         else:
             print(f"Error: unexpected argument: {arg}")
             return
