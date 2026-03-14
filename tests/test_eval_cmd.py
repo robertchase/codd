@@ -111,6 +111,120 @@ class TestCsvOutput:
         assert "+-" not in result.output
 
 
+class TestFileEval:
+    """Test -f (file evaluation) with --arg substitution."""
+
+    def test_single_expression(self, tmp_path: Path) -> None:
+        """A script with one expression prints its result."""
+        script = tmp_path / "query.codd"
+        script.write_text("E # name\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--sample", "-f", str(script)])
+        assert result.exit_code == 0
+        assert "Alice" in result.output
+
+    def test_assignments_and_final_expression(self, tmp_path: Path) -> None:
+        """Assignments accumulate; last line's result is printed."""
+        script = tmp_path / "query.codd"
+        script.write_text("eng := E ? dept_id = 10\neng # name\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--sample", "-f", str(script)])
+        assert result.exit_code == 0
+        assert "Alice" in result.output
+        assert "Bob" in result.output
+        # Carol is in dept 20, should not appear.
+        assert "Carol" not in result.output
+
+    def test_arg_substitution_numeric(self, tmp_path: Path) -> None:
+        """--arg substitutes numeric values into {{placeholders}}."""
+        script = tmp_path / "query.codd"
+        script.write_text("E ? salary > {{min_sal}} # name\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--sample", "-f", str(script), "--arg", "min_sal=70000"],
+        )
+        assert result.exit_code == 0
+        assert "Alice" in result.output
+        assert "Dave" in result.output
+        assert "Eve" not in result.output
+
+    def test_arg_substitution_string(self, tmp_path: Path) -> None:
+        """--arg substitutes string values (quotes in the script)."""
+        script = tmp_path / "query.codd"
+        script.write_text('E ? role = "{{role}}" # name\n')
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--sample", "-f", str(script), "--arg", "role=manager"],
+        )
+        assert result.exit_code == 0
+        assert "Bob" in result.output
+
+    def test_missing_arg_error(self, tmp_path: Path) -> None:
+        """Unresolved {{placeholder}} raises a clear error."""
+        script = tmp_path / "query.codd"
+        script.write_text("E ? salary > {{min_sal}}\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--sample", "-f", str(script)])
+        assert result.exit_code != 0
+        assert "min_sal" in result.output
+
+    def test_e_and_f_conflict(self, tmp_path: Path) -> None:
+        """Using both -e and -f is an error."""
+        script = tmp_path / "query.codd"
+        script.write_text("E\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--sample", "-e", "E", "-f", str(script)],
+        )
+        assert result.exit_code != 0
+        assert "Cannot use both" in result.output
+
+    def test_arg_without_f_error(self) -> None:
+        """--arg without -f is an error."""
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--sample", "-e", "E", "--arg", "x=1"],
+        )
+        assert result.exit_code != 0
+        assert "--arg requires -f" in result.output
+
+    def test_comments_and_blank_lines(self, tmp_path: Path) -> None:
+        """Comments (#) and blank lines are skipped."""
+        script = tmp_path / "query.codd"
+        script.write_text(
+            "# This is a comment\n"
+            "\n"
+            "eng := E ? dept_id = 10\n"
+            "# Another comment\n"
+            "\n"
+            "eng # name\n"
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--sample", "-f", str(script)])
+        assert result.exit_code == 0
+        assert "Alice" in result.output
+
+    def test_csv_output_with_file(self, tmp_path: Path) -> None:
+        """--csv works with -f."""
+        script = tmp_path / "query.codd"
+        script.write_text("E # [name dept_id]\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--sample", "--csv", "-f", str(script)],
+        )
+        assert result.exit_code == 0
+        assert "dept_id,name" in result.output
+        assert "+-" not in result.output
+
+
 class TestOpsFlag:
     """Test --ops flag."""
 
