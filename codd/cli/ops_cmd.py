@@ -1,6 +1,4 @@
-"""CLI subcommand: ops – display language primitives."""
-
-import click
+"""Ops reference – display language primitives."""
 
 from codd.repl.formatter import _build_table
 
@@ -58,9 +56,3 @@ def ops_output() -> str:
         parts.append(title)
         parts.append(_build_table(_HEADERS, [list(r) for r in rows]))
     return "\n".join(parts)
-
-
-@click.command("ops")
-def ops_cmd() -> None:
-    """Display all language primitives."""
-    click.echo(ops_output())

@@ -1,4 +1,4 @@
-"""Tests for the eval CLI subcommand."""
+"""Tests for the eval CLI (codd -e)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from codd.cli.eval_cmd import eval_cmd
+from codd.cli import main
 
 
 class TestBashEscaping:
@@ -16,7 +16,7 @@ class TestBashEscaping:
         """Bash escapes ?! to ?\\!, eval should strip the backslash."""
         runner = CliRunner()
         result = runner.invoke(
-            eval_cmd, ["--sample", 'E ?\\! role = "engineer" # name'],
+            main, ["--sample", "-e", 'E ?\\! role = "engineer" # name'],
         )
         assert result.exit_code == 0
         assert "Bob" in result.output
@@ -31,7 +31,9 @@ class TestEvalGenkey:
         csv_file.write_text("name,price\nApple,1.50\nBanana,0.75\n")
 
         runner = CliRunner()
-        result = runner.invoke(eval_cmd, ["--genkey", "items # items_id", str(csv_file)])
+        result = runner.invoke(
+            main, [str(csv_file), "--genkey", "-e", "items # items_id"],
+        )
 
         assert result.exit_code == 0
         assert "1" in result.output
@@ -43,7 +45,9 @@ class TestEvalGenkey:
         csv_file.write_text("name\nAlice\nAlice\n")
 
         runner = CliRunner()
-        result = runner.invoke(eval_cmd, ["--genkey", "data ^ 5", str(csv_file)])
+        result = runner.invoke(
+            main, [str(csv_file), "--genkey", "-e", "data ^ 5"],
+        )
 
         assert result.exit_code == 0
         # Both rows should be present (not deduped).
@@ -57,8 +61,8 @@ class TestEvalGenkey:
 
         runner = CliRunner()
         result = runner.invoke(
-            eval_cmd,
-            ["--genkey", "--as", f"Stuff={csv_file}", "Stuff # Stuff_id"],
+            main,
+            ["--genkey", "--as", f"Stuff={csv_file}", "-e", "Stuff # Stuff_id"],
         )
 
         assert result.exit_code == 0
@@ -69,8 +73,8 @@ class TestEvalGenkey:
         """--genkey works with stdin input."""
         runner = CliRunner()
         result = runner.invoke(
-            eval_cmd,
-            ["--genkey", "stdin # stdin_id", "-"],
+            main,
+            ["-", "--genkey", "-e", "stdin # stdin_id"],
             input="x\na\nb\n",
         )
 
@@ -84,8 +88,36 @@ class TestEvalGenkey:
         csv_file.write_text("name\nAlice\nAlice\n")
 
         runner = CliRunner()
-        result = runner.invoke(eval_cmd, ["data ^ 5", str(csv_file)])
+        result = runner.invoke(
+            main, [str(csv_file), "-e", "data ^ 5"],
+        )
 
         assert result.exit_code == 0
         # Only one Alice — set semantics.
         assert result.output.count("Alice") == 1
+
+
+class TestCsvOutput:
+    """Test --csv flag."""
+
+    def test_csv_output(self) -> None:
+        """--csv outputs CSV instead of table."""
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--sample", "--csv", "-e", "E # [name dept_id]"],
+        )
+        assert result.exit_code == 0
+        assert "dept_id,name" in result.output
+        assert "+-" not in result.output
+
+
+class TestOpsFlag:
+    """Test --ops flag."""
+
+    def test_ops_prints_reference(self) -> None:
+        """--ops prints the primitives reference."""
+        runner = CliRunner()
+        result = runner.invoke(main, ["--ops"])
+        assert result.exit_code == 0
+        assert "Relational" in result.output
+        assert "#." in result.output
