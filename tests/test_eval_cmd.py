@@ -55,14 +55,14 @@ class TestEvalGenkey:
         assert "2" in result.output
 
     def test_genkey_with_alias(self, tmp_path: Path) -> None:
-        """--genkey with --as uses the alias for key name."""
+        """--genkey with name=path uses the name for key column."""
         csv_file = tmp_path / "data.csv"
         csv_file.write_text("x\n1\n2\n")
 
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["--genkey", "--as", f"Stuff={csv_file}", "-e", "Stuff # Stuff_id"],
+            [f"Stuff={csv_file}", "--genkey", "-e", "Stuff # Stuff_id"],
         )
 
         assert result.exit_code == 0

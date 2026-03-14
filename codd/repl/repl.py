@@ -34,7 +34,7 @@ def run_repl(env: Environment | None = None) -> None:
 
     print("Codd REPL")
     print(
-        "Commands: \\load [file], \\save [file], \\drop <name>, "
+        "Commands: \\load <file> [name], \\save [file], \\drop <name>, "
         "\\env, \\ops, \\quit"
     )
     print()
@@ -103,15 +103,14 @@ def _cmd_load(args: list[str], env: Environment) -> None:
         print("Loaded: E (Employee), D (Department), Phone, ContractorPay")
         return
 
-    # Parse options: --as=Name, --genkey, --genkey=Name.
+    # Parse options: --genkey, --genkey=Name.
+    # Positional: file [name]
     file_arg = None
     alias = None
     genkey: str | None = None
     genkey_seen = False
     for arg in args:
-        if arg.startswith("--as="):
-            alias = arg[len("--as="):]
-        elif arg == "--genkey":
+        if arg == "--genkey":
             genkey_seen = True
         elif arg.startswith("--genkey="):
             genkey_seen = True
@@ -135,7 +134,7 @@ def _cmd_load(args: list[str], env: Environment) -> None:
 
     if is_workspace_file(path):
         if alias:
-            print("Error: --as cannot be used with workspace files")
+            print("Error: name cannot be used with workspace files")
             return
         if genkey_seen:
             print("Error: --genkey cannot be used with workspace files")

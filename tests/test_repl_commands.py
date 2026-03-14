@@ -71,12 +71,12 @@ class TestLoadCommand:
     def test_load_csv_with_alias(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """The --as flag overrides the default relation name."""
+        """A second positional arg overrides the default relation name."""
         csv_file = tmp_path / "data.csv"
         csv_file.write_text("x\n1\n2\n")
 
         env = Environment()
-        _handle_command(f"\\load {csv_file} --as=MyData", env)
+        _handle_command(f"\\load {csv_file} MyData", env)
 
         assert "MyData" in env
         assert "data" not in env
@@ -111,14 +111,14 @@ class TestLoadCommand:
     def test_load_workspace_rejects_alias(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """The --as flag is rejected for workspace files."""
+        """A name argument is rejected for workspace files."""
         ws_path = tmp_path / "test.codd"
         ws_path.write_text('{"version": 1, "relations": {}}')
 
         env = Environment()
-        _handle_command(f"\\load {ws_path} --as=X", env)
+        _handle_command(f"\\load {ws_path} X", env)
         out = capsys.readouterr().out
-        assert "--as cannot be used with workspace" in out
+        assert "name cannot be used with workspace" in out
 
     def test_load_csv_with_genkey(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -138,12 +138,12 @@ class TestLoadCommand:
     def test_load_csv_genkey_with_alias(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """--genkey uses --as name for key column."""
+        """--genkey uses name arg for key column."""
         csv_file = tmp_path / "data.csv"
         csv_file.write_text("x\n1\n2\n")
 
         env = Environment()
-        _handle_command(f"\\load {csv_file} --as=Stuff --genkey", env)
+        _handle_command(f"\\load {csv_file} Stuff --genkey", env)
 
         assert "Stuff" in env
         rel = env.lookup("Stuff")

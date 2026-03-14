@@ -20,12 +20,6 @@ from codd.executor.environment import Environment
     help="Evaluate expression and exit (omit for REPL).",
 )
 @click.option(
-    "--as",
-    "aliases",
-    multiple=True,
-    help="Bind a file with an explicit name: --as name=path.csv",
-)
-@click.option(
     "--sample", "sample", is_flag=True, default=False,
     help="Load sample data (E, D, Phone, ContractorPay).",
 )
@@ -48,7 +42,6 @@ from codd.executor.environment import Environment
 def main(
     files: tuple[str, ...],
     expression: str | None,
-    aliases: tuple[str, ...],
     sample: bool,
     auto_load: bool,
     genkey: bool,
@@ -58,14 +51,15 @@ def main(
     """Codd relational algebra.
 
     Load CSV files and either evaluate an expression (-e) or start a REPL.
+    Use name=path.csv to load a file with an explicit relation name.
 
     \b
     Examples:
-        codd prices.csv                          # REPL with prices loaded
+        codd prices.csv                            # REPL with prices loaded
         codd prices.csv -e "prices ? price > 100"  # evaluate and exit
-        codd p=prices.csv --csv -e "p $ price"    # CSV output
-        codd --ops                                 # print reference
-        cat data.csv | codd - -e "stdin"           # pipe stdin
+        codd p=prices.csv --csv -e "p $ price"     # CSV output
+        codd --ops                                  # print reference
+        cat data.csv | codd - -e "stdin"            # pipe stdin
     """
     if show_ops:
         from codd.cli.ops_cmd import ops_output
@@ -87,19 +81,6 @@ def main(
     def _genkey_for(name: str) -> str | None:
         """Resolve the genkey name for a relation."""
         return name if genkey else None
-
-    # Load aliased files (- means stdin)
-    for alias in aliases:
-        if "=" not in alias:
-            raise click.ClickException(f"Invalid --as format: {alias!r} (expected name=path)")
-        name, path = alias.split("=", 1)
-        name = name.strip()
-        path = path.strip()
-        if path == "-":
-            stdin_consumed = True
-            _load_stdin(env, name, genkey=_genkey_for(name))
-        else:
-            _load_file(env, path, name, genkey=_genkey_for(name))
 
     # Load positional files (stem becomes name, - means stdin).
     # Supports name=path syntax for explicit naming: p=prices.csv
