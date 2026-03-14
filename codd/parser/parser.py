@@ -147,6 +147,8 @@ class Parser:
                 left = self._parse_nest_by(left)
             elif tok.type == TokenType.DOLLAR:
                 left = self._parse_sort(left)
+            elif tok.type == TokenType.DOLLAR_DOT:
+                left = self._parse_order_columns(left)
             elif tok.type == TokenType.CARET:
                 left = self._parse_take(left)
             else:
@@ -293,6 +295,12 @@ class Parser:
         self._advance()  # consume $
         keys = self._parse_sort_key_list()
         return ast.Sort(source=source, keys=tuple(keys))
+
+    def _parse_order_columns(self, source: ast.RelExpr) -> ast.OrderColumns:
+        """Parse: $. col or $. [col1 col2 ...]."""
+        self._advance()  # consume $.
+        columns = self._parse_attr_list()
+        return ast.OrderColumns(source=source, columns=columns)
 
     def _parse_take(self, source: ast.RelExpr) -> ast.Take:
         """Parse: ^ N."""

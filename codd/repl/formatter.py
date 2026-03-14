@@ -7,7 +7,7 @@ import io
 from decimal import Decimal
 
 from codd.model.relation import Relation
-from codd.model.types import Tuple_
+from codd.model.types import OrderedArray, Tuple_
 
 
 def format_value(value: object) -> str:
@@ -53,12 +53,23 @@ def format_relation(rel: Relation) -> str:
     return _build_table(attrs, rows)
 
 
+def _array_attrs(arr: list[Tuple_]) -> list[str]:
+    """Determine column order for an array.
+
+    Uses explicit column_order from OrderedArray if available,
+    otherwise sorts alphabetically.
+    """
+    if isinstance(arr, OrderedArray):
+        return list(arr.column_order)
+    return sorted(arr[0].data.keys())
+
+
 def format_array(arr: list[Tuple_]) -> str:
     """Format a sorted array (list of tuples) as an ASCII table."""
     if not arr:
         return "(empty array)"
 
-    attrs = sorted(arr[0].data.keys())
+    attrs = _array_attrs(arr)
     rows = []
     for t in arr:
         rows.append([format_value(t[a]) for a in attrs])
@@ -81,7 +92,7 @@ def format_array_csv(arr: list[Tuple_]) -> str:
     """Format a sorted array (list of tuples) as CSV text."""
     if not arr:
         return ""
-    attrs = sorted(arr[0].data.keys())
+    attrs = _array_attrs(arr)
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(attrs)

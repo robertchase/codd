@@ -29,6 +29,7 @@ class TokenType(Enum):
     AMPERSAND = auto()      # &   AND in filter
     SLASH = auto()          # /   divide
     DOLLAR = auto()         # $   sort
+    DOLLAR_DOT = auto()     # $.  order columns
     CARET = auto()          # ^   take
     GT = auto()             # >   greater than
     LT = auto()             # <   less than

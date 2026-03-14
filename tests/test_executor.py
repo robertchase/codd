@@ -6,7 +6,7 @@ from codd.executor.environment import Environment
 from codd.executor.executor import Executor, ExecutionError
 from codd.lexer.lexer import Lexer
 from codd.model.relation import Relation
-from codd.model.types import Tuple_
+from codd.model.types import OrderedArray, Tuple_
 from codd.parser.parser import Parser
 
 
@@ -377,6 +377,39 @@ class TestSort:
         result = run("E ^ 100")
         assert isinstance(result, list)
         assert len(result) == 5
+
+
+class TestOrderColumns:
+    """Test $. (order columns)."""
+
+    def test_order_columns_from_relation(self) -> None:
+        """$. projects and orders columns from a relation."""
+        result = run("E $. [salary name]")
+        assert isinstance(result, OrderedArray)
+        assert result.column_order == ("salary", "name")
+        assert len(result) == 5
+        # Each tuple should only have the two columns.
+        assert result[0].attributes() == frozenset({"salary", "name"})
+
+    def test_order_columns_single(self) -> None:
+        """$. with a single column name."""
+        result = run("E $. name")
+        assert isinstance(result, OrderedArray)
+        assert result.column_order == ("name",)
+        assert all(t.attributes() == frozenset({"name"}) for t in result)
+
+    def test_order_columns_from_sorted_list(self) -> None:
+        """$. works on a sorted list (from $)."""
+        result = run("E $ salary- $. [name salary]")
+        assert isinstance(result, OrderedArray)
+        assert result.column_order == ("name", "salary")
+        # Tuple order should be preserved from the sort.
+        assert result[0]["name"] == "Dave"
+
+    def test_order_columns_unknown_attr(self) -> None:
+        """$. with an unknown column raises an error."""
+        with pytest.raises(ExecutionError, match="unknown attribute.*bogus"):
+            run("E $. bogus")
 
 
 class TestAssignment:

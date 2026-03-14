@@ -11,7 +11,7 @@ from decimal import Decimal
 from codd.executor.aggregates import _promote_numeric, get_aggregate
 from codd.executor.environment import Environment
 from codd.model.relation import Relation
-from codd.model.types import Tuple_, Value
+from codd.model.types import OrderedArray, Tuple_, Value
 from codd.parser import ast_nodes as ast
 
 
@@ -94,6 +94,8 @@ class Executor:
             return self._eval_nest_by(node)
         if isinstance(node, ast.Sort):
             return self._eval_sort(node)
+        if isinstance(node, ast.OrderColumns):
+            return self._eval_order_columns(node)
         if isinstance(node, ast.Take):
             return self._eval_take(node)
         raise ExecutionError(f"Unknown node type: {type(node).__name__}")
@@ -307,6 +309,37 @@ class Executor:
             return tuple(parts)
 
         return source.sort(sort_key)
+
+    def _eval_order_columns(self, node: ast.OrderColumns) -> OrderedArray:
+        """Evaluate: source $. [col1 col2 ...].
+
+        Projects to the listed columns and returns an OrderedArray
+        that preserves the specified column display order.
+        """
+        source = self._eval_rel(node.source)
+        columns = node.columns
+
+        # Get tuples from relation or list.
+        if isinstance(source, Relation):
+            tuples = list(source)
+            available = source.attributes
+        elif isinstance(source, list):
+            tuples = source
+            available = tuples[0].attributes() if tuples else frozenset()
+        else:
+            raise ExecutionError("$. (order columns) requires a relation or list")
+
+        # Validate all columns exist.
+        for col in columns:
+            if col not in available:
+                raise ExecutionError(
+                    f"$. unknown attribute: {col!r}"
+                )
+
+        # Project tuples to only the listed columns.
+        keep = frozenset(columns)
+        projected = [t.project(keep) for t in tuples]
+        return OrderedArray(projected, columns)
 
     def _eval_take(self, node: ast.Take) -> list[Tuple_]:
         """Evaluate: source ^ N."""

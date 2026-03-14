@@ -308,6 +308,14 @@ class Sort:
 
 
 @dataclass(frozen=True)
+class OrderColumns:
+    """Order columns: $. [col1 col2 ...] or $. col."""
+
+    source: RelExpr
+    columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Take:
     """Take: ^ N (follows Sort)."""
 
@@ -334,6 +342,7 @@ RelExpr = (
     | SummarizeAll
     | NestBy
     | Sort
+    | OrderColumns
     | Take
 )
 

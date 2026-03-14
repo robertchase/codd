@@ -220,6 +220,12 @@ class Lexer:
             self._advance()
             return self._make_token(TokenType.BANG_TILDE, "!~", line, col)
 
+        # $.
+        if ch == "$" and ch2 == ".":
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.DOLLAR_DOT, "$.", line, col)
+
         # --- Single-char operators ---
 
         single_map: dict[str, TokenType] = {

@@ -109,3 +109,16 @@ class Tuple_:
 
     def __setattr__(self, name: str, value: object) -> None:
         raise AttributeError("Tuple_ is immutable")
+
+
+class OrderedArray(list["Tuple_"]):
+    """A list of tuples with a defined column order for display.
+
+    Subclasses list so it passes isinstance(x, list) checks throughout
+    the system, but carries column_order metadata for formatters.
+    """
+
+    def __init__(self, tuples: list[Tuple_], column_order: tuple[str, ...]) -> None:
+        super().__init__(tuples)
+        # Use object.__setattr__ style to avoid conflicts, but list is mutable
+        self.column_order = column_order

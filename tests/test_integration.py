@@ -307,6 +307,35 @@ class TestSortExamples:
         assert result[4]["name"] == "Eve"  # 45000
 
 
+class TestOrderColumnsExamples:
+    """Test $. (order columns) examples."""
+
+    def test_order_columns_display(self) -> None:
+        """$. controls column order in formatted output."""
+        from codd.repl.formatter import format_array
+
+        result = run("E $. [salary name]")
+        output = format_array(result)
+        lines = output.split("\n")
+        # Header line should have salary before name.
+        header = lines[1]
+        assert header.index("salary") < header.index("name")
+
+    def test_sort_then_order_columns(self) -> None:
+        """$ followed by $. preserves row order, reorders columns."""
+        result = run("E $ salary- $. [name salary]")
+        assert result[0]["name"] == "Dave"
+        assert result.column_order == ("name", "salary")
+
+    def test_order_columns_csv(self) -> None:
+        """$. column order is respected in CSV output."""
+        from codd.repl.formatter import format_array_csv
+
+        result = run("E $. [salary name]")
+        output = format_array_csv(result)
+        assert output.startswith("salary,name")
+
+
 class TestComplexChains:
     """Test complex multi-operator chains from the design doc."""
 
