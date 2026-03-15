@@ -18,6 +18,7 @@ _RELATIONAL = [
     ("/.", "Summarize", "E /. dept_id [n: #. avg: %. salary]  or  E /. [n: #.]"),
     ("/:", "Nest by", "E /: dept_id -> team  or  E /: [dept_id role] -> team"),
     ("$", "Sort", "E $ salary-"),
+    ("$.", "Order columns", "E $. [salary name]"),
     ("^", "Take", "E $ salary- ^ 3"),
 ]
 
