@@ -113,7 +113,11 @@ def main(
             _load_stdin(env, "stdin", genkey=_genkey_for("stdin"))
         elif "=" in filepath:
             name, path = filepath.split("=", 1)
-            _load_file(env, path, name, genkey=_genkey_for(name))
+            if path == "-":
+                stdin_consumed = True
+                _load_stdin(env, name, genkey=_genkey_for(name))
+            else:
+                _load_file(env, path, name, genkey=_genkey_for(name))
         else:
             p = pathlib.Path(filepath)
             name = p.stem
