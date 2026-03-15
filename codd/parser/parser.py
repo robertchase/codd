@@ -378,6 +378,7 @@ class Parser:
         TokenType.LT_DOT,
         TokenType.PERCENT_DOT,
         TokenType.N_DOT,
+        TokenType.P_DOT,
     }
 
     _AGG_NAME_PREFIX: dict[str, str] = {
@@ -387,6 +388,7 @@ class Parser:
         "<.": "min",
         "%.": "mean",
         "n.": "collect",
+        "p.": "pct",
     }
 
     def _parse_named_expr_list(
@@ -479,12 +481,7 @@ class Parser:
 
     def _parse_comparison(self) -> ast.Comparison:
         """Parse: attr op value, or aggregate op value."""
-        agg_types = {
-            TokenType.HASH_DOT, TokenType.PLUS_DOT,
-            TokenType.GT_DOT, TokenType.LT_DOT, TokenType.PERCENT_DOT,
-            TokenType.N_DOT,
-        }
-        if self._peek().type in agg_types:
+        if self._peek().type in self._AGG_TOKENS:
             left: ast.AttrRef | ast.AggregateCall = self._parse_aggregate_call()
         else:
             left = self._parse_attr_ref()
@@ -708,12 +705,7 @@ class Parser:
         if tok.type == TokenType.BOOLEAN:
             self._advance()
             return ast.BoolLiteral(value=tok.value == "true")
-        agg_types = {
-            TokenType.HASH_DOT, TokenType.PLUS_DOT,
-            TokenType.GT_DOT, TokenType.LT_DOT, TokenType.PERCENT_DOT,
-            TokenType.N_DOT,
-        }
-        if tok.type in agg_types:
+        if tok.type in self._AGG_TOKENS:
             return self._parse_aggregate_call()
         if tok.type == TokenType.IDENT:
             return self._parse_attr_ref()

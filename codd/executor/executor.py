@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from codd.executor.aggregates import _promote_numeric, get_aggregate
+from codd.executor.aggregates import _promote_numeric, agg_percent, get_aggregate
 from codd.executor.environment import Environment
 from codd.model.relation import Relation
 from codd.model.types import OrderedArray, Tuple_, Value
@@ -162,7 +162,7 @@ class Executor:
         def compute(t: Tuple_) -> dict[str, Value]:
             result: dict[str, Value] = {}
             for comp in node.computations:
-                result[comp.name] = self._eval_expr(comp.expr, t)
+                result[comp.name] = self._eval_expr(comp.expr, t, source)
             return result
 
         return source.extend(compute)
@@ -200,7 +200,7 @@ class Executor:
 
             def make_fn(e: ast.Expr):
                 def f(group_rel: Relation) -> Value:
-                    return self._eval_summarize_expr(e, group_rel)
+                    return self._eval_summarize_expr(e, group_rel, source)
                 return f
 
             agg_fns[comp.name] = make_fn(expr)
@@ -216,17 +216,20 @@ class Executor:
 
             def make_fn(e: ast.Expr):
                 def f(rel: Relation) -> Value:
-                    return self._eval_summarize_expr(e, rel)
+                    return self._eval_summarize_expr(e, rel, source)
                 return f
 
             agg_fns[comp.name] = make_fn(expr)
 
         return source.summarize_all(agg_fns)
 
-    def _eval_summarize_expr(self, expr: ast.Expr, group_rel: Relation) -> Value:
+    def _eval_summarize_expr(
+        self, expr: ast.Expr, group_rel: Relation, whole_rel: Relation
+    ) -> Value:
         """Evaluate a scalar expression in summarize context.
 
         AggregateCall nodes are evaluated against group_rel.
+        p. (percent) also receives whole_rel for the denominator.
         SubqueryExpr nodes are evaluated as relational expressions and
         unwrapped to a scalar (must be 1x1).
         BinOp, Round, and literals recurse naturally.
@@ -241,6 +244,9 @@ class Executor:
         if isinstance(expr, ast.BoolLiteral):
             return expr.value
         if isinstance(expr, ast.AggregateCall):
+            if expr.func == "p.":
+                attr_name = expr.arg.parts[0] if expr.arg else None
+                return agg_percent(group_rel, attr_name, whole_rel)
             agg_fn = get_aggregate(expr.func)
             attr_name = expr.arg.parts[0] if expr.arg else None
             return agg_fn(group_rel, attr_name)
@@ -249,14 +255,14 @@ class Executor:
             return self._unwrap_scalar(result)
         if isinstance(expr, ast.BinOp):
             left = _promote_numeric(
-                self._eval_summarize_expr(expr.left, group_rel)
+                self._eval_summarize_expr(expr.left, group_rel, whole_rel)
             )
             right = _promote_numeric(
-                self._eval_summarize_expr(expr.right, group_rel)
+                self._eval_summarize_expr(expr.right, group_rel, whole_rel)
             )
             return self._apply_binop(expr.op, left, right)
         if isinstance(expr, ast.Round):
-            value = self._eval_summarize_expr(expr.expr, group_rel)
+            value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
             return self._apply_round(value, expr.places)
         if isinstance(expr, ast.AttrRef):
             raise ExecutionError(
@@ -352,8 +358,13 @@ class Executor:
 
     # --- Expression evaluation ---
 
-    def _eval_expr(self, expr: ast.Expr, t: Tuple_) -> Value:
-        """Evaluate a scalar expression in the context of a tuple."""
+    def _eval_expr(
+        self, expr: ast.Expr, t: Tuple_, source: Relation | None = None
+    ) -> Value:
+        """Evaluate a scalar expression in the context of a tuple.
+
+        source is the enclosing relation (from extend), used by p.
+        """
         if isinstance(expr, ast.IntLiteral):
             return expr.value
         if isinstance(expr, ast.FloatLiteral):
@@ -365,16 +376,16 @@ class Executor:
         if isinstance(expr, ast.AttrRef):
             return self._eval_attr_ref(expr, t)
         if isinstance(expr, ast.BinOp):
-            return self._eval_binop(expr, t)
+            return self._eval_binop(expr, t, source)
         if isinstance(expr, ast.AggregateCall):
-            return self._eval_aggregate_call(expr, t)
+            return self._eval_aggregate_call(expr, t, source)
         if isinstance(expr, ast.SubqueryExpr):
             result = self._as_relation(expr.query)
             return self._unwrap_scalar(result)
         if isinstance(expr, ast.TernaryExpr):
-            return self._eval_ternary(expr, t)
+            return self._eval_ternary(expr, t, source)
         if isinstance(expr, ast.Round):
-            value = self._eval_expr(expr.expr, t)
+            value = self._eval_expr(expr.expr, t, source)
             return self._apply_round(value, expr.places)
         raise ExecutionError(f"Unknown expression type: {type(expr).__name__}")
 
@@ -398,13 +409,15 @@ class Executor:
         except KeyError as e:
             raise ExecutionError(f"Unknown attribute: {e}") from e
 
-    def _eval_binop(self, expr: ast.BinOp, t: Tuple_) -> Value:
+    def _eval_binop(
+        self, expr: ast.BinOp, t: Tuple_, source: Relation | None = None
+    ) -> Value:
         """Evaluate a binary arithmetic operation.
 
         String values are promoted to numbers when possible.
         """
-        left = _promote_numeric(self._eval_expr(expr.left, t))
-        right = _promote_numeric(self._eval_expr(expr.right, t))
+        left = _promote_numeric(self._eval_expr(expr.left, t, source))
+        right = _promote_numeric(self._eval_expr(expr.right, t, source))
         return self._apply_binop(expr.op, left, right)
 
     def _apply_binop(self, op: str, left: Value, right: Value) -> Value:
@@ -431,20 +444,41 @@ class Executor:
             raise ExecutionError(f"Unknown operator: {op}")
         return ops[op](left, right)
 
-    def _eval_ternary(self, expr: ast.TernaryExpr, t: Tuple_) -> Value:
+    def _eval_ternary(
+        self, expr: ast.TernaryExpr, t: Tuple_, source: Relation | None = None
+    ) -> Value:
         """Evaluate a ternary (conditional) expression."""
         predicate = self._compile_comparison(expr.condition)
         if predicate(t):
-            return self._eval_expr(expr.true_expr, t)
-        return self._eval_expr(expr.false_expr, t)
+            return self._eval_expr(expr.true_expr, t, source)
+        return self._eval_expr(expr.false_expr, t, source)
 
     def _apply_round(self, value: Value, places: int) -> Decimal:
         """Round a number to the specified decimal places, returning Decimal."""
         rounded = round(float(value), places)
         return Decimal(str(rounded)).quantize(Decimal(10) ** -places)
 
-    def _eval_aggregate_call(self, expr: ast.AggregateCall, t: Tuple_) -> Value:
+    def _eval_aggregate_call(
+        self, expr: ast.AggregateCall, t: Tuple_, source: Relation | None = None
+    ) -> Value:
         """Evaluate an aggregate function call in extend context."""
+        # p. (percent) uses the enclosing source relation as the whole.
+        if expr.func == "p.":
+            if expr.source is not None:
+                # Explicit source: p. E salary
+                whole_rel = self._as_relation(expr.source)
+            elif source is not None:
+                # Implicit source from extend context
+                whole_rel = source
+            else:
+                raise ExecutionError(
+                    "p. requires a source relation in this context"
+                )
+            attr_name = expr.arg.parts[0] if expr.arg else None
+            # In extend, the "group" is a single tuple.
+            single = Relation(frozenset({t}))
+            return agg_percent(single, attr_name, whole_rel)
+
         agg_fn = get_aggregate(expr.func)
 
         if expr.source is not None:

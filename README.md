@@ -186,7 +186,7 @@ Use `{{name}}` placeholders for parameters, supplied via `--arg name=value`. Val
 
 Expressions chain left-to-right. Each operator transforms the result of the previous step. `$` and `$.` leave the relational world (returning an ordered list); only `^` and `$.` can follow them.
 
-### Aggregates (used inside `/.`)
+### Aggregates (used inside `/.` and `+:`)
 
 | Op | Name | Example |
 |----|------|---------|
@@ -196,6 +196,7 @@ Expressions chain left-to-right. Each operator transforms the result of the prev
 | `<.` | Min | `<. salary` |
 | `%.` | Mean | `%. salary` |
 | `n.` | Collect | `n. activity` |
+| `p.` | Percent | `p. salary ~ 1` |
 
 ### Expressions (used inside `+:` extend)
 

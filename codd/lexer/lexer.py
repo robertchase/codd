@@ -311,7 +311,7 @@ class Lexer:
         return self._make_token(TokenType.INTEGER, value, line, col)
 
     # Alphabetic operators: single letter + '.' (extensible for p., d., etc.)
-    _ALPHA_OPS: dict[str, TokenType] = {"n": TokenType.N_DOT}
+    _ALPHA_OPS: dict[str, TokenType] = {"n": TokenType.N_DOT, "p": TokenType.P_DOT}
 
     def _read_ident(self, line: int, col: int) -> Token:
         """Read an identifier, boolean keyword, or alphabetic operator."""

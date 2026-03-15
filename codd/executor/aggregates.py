@@ -83,6 +83,22 @@ def agg_collect(rel: Relation, attr: str | None = None) -> Relation:
     return rel
 
 
+def agg_percent(group_rel: Relation, attr: str | None, whole_rel: Relation) -> float:
+    """Percent of group total relative to whole total (p.).
+
+    Returns (sum(group.attr) / sum(whole.attr)) * 100.
+    """
+    if attr is None:
+        raise ValueError("p. requires an attribute name")
+    group_values = _extract_values(group_rel, attr)
+    whole_values = _extract_values(whole_rel, attr)
+    group_sum = sum(float(v) for v in group_values)
+    whole_sum = sum(float(v) for v in whole_values)
+    if whole_sum == 0:
+        raise ValueError("p. division by zero: total is 0")
+    return group_sum / whole_sum * 100
+
+
 def get_aggregate(func_name: str):
     """Return the aggregate function for the given name."""
     dispatch = {

@@ -921,3 +921,57 @@ class TestCollectAggregate:
         assert isinstance(names_rel, Relation)
         name_set = {nt["name"] for nt in names_rel}
         assert name_set == {"Alice", "Bob", "Carol", "Dave", "Eve"}
+
+
+class TestPercentAggregate:
+    """Test p. (percent) aggregate."""
+
+    def test_percent_in_summarize(self) -> None:
+        """p. in summarize computes group percent of whole."""
+        # Total salary = 80000+60000+55000+90000+45000 = 330000
+        # Dept 10 = 230000 -> 230000/330000*100 ≈ 69.7%
+        # Dept 20 = 100000 -> 100000/330000*100 ≈ 30.3%
+        result = run("E /. dept_id [pct: p. salary ~ 1]")
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        for t in result:
+            from decimal import Decimal
+
+            if t["dept_id"] == 10:
+                assert t["pct"] == Decimal("69.7")
+            else:
+                assert t["pct"] == Decimal("30.3")
+
+    def test_percent_in_summarize_all(self) -> None:
+        """p. in summarize-all: whole over whole = 100%."""
+        result = run("E /. [pct: p. salary ~ 1]")
+        assert isinstance(result, Relation)
+        t = next(iter(result))
+        from decimal import Decimal
+
+        assert t["pct"] == Decimal("100.0")
+
+    def test_percent_in_extend(self) -> None:
+        """p. in extend computes each tuple's percent of the whole."""
+        # Alice salary=80000, total=330000 -> 80000/330000*100 ≈ 24.2%
+        result = run("E +: pct: p. salary ~ 1")
+        assert isinstance(result, Relation)
+        from decimal import Decimal
+
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["pct"] == Decimal("24.2")
+            elif t["name"] == "Eve":
+                # 45000/330000*100 ≈ 13.6%
+                assert t["pct"] == Decimal("13.6")
+
+    def test_percent_in_extend_with_arithmetic(self) -> None:
+        """p. participates in arithmetic expressions."""
+        result = run("E +: pct: p. salary / 100 ~ 4")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                from decimal import Decimal
+
+                # 80000/330000 * 100 / 100 = 80000/330000 ≈ 0.2424
+                assert t["pct"] == Decimal("0.2424")

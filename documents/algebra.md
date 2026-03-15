@@ -436,7 +436,7 @@ Result:
 
 The result has the grouping key(s) plus the named aggregates. The original attributes (name, salary, etc.) are gone — consumed by the aggregation.
 
-Aggregate functions: `#.` (count), `+.` (sum), `>.` (max), `<.` (min), `%.` (mean).
+Aggregate functions: `#.` (count), `+.` (sum), `>.` (max), `<.` (min), `%.` (mean), `n.` (collect), `p.` (percent of whole).
 
 ### Summarize all: `/.`
 
