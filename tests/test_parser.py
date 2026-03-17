@@ -205,8 +205,30 @@ class TestExtend:
         assert result.computations[1].name == "tax"
 
 
-class TestArithmeticPrecedence:
-    """Test arithmetic chaining and operator precedence in extend."""
+class TestModify:
+    """Test modify parsing."""
+
+    def test_single(self) -> None:
+        """Single modify expression."""
+        result = parse("E =: salary: salary * 1.1")
+        assert isinstance(result, ast.Modify)
+        assert len(result.computations) == 1
+        comp = result.computations[0]
+        assert comp.name == "salary"
+        assert isinstance(comp.expr, ast.BinOp)
+        assert comp.expr.op == "*"
+
+    def test_multiple(self) -> None:
+        """Multiple bracketed modify expressions."""
+        result = parse('E =: [salary: salary * 1.1  role: "senior"]')
+        assert isinstance(result, ast.Modify)
+        assert len(result.computations) == 2
+        assert result.computations[0].name == "salary"
+        assert result.computations[1].name == "role"
+
+
+class TestLeftToRightArithmetic:
+    """Test left-to-right arithmetic evaluation (no precedence)."""
 
     def test_chained_multiply_divide(self) -> None:
         """a / b * 2 parses as (a / b) * 2 (left-to-right)."""
@@ -220,16 +242,17 @@ class TestArithmeticPrecedence:
         assert isinstance(expr.right, ast.IntLiteral)
         assert expr.right.value == 2
 
-    def test_multiply_before_add(self) -> None:
-        """a + b * 2 parses as a + (b * 2) (precedence)."""
+    def test_add_then_multiply(self) -> None:
+        """a + b * 2 parses as (a + b) * 2 (left-to-right, no precedence)."""
         result = parse("R +: x: a + b * 2")
         assert isinstance(result, ast.Extend)
         expr = result.computations[0].expr
         assert isinstance(expr, ast.BinOp)
-        assert expr.op == "+"
-        assert isinstance(expr.left, ast.AttrRef)
-        assert isinstance(expr.right, ast.BinOp)
-        assert expr.right.op == "*"
+        assert expr.op == "*"
+        assert isinstance(expr.left, ast.BinOp)
+        assert expr.left.op == "+"
+        assert isinstance(expr.right, ast.IntLiteral)
+        assert expr.right.value == 2
 
     def test_chained_additive(self) -> None:
         """a + b - c parses as (a + b) - c."""
@@ -241,15 +264,27 @@ class TestArithmeticPrecedence:
         assert isinstance(expr.left, ast.BinOp)
         assert expr.left.op == "+"
 
-    def test_parens_override_precedence(self) -> None:
-        """(a + b) * 2 groups addition first via parentheses."""
-        result = parse("R +: x: (a + b) * 2")
+    def test_parens_override(self) -> None:
+        """a + (b * 2) groups multiplication first via parentheses."""
+        result = parse("R +: x: a + (b * 2)")
         assert isinstance(result, ast.Extend)
         expr = result.computations[0].expr
         assert isinstance(expr, ast.BinOp)
-        assert expr.op == "*"
-        assert isinstance(expr.left, ast.BinOp)
-        assert expr.left.op == "+"
+        assert expr.op == "+"
+        assert isinstance(expr.left, ast.AttrRef)
+        assert isinstance(expr.right, ast.BinOp)
+        assert expr.right.op == "*"
+
+    def test_tilde_left_to_right(self) -> None:
+        """a ~ 2 + b parses as (a ~ 2) + b (tilde has no special precedence)."""
+        result = parse("R +: x: a ~ 2 + b")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.BinOp)
+        assert expr.op == "+"
+        assert isinstance(expr.left, ast.Round)
+        assert expr.left.places == 2
+        assert isinstance(expr.right, ast.AttrRef)
 
 
 class TestRename:

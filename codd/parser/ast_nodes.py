@@ -234,6 +234,14 @@ class Extend:
 
 
 @dataclass(frozen=True)
+class Modify:
+    """Modify: =: name: expr or =: [name1: expr1  name2: expr2]."""
+
+    source: RelExpr
+    computations: tuple[NamedExpr, ...]
+
+
+@dataclass(frozen=True)
 class Rename:
     """Rename: @ old > new or @ [old1 > new1  old2 > new2]."""
 
@@ -334,6 +342,7 @@ RelExpr = (
     | NestJoin
     | Unnest
     | Extend
+    | Modify
     | Rename
     | Union
     | Difference

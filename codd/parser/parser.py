@@ -133,6 +133,8 @@ class Parser:
                 left = self._parse_unnest(left)
             elif tok.type == TokenType.PLUS_COLON:
                 left = self._parse_extend(left)
+            elif tok.type == TokenType.EQUALS_COLON:
+                left = self._parse_modify(left)
             elif tok.type == TokenType.AT:
                 left = self._parse_rename(left)
             elif tok.type == TokenType.PIPE_DOT:
@@ -206,6 +208,12 @@ class Parser:
         self._advance()  # consume +:
         computations = self._parse_named_expr_list()
         return ast.Extend(source=source, computations=tuple(computations))
+
+    def _parse_modify(self, source: ast.RelExpr) -> ast.Modify:
+        """Parse: =: name: expr or =: [name1: expr1  name2: expr2]."""
+        self._advance()  # consume =:
+        computations = self._parse_named_expr_list()
+        return ast.Modify(source=source, computations=tuple(computations))
 
     def _parse_rename(self, source: ast.RelExpr) -> ast.Rename:
         """Parse: @ old -> new or @ [old1 -> new1  old2 -> new2]."""
@@ -565,46 +573,42 @@ class Parser:
     def _parse_computation_expr(self) -> ast.Expr:
         """Parse a computation expression.
 
-        Supports full arithmetic with standard precedence (* / before + -),
-        precision (~), aggregate calls, ternary expressions, and
-        parenthesized subqueries.
+        All operators evaluate left-to-right with no precedence (like the
+        relational chain).  Use parentheses to override:
+        ``salary + bonus * 2`` means ``(salary + bonus) * 2``.
         """
         # Check for ternary expression
         if self._peek().type == TokenType.QUESTION_COLON:
             return self._parse_ternary_expr()
 
-        return self._parse_precision_expr()
+        return self._parse_left_to_right_expr()
 
-    def _parse_precision_expr(self) -> ast.Expr:
-        """Parse precision expression: additive (TILDE INTEGER)?
+    _ARITH_OPS: dict[TokenType, str] = {
+        TokenType.PLUS: "+",
+        TokenType.MINUS: "-",
+        TokenType.STAR: "*",
+        TokenType.SLASH: "/",
+    }
 
-        Lowest arithmetic precedence so a / b ~ 2 = (a / b) ~ 2.
+    def _parse_left_to_right_expr(self) -> ast.Expr:
+        """Parse arithmetic left-to-right: atom (op atom)* with no precedence.
+
+        Handles +, -, *, / and ~ (precision) all at the same level.
         """
-        left = self._parse_additive_expr()
-        if self._peek().type == TokenType.TILDE:
-            self._advance()  # consume ~
-            tok = self._expect(TokenType.INTEGER)
-            return ast.Round(expr=left, places=int(tok.value))
-        return left
-
-    def _parse_additive_expr(self) -> ast.Expr:
-        """Parse additive expression: multiplicative ((+ | -) multiplicative)*."""
-        add_ops = {TokenType.PLUS: "+", TokenType.MINUS: "-"}
-        left = self._parse_multiplicative_expr()
-        while self._peek().type in add_ops:
-            op_tok = self._advance()
-            right = self._parse_multiplicative_expr()
-            left = ast.BinOp(left=left, op=add_ops[op_tok.type], right=right)
-        return left
-
-    def _parse_multiplicative_expr(self) -> ast.Expr:
-        """Parse multiplicative expression: atom ((* | /) atom)*."""
-        mul_ops = {TokenType.STAR: "*", TokenType.SLASH: "/"}
         left = self._parse_computation_atom()
-        while self._peek().type in mul_ops:
-            op_tok = self._advance()
-            right = self._parse_computation_atom()
-            left = ast.BinOp(left=left, op=mul_ops[op_tok.type], right=right)
+        while True:
+            if self._peek().type == TokenType.TILDE:
+                self._advance()  # consume ~
+                tok = self._expect(TokenType.INTEGER)
+                left = ast.Round(expr=left, places=int(tok.value))
+            elif self._peek().type in self._ARITH_OPS:
+                op_tok = self._advance()
+                right = self._parse_computation_atom()
+                left = ast.BinOp(
+                    left=left, op=self._ARITH_OPS[op_tok.type], right=right
+                )
+            else:
+                break
         return left
 
     def _parse_ternary_expr(self) -> ast.TernaryExpr:

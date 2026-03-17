@@ -51,6 +51,10 @@ from codd.executor.environment import Environment
     help="Output as CSV instead of table (only with -e/-f).",
 )
 @click.option(
+    "--no-header", "no_header", is_flag=True, default=False,
+    help="Omit header row from CSV output (implies --csv).",
+)
+@click.option(
     "--ops", "show_ops", is_flag=True, default=False,
     help="Print language primitives reference and exit.",
 )
@@ -63,6 +67,7 @@ def main(
     auto_load: bool,
     genkey: bool,
     output_csv: bool,
+    no_header: bool,
     show_ops: bool,
 ) -> None:
     """Codd relational algebra.
@@ -128,18 +133,23 @@ def main(
         _load_stdin(env, "stdin", genkey=_genkey_for("stdin"))
         stdin_consumed = True
 
+    if no_header:
+        output_csv = True
+
     if expression is not None:
         # Eval mode: evaluate and exit.
-        _run_eval(expression, env, output_csv)
+        _run_eval(expression, env, output_csv, no_header)
     elif script_file is not None:
         # File mode: run script and exit.
-        _run_file(script_file, args, env, output_csv)
+        _run_file(script_file, args, env, output_csv, no_header)
     else:
         # REPL mode.
         _enter_repl(env, stdin_consumed)
 
 
-def _run_eval(expression: str, env: Environment, output_csv: bool) -> None:
+def _run_eval(
+    expression: str, env: Environment, output_csv: bool, no_header: bool = False
+) -> None:
     """Evaluate a single expression and print the result."""
     from codd.executor.executor import Executor, ExecutionError
     from codd.lexer.lexer import Lexer, LexError
@@ -154,6 +164,7 @@ def _run_eval(expression: str, env: Environment, output_csv: bool) -> None:
 
     # Bash history expansion escapes '!' to '\!'.
     expression = expression.replace("\\!", "!")
+    header = not no_header
 
     try:
         tokens = Lexer(expression).tokenize()
@@ -161,9 +172,15 @@ def _run_eval(expression: str, env: Environment, output_csv: bool) -> None:
         result = Executor(env).execute(tree)
 
         if isinstance(result, list):
-            click.echo(format_array_csv(result) if output_csv else format_array(result))
+            click.echo(
+                format_array_csv(result, header=header)
+                if output_csv else format_array(result)
+            )
         elif isinstance(result, Relation):
-            click.echo(format_csv(result) if output_csv else format_relation(result))
+            click.echo(
+                format_csv(result, header=header)
+                if output_csv else format_relation(result)
+            )
         else:
             click.echo(result)
     except (LexError, ParseError, ExecutionError) as e:
@@ -208,6 +225,7 @@ def _run_file(
     args: tuple[str, ...],
     env: Environment,
     output_csv: bool,
+    no_header: bool = False,
 ) -> None:
     """Execute expressions from a script file.
 
@@ -254,10 +272,17 @@ def _run_file(
             result = executor.execute(tree)
 
         # Print the last result.
+        header = not no_header
         if isinstance(result, list):
-            click.echo(format_array_csv(result) if output_csv else format_array(result))
+            click.echo(
+                format_array_csv(result, header=header)
+                if output_csv else format_array(result)
+            )
         elif isinstance(result, Relation):
-            click.echo(format_csv(result) if output_csv else format_relation(result))
+            click.echo(
+                format_csv(result, header=header)
+                if output_csv else format_relation(result)
+            )
         elif result is not None:
             click.echo(result)
     except (LexError, ParseError, ExecutionError) as e:

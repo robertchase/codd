@@ -216,8 +216,44 @@ class TestExtend:
                 assert t["bonus"] == 8000.0
 
 
-class TestArithmeticPrecedence:
-    """Test chained arithmetic and precedence in extend."""
+class TestModify:
+    """Test =: (modify)."""
+
+    def test_update_value(self) -> None:
+        """Modify updates an existing attribute."""
+        result = run("E =: salary: salary * 1.1 # [name salary]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["salary"] == 88000.0
+
+    def test_multiple(self) -> None:
+        """Modify updates multiple existing attributes."""
+        result = run('E =: [salary: salary * 2  role: "x"] # [name salary role]')
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["salary"] == 160000
+                assert t["role"] == "x"
+
+    def test_unknown_attribute_error(self) -> None:
+        """Modify rejects unknown attribute names."""
+        import pytest
+
+        with pytest.raises(Exception, match="unknown attributes"):
+            run("E =: nonexistent: 1")
+
+    def test_ternary(self) -> None:
+        """Modify with ternary expression."""
+        result = run('E =: role: ?: salary > 70000 "senior" role')
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["role"] == "senior"
+
+
+class TestLeftToRightArithmetic:
+    """Test left-to-right arithmetic evaluation (no precedence)."""
 
     def test_divide_then_multiply(self) -> None:
         """salary / 1000 * 2 evaluates left-to-right as (salary / 1000) * 2."""
@@ -227,9 +263,17 @@ class TestArithmeticPrecedence:
             if t["name"] == "Alice":
                 assert t["x"] == 160.0
 
-    def test_precedence(self) -> None:
-        """salary + 1000 * 2 evaluates as salary + (1000 * 2)."""
+    def test_left_to_right(self) -> None:
+        """salary + 1000 * 2 evaluates as (salary + 1000) * 2 (no precedence)."""
         result = run("E +: x: salary + 1000 * 2 # [name x]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["x"] == 162000
+
+    def test_parens_override(self) -> None:
+        """salary + (1000 * 2) uses parens to get standard math order."""
+        result = run("E +: x: salary + (1000 * 2) # [name x]")
         assert isinstance(result, Relation)
         for t in result:
             if t["name"] == "Alice":

@@ -77,25 +77,27 @@ def format_array(arr: list[Tuple_]) -> str:
     return _build_table(attrs, rows)
 
 
-def format_csv(rel: Relation) -> str:
+def format_csv(rel: Relation, *, header: bool = True) -> str:
     """Format a relation as CSV text."""
     attrs = sorted(rel.attributes)
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(attrs)
+    if header:
+        writer.writerow(attrs)
     for t in rel:
         writer.writerow([format_value(t[a]) for a in attrs])
     return buf.getvalue().rstrip("\n")
 
 
-def format_array_csv(arr: list[Tuple_]) -> str:
+def format_array_csv(arr: list[Tuple_], *, header: bool = True) -> str:
     """Format a sorted array (list of tuples) as CSV text."""
     if not arr:
         return ""
     attrs = _array_attrs(arr)
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(attrs)
+    if header:
+        writer.writerow(attrs)
     for t in arr:
         writer.writerow([format_value(t[a]) for a in attrs])
     return buf.getvalue().rstrip("\n")

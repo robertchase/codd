@@ -78,6 +78,8 @@ class Executor:
             return self._eval_unnest(node)
         if isinstance(node, ast.Extend):
             return self._eval_extend(node)
+        if isinstance(node, ast.Modify):
+            return self._eval_modify(node)
         if isinstance(node, ast.Rename):
             return self._eval_rename(node)
         if isinstance(node, ast.Union):
@@ -166,6 +168,18 @@ class Executor:
             return result
 
         return source.extend(compute)
+
+    def _eval_modify(self, node: ast.Modify) -> Relation:
+        """Evaluate: source =: computations (update existing attributes)."""
+        source = self._as_relation(node.source)
+
+        def compute(t: Tuple_) -> dict[str, Value]:
+            result: dict[str, Value] = {}
+            for comp in node.computations:
+                result[comp.name] = self._eval_expr(comp.expr, t, source)
+            return result
+
+        return source.modify(compute)
 
     def _eval_rename(self, node: ast.Rename) -> Relation:
         """Evaluate: source @ mappings."""

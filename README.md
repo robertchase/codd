@@ -206,7 +206,7 @@ Expressions chain left-to-right. Each operator transforms the result of the prev
 | `~` | Precision | `%. salary ~ 2` |
 | `?:` | Ternary | `?: dept_id = 10 "eng" "other"` |
 
-Arithmetic follows standard precedence (`*`/`/` before `+`/`-`).
+Arithmetic evaluates left-to-right with no precedence — use parentheses to override.
 
 ### Other
 

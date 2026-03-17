@@ -34,7 +34,7 @@ Immutable set of tuples backed by `frozenset[Tuple_]` — automatic deduplicatio
 
 ## Lexer
 
-Hand-written single-pass lexer with two-character lookahead for digraph detection. Digraphs (`?!`, `*:`, `<:`, `/.`, `/:`, `#!`, `#.`, `+.`, `>.`, `<.`, `%.`, `:=`, `|=`, `-=`, `?=`, `!=`, `>=`, `<=`, `!~`, `::`, `+:`) are checked before single-character operators. Line comments start with `--`.
+Hand-written single-pass lexer with two-character lookahead for digraph detection. Digraphs (`?!`, `*:`, `<:`, `/.`, `/:`, `#!`, `#.`, `+.`, `>.`, `<.`, `%.`, `:=`, `|=`, `-=`, `?=`, `!=`, `>=`, `<=`, `!~`, `::`, `+:`, `=:`) are checked before single-character operators. Line comments start with `--`.
 
 50+ token types in the `TokenType` enum. Each `Token` carries type, value, line, and column.
 
@@ -56,13 +56,13 @@ Recursive descent. The core is `_parse_postfix_chain`: parse an atom (relation n
 
 The parser knows which context it's in because extend computation parsing uses `_parse_computation_expr` (arithmetic context) while the main chain uses `_parse_postfix_chain` (relational context).
 
-### Arithmetic precedence
+### Left-to-right arithmetic
 
-Computation expressions use a two-level precedence parser: `_parse_additive_expr` handles `+` and `-` (lower precedence), `_parse_multiplicative_expr` handles `*` and `/` (higher precedence). Both loop to support chained operations. So `a + b * 2` parses as `a + (b * 2)` and `a / b * 2` parses as `(a / b) * 2`. Parentheses override precedence as expected.
+Computation expressions evaluate strictly left-to-right with no operator precedence, matching the relational chain. `_parse_left_to_right_expr` handles `+`, `-`, `*`, `/`, and `~` all at the same level in a single loop. So `a + b * 2` parses as `(a + b) * 2` and `a / b ~ 2` parses as `(a / b) ~ 2`. Use parentheses for standard math order: `a + (b * 2)`.
 
 ### Precision primitive (~)
 
-The `~` operator rounds an expression to N decimal places: `expr ~ N`. It has the lowest arithmetic precedence, so `a / b ~ 2` parses as `(a / b) ~ 2`. Parsed by `_parse_precision_expr`, which sits between `_parse_computation_expr` and `_parse_additive_expr` in the precedence chain. Produces a `Round(expr, places)` AST node.
+The `~` operator rounds an expression to N decimal places: `expr ~ N`. It participates in the left-to-right chain like any other operator. Produces a `Round(expr, places)` AST node.
 
 ### Ternary branches
 
@@ -119,7 +119,7 @@ For `/:` (nest by) + `+` (extend) chains like `E /: dept_id > team + [top: >. te
 
 ### Deferred
 
-`+:` (modify), mutation operators (`:=`, `|=`, `-=`, `?=`), regex (`!~`), type predicates (`::`), transactions, DDL, file storage, the prose layer.
+Mutation operators (`:=`, `|=`, `-=`, `?=`), regex (`!~`), type predicates (`::`), transactions, DDL, file storage, the prose layer.
 
 ## Testing
 
