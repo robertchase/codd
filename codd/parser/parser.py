@@ -601,6 +601,9 @@ class Parser:
                 self._advance()  # consume ~
                 tok = self._expect(TokenType.INTEGER)
                 left = ast.Round(expr=left, places=int(tok.value))
+            elif self._peek().type == TokenType.S_DOT:
+                self._advance()  # consume s.
+                left = self._parse_substring(left)
             elif self._peek().type in self._ARITH_OPS:
                 op_tok = self._advance()
                 right = self._parse_computation_atom()
@@ -610,6 +613,28 @@ class Parser:
             else:
                 break
         return left
+
+    def _parse_substring(self, expr: ast.Expr) -> ast.Substring:
+        """Parse: .s [start] or .s [start end].
+
+        Indices are integers, optionally negative (MINUS INTEGER).
+        """
+        self._expect(TokenType.LBRACKET)
+        start = self._parse_signed_int()
+        end: int | None = None
+        if self._peek().type in (TokenType.INTEGER, TokenType.MINUS):
+            end = self._parse_signed_int()
+        self._expect(TokenType.RBRACKET)
+        return ast.Substring(expr=expr, start=start, end=end)
+
+    def _parse_signed_int(self) -> int:
+        """Parse an optionally negative integer: INTEGER or MINUS INTEGER."""
+        if self._peek().type == TokenType.MINUS:
+            self._advance()  # consume -
+            tok = self._expect(TokenType.INTEGER)
+            return -int(tok.value)
+        tok = self._expect(TokenType.INTEGER)
+        return int(tok.value)
 
     def _parse_ternary_expr(self) -> ast.TernaryExpr:
         """Parse: ?: condition true_expr false_expr."""

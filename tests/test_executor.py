@@ -280,6 +280,64 @@ class TestLeftToRightArithmetic:
                 assert t["x"] == 82000
 
 
+class TestSubstring:
+    """Test .s (substring)."""
+
+    def test_positive_range(self) -> None:
+        """name .s [1 3] extracts first 3 characters."""
+        result = run("E +: sub: name .s [1 3] # [name sub]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["sub"] == "Ali"
+            elif t["name"] == "Bob":
+                assert t["sub"] == "Bob"
+
+    def test_from_position(self) -> None:
+        """name .s [3] extracts from position 3 to end."""
+        result = run("E +: sub: name .s [3] # [name sub]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["sub"] == "ice"
+            elif t["name"] == "Bob":
+                assert t["sub"] == "b"
+
+    def test_negative_single(self) -> None:
+        """name .s [-2] extracts last 2 characters."""
+        result = run("E +: sub: name .s [-2] # [name sub]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["sub"] == "ce"
+            elif t["name"] == "Carol":
+                assert t["sub"] == "ol"
+
+    def test_negative_range(self) -> None:
+        """name .s [-4 -2] extracts a range from the end."""
+        result = run("E +: sub: name .s [-4 -2] # [name sub]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["sub"] == "lic"
+
+    def test_clamp_out_of_bounds(self) -> None:
+        """Out-of-bounds indices are clamped silently."""
+        result = run("E +: sub: name .s [1 100] # [name sub]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Bob":
+                assert t["sub"] == "Bob"
+
+    def test_single_char(self) -> None:
+        """name .s [1 1] extracts a single character."""
+        result = run("E +: sub: name .s [1 1] # [name sub]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["sub"] == "A"
+
+
 class TestRename:
     """Test @ (rename)."""
 

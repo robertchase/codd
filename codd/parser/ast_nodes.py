@@ -106,6 +106,18 @@ class Round:
     places: int
 
 
+@dataclass(frozen=True)
+class Substring:
+    """Substring primitive: expr .s [start] or expr .s [start end].
+
+    1-based inclusive indexing, negative indices count from end.
+    """
+
+    expr: Expr
+    start: int
+    end: int | None = None
+
+
 # Expr is the union of all expression types
 Expr = (
     IntLiteral
@@ -119,6 +131,7 @@ Expr = (
     | SubqueryExpr
     | TernaryExpr
     | Round
+    | Substring
 )
 
 

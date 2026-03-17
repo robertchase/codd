@@ -287,6 +287,47 @@ class TestLeftToRightArithmetic:
         assert isinstance(expr.right, ast.AttrRef)
 
 
+class TestSubstring:
+    """Test .s (substring) parsing."""
+
+    def test_two_args(self) -> None:
+        """name .s [1 3] parses as Substring(start=1, end=3)."""
+        result = parse("R +: sub: name .s [1 3]")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.Substring)
+        assert expr.start == 1
+        assert expr.end == 3
+        assert isinstance(expr.expr, ast.AttrRef)
+
+    def test_single_arg(self) -> None:
+        """name .s [3] parses as Substring(start=3, end=None)."""
+        result = parse("R +: sub: name .s [3]")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.Substring)
+        assert expr.start == 3
+        assert expr.end is None
+
+    def test_negative_args(self) -> None:
+        """name .s [-4 -2] parses with negative indices."""
+        result = parse("R +: sub: name .s [-4 -2]")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.Substring)
+        assert expr.start == -4
+        assert expr.end == -2
+
+    def test_chains_left_to_right(self) -> None:
+        """name .s [1 3] + suffix chains left-to-right."""
+        result = parse("R +: x: name .s [1 3] + suffix")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.BinOp)
+        assert expr.op == "+"
+        assert isinstance(expr.left, ast.Substring)
+
+
 class TestRename:
     """Test rename parsing."""
 

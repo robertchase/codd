@@ -232,6 +232,12 @@ class Lexer:
             self._advance()
             return self._make_token(TokenType.DOLLAR_DOT, "$.", line, col)
 
+        # .s (dot-prefix scalar operators)
+        if ch == "." and ch2 == "s" and not (self._peek(2).isalnum() or self._peek(2) == "_"):
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.S_DOT, ".s", line, col)
+
         # --- Single-char operators ---
 
         single_map: dict[str, TokenType] = {
@@ -317,7 +323,10 @@ class Lexer:
         return self._make_token(TokenType.INTEGER, value, line, col)
 
     # Alphabetic operators: single letter + '.' (extensible for p., d., etc.)
-    _ALPHA_OPS: dict[str, TokenType] = {"n": TokenType.N_DOT, "p": TokenType.P_DOT}
+    _ALPHA_OPS: dict[str, TokenType] = {
+        "n": TokenType.N_DOT,
+        "p": TokenType.P_DOT,
+    }
 
     def _read_ident(self, line: int, col: int) -> Token:
         """Read an identifier, boolean keyword, or alphabetic operator."""

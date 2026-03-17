@@ -278,6 +278,9 @@ class Executor:
         if isinstance(expr, ast.Round):
             value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
             return self._apply_round(value, expr.places)
+        if isinstance(expr, ast.Substring):
+            value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
+            return self._apply_substring(value, expr.start, expr.end)
         if isinstance(expr, ast.AttrRef):
             raise ExecutionError(
                 f"Cannot reference attribute {expr.name!r} in summarize context"
@@ -401,6 +404,9 @@ class Executor:
         if isinstance(expr, ast.Round):
             value = self._eval_expr(expr.expr, t, source)
             return self._apply_round(value, expr.places)
+        if isinstance(expr, ast.Substring):
+            value = self._eval_expr(expr.expr, t, source)
+            return self._apply_substring(value, expr.start, expr.end)
         raise ExecutionError(f"Unknown expression type: {type(expr).__name__}")
 
     def _eval_attr_ref(self, ref: ast.AttrRef, t: Tuple_) -> Value:
@@ -471,6 +477,32 @@ class Executor:
         """Round a number to the specified decimal places, returning Decimal."""
         rounded = round(float(value), places)
         return Decimal(str(rounded)).quantize(Decimal(10) ** -places)
+
+    def _apply_substring(self, value: Value, start: int, end: int | None) -> str:
+        """Extract substring with 1-based inclusive indexing.
+
+        Positive indices count from 1, negative from end.
+        Out-of-bounds indices are clamped silently.
+        """
+        s = str(value)
+        length = len(s)
+
+        # Convert 1-based to 0-based.
+        if start > 0:
+            idx_start = start - 1
+        else:
+            idx_start = length + start
+        idx_start = max(0, min(idx_start, length))
+
+        if end is None:
+            idx_end = length
+        elif end > 0:
+            idx_end = end
+        else:
+            idx_end = length + end + 1
+        idx_end = max(0, min(idx_end, length))
+
+        return s[idx_start:idx_end]
 
     def _eval_aggregate_call(
         self, expr: ast.AggregateCall, t: Tuple_, source: Relation | None = None
