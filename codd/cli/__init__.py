@@ -7,11 +7,13 @@ import sys
 
 import click
 
+from codd import __version__
 from codd.data.loader import load_csv
 from codd.executor.environment import Environment
 
 
 @click.command()
+@click.version_option(version=__version__, prog_name="codd")
 @click.argument("files", nargs=-1, type=click.Path())
 @click.option(
     "-e",

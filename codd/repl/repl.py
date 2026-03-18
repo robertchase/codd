@@ -32,7 +32,9 @@ def run_repl(env: Environment | None = None) -> None:
 
     executor = Executor(env)
 
-    print("Codd REPL")
+    from codd import __version__
+
+    print(f"Codd REPL v{__version__}")
     print(
         "Commands: \\load <file> [name], \\save [file], \\drop <name>, "
         "\\env, \\ops, \\quit"
