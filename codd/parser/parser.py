@@ -100,7 +100,7 @@ class Parser:
         return self._parse_postfix_chain(left)
 
     def _parse_atom(self) -> ast.RelExpr:
-        """Parse an atomic expression: IDENT or '(' expr ')'."""
+        """Parse an atomic expression: IDENT, '(' expr ')', or i. source."""
         tok = self._peek()
         if tok.type == TokenType.IDENT:
             self._advance()
@@ -110,7 +110,30 @@ class Parser:
             expr = self._parse_expr()
             self._expect(TokenType.RPAREN)
             return expr
+        if tok.type == TokenType.I_DOT:
+            return self._parse_iota()
         raise ParseError(f"Expected relation name or '(', got {tok.value!r}", tok)
+
+    def _parse_iota(self) -> ast.Iota:
+        """Parse: i. [name:] COUNT.
+
+        COUNT must be a literal positive integer.
+        Optional name: prefix sets the attribute name (default 'i').
+        """
+        self._advance()  # consume i.
+        name = "i"
+        # Check for optional name: prefix (IDENT followed by COLON)
+        if (
+            self._peek().type == TokenType.IDENT
+            and self._peek(1).type == TokenType.COLON
+        ):
+            name = self._advance().value  # consume IDENT
+            self._advance()  # consume :
+        tok = self._expect(TokenType.INTEGER)
+        count = int(tok.value)
+        if count <= 0:
+            raise ParseError("i. count must be a positive integer", tok)
+        return ast.Iota(count=count, name=name)
 
     def _parse_postfix_chain(self, left: ast.RelExpr) -> ast.RelExpr:
         """Parse a chain of postfix operators applied to left."""

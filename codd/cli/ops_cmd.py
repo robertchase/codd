@@ -40,6 +40,10 @@ _EXPRESSIONS = [
     ("?:", "Ternary", '?: dept_id = 10 "eng" "other"'),
 ]
 
+_SOURCES = [
+    ("i.", "Iota (generate)", "i. 5  or  i. month: 12"),
+]
+
 _OTHER = [
     (":=", "Assignment", "high := E ? salary > 70000"),
 ]
@@ -50,6 +54,7 @@ _HEADERS = ["Primitive", "Name", "Example"]
 def ops_output() -> str:
     """Return formatted primitives reference as a string."""
     sections = [
+        ("Sources", _SOURCES),
         ("Relational", _RELATIONAL),
         ("Aggregates", _AGGREGATES),
         ("Expressions", _EXPRESSIONS),

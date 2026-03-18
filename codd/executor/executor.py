@@ -100,6 +100,8 @@ class Executor:
             return self._eval_order_columns(node)
         if isinstance(node, ast.Take):
             return self._eval_take(node)
+        if isinstance(node, ast.Iota):
+            return self._eval_iota(node)
         raise ExecutionError(f"Unknown node type: {type(node).__name__}")
 
     def _as_relation(self, node: ast.RelExpr) -> Relation:
@@ -110,6 +112,16 @@ class Executor:
         return result
 
     # --- Node evaluators ---
+
+    def _eval_iota(self, node: ast.Iota) -> Relation:
+        """Evaluate: i. [name:] count.
+
+        Generate a single-attribute relation with integers 1..count.
+        """
+        tuples = frozenset(
+            Tuple_({node.name: i}) for i in range(1, node.count + 1)
+        )
+        return Relation(tuples, attributes=frozenset({node.name}))
 
     def _eval_rel_name(self, node: ast.RelName) -> Relation:
         """Look up a named relation in the environment."""

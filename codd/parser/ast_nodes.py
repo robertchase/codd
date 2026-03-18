@@ -344,6 +344,17 @@ class Take:
     count: int
 
 
+@dataclass(frozen=True)
+class Iota:
+    """Iota source: i. [name:] count.
+
+    Generates a single-attribute relation with consecutive integers 1..count.
+    """
+
+    count: int
+    name: str = "i"
+
+
 # RelExpr is the union of all relational expression types
 RelExpr = (
     RelName
@@ -366,6 +377,7 @@ RelExpr = (
     | Sort
     | OrderColumns
     | Take
+    | Iota
 )
 
 

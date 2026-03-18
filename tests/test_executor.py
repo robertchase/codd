@@ -338,6 +338,58 @@ class TestSubstring:
                 assert t["sub"] == "A"
 
 
+class TestIota:
+    """Test i. (iota)."""
+
+    def test_basic(self) -> None:
+        """i. 5 produces a 5-tuple relation with attribute 'i'."""
+        result = run("i. 5")
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"i"})
+        assert len(result) == 5
+        values = {t["i"] for t in result}
+        assert values == {1, 2, 3, 4, 5}
+
+    def test_named(self) -> None:
+        """i. month: 3 produces a relation with attribute 'month'."""
+        result = run("i. month: 3")
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"month"})
+        values = {t["month"] for t in result}
+        assert values == {1, 2, 3}
+
+    def test_chain_modify(self) -> None:
+        """i. 5 =: i: i + 9 shifts values to 10..14."""
+        result = run("i. 5 =: i: i + 9")
+        assert isinstance(result, Relation)
+        values = {t["i"] for t in result}
+        assert values == {10, 11, 12, 13, 14}
+
+    def test_chain_extend(self) -> None:
+        """i. 3 +: sq: i * i adds a squared column."""
+        result = run("i. 3 +: sq: i * i")
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"i", "sq"})
+        for t in result:
+            assert t["sq"] == t["i"] * t["i"]
+
+    def test_chain_filter(self) -> None:
+        """i. 10 ? i > 7 filters to 3 tuples."""
+        result = run("i. 10 ? i > 7")
+        assert isinstance(result, Relation)
+        assert len(result) == 3
+        values = {t["i"] for t in result}
+        assert values == {8, 9, 10}
+
+    def test_single(self) -> None:
+        """i. 1 produces a single-tuple relation."""
+        result = run("i. 1")
+        assert isinstance(result, Relation)
+        assert len(result) == 1
+        t = next(iter(result))
+        assert t["i"] == 1
+
+
 class TestRename:
     """Test @ (rename)."""
 
