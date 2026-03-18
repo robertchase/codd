@@ -13,7 +13,7 @@ from decimal import Decimal
 from codd.executor.aggregates import _promote_numeric, agg_percent, get_aggregate
 from codd.executor.environment import Environment
 from codd.model.relation import Relation
-from codd.model.types import OrderedArray, Tuple_, Value
+from codd.model.types import OrderedArray, Tuple_, Value, str_to_date
 from codd.parser import ast_nodes as ast
 
 
@@ -599,10 +599,8 @@ class Executor:
         if isinstance(value, datetime.date):
             return value
         if isinstance(value, str):
-            if value == "today":
-                return datetime.date.today()
             try:
-                return datetime.date.fromisoformat(value)
+                return str_to_date(value)
             except ValueError as e:
                 raise ExecutionError(
                     f"Cannot parse date: {value!r} (expected YYYY-MM-DD)"
@@ -827,7 +825,10 @@ class Executor:
             if op == "!=":
                 return lambda t: get_left(t) not in values
             raise ExecutionError(f"Cannot use {op} with subquery")
-        raise ExecutionError(f"Unknown RHS type: {type(right_expr).__name__}")
+        # Fallback: evaluate as a constant scalar expression (e.g. "today" .d - 14).
+        dummy = Tuple_({})
+        rval = self._eval_expr(right_expr, dummy, None)
+        return _make_scalar_cmp(get_left, op, rval)
 
 
 class _ReverseKey:
@@ -859,12 +860,12 @@ def _coerce_pair(a: Value, b: Value) -> tuple[Value, Value]:
     """
     if isinstance(a, datetime.date) and isinstance(b, str):
         try:
-            return a, datetime.date.fromisoformat(b)
+            return a, str_to_date(b)
         except ValueError:
             return a, b
     if isinstance(b, datetime.date) and isinstance(a, str):
         try:
-            return datetime.date.fromisoformat(a), b
+            return str_to_date(a), b
         except ValueError:
             return a, b
     if isinstance(a, str) and isinstance(b, (int, float, Decimal)):

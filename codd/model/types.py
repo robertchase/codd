@@ -13,6 +13,13 @@ Value = Union[int, float, Decimal, str, bool, datetime.date, "Relation"]
 # Re-export after Relation is defined; at runtime the union resolves lazily.
 
 
+def str_to_date(s: str) -> datetime.date:
+    """Convert a string to a date. Supports ISO format and "today"."""
+    if s == "today":
+        return datetime.date.today()
+    return datetime.date.fromisoformat(s)
+
+
 def _values_equal(a: Value, b: Value) -> bool:
     """Coercion-aware equality for join matching and comparisons.
 
@@ -23,12 +30,12 @@ def _values_equal(a: Value, b: Value) -> bool:
     # Date/string coercion.
     if isinstance(a, datetime.date) and isinstance(b, str):
         try:
-            return a == datetime.date.fromisoformat(b)
+            return a == str_to_date(b)
         except ValueError:
             return False
     if isinstance(b, datetime.date) and isinstance(a, str):
         try:
-            return datetime.date.fromisoformat(a) == b
+            return str_to_date(a) == b
         except ValueError:
             return False
     # Numeric/string coercion.

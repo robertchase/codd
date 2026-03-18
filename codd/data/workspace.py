@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -21,6 +22,7 @@ _TYPE_FLOAT = "float"
 _TYPE_BOOL = "bool"
 _TYPE_DECIMAL = "Decimal"
 _TYPE_RELATION = "Relation"
+_TYPE_DATE = "date"
 
 
 def save_workspace(env: Environment, path: Path) -> None:
@@ -105,6 +107,8 @@ def _value_type_tag(value: Value) -> str:
         return _TYPE_FLOAT
     if isinstance(value, Decimal):
         return _TYPE_DECIMAL
+    if isinstance(value, datetime.date):
+        return _TYPE_DATE
     if isinstance(value, Relation):
         return _TYPE_RELATION
     return _TYPE_STR
@@ -117,6 +121,8 @@ def _serialize_tuple(tup: Tuple_, attr_types: dict[str, str]) -> dict[str, Any]:
         val = tup[attr]
         if type_tag in (_TYPE_DECIMAL, _TYPE_FLOAT):
             result[attr] = str(val)
+        elif type_tag == _TYPE_DATE:
+            result[attr] = val.isoformat() if isinstance(val, datetime.date) else str(val)
         elif type_tag == _TYPE_RELATION:
             assert isinstance(val, Relation)
             result[attr] = _serialize_relation(val)
@@ -162,6 +168,8 @@ def _deserialize_value(val: Any, type_tag: str) -> Value:
         return Decimal(val)
     if type_tag == _TYPE_BOOL:
         return bool(val)
+    if type_tag == _TYPE_DATE:
+        return datetime.date.fromisoformat(val)
     if type_tag == _TYPE_RELATION:
         return _deserialize_relation(val)
     return str(val)

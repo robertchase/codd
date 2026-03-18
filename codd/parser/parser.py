@@ -573,8 +573,25 @@ class Parser:
         if tok.type == TokenType.LBRACE:
             return self._parse_set_literal()
         if tok.type == TokenType.LPAREN:
-            # Subquery in filter RHS
             self._advance()
+            # Peek to decide: scalar computation or relational subquery.
+            # Relational atoms start with IDENT, LPAREN, or I_DOT;
+            # anything else (STRING, INTEGER, FLOAT, BOOLEAN, MINUS,
+            # aggregates, QUESTION_COLON) is a scalar computation.
+            next_tok = self._peek()
+            if next_tok.type in (
+                TokenType.STRING,
+                TokenType.INTEGER,
+                TokenType.FLOAT,
+                TokenType.BOOLEAN,
+                TokenType.MINUS,
+                TokenType.QUESTION_COLON,
+                *self._AGG_TOKENS,
+            ):
+                expr = self._parse_computation_expr()
+                self._expect(TokenType.RPAREN)
+                return expr
+            # Otherwise treat as relational subquery.
             query = self._parse_expr()
             self._expect(TokenType.RPAREN)
             return ast.SubqueryExpr(query=query)
