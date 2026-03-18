@@ -526,6 +526,30 @@ class TestDateOp:
         with pytest.raises(ExecutionError, match="Cannot parse date"):
             run('E +: d: "not-a-date" .d # [name d]')
 
+    def test_today(self) -> None:
+        """"today" .d returns today's date."""
+        import datetime
+
+        result = run('i. 1 +: d: "today" .d')
+        assert isinstance(result, Relation)
+        t = next(iter(result))
+        assert t["d"] == datetime.date.today()
+
+    def test_today_extraction(self) -> None:
+        """"today" .d "year" extracts year directly."""
+        import datetime
+
+        result = run('i. 1 +: y: "today" .d "year"')
+        assert isinstance(result, Relation)
+        t = next(iter(result))
+        assert t["y"] == datetime.date.today().year
+
+    def test_filter_date_vs_string(self) -> None:
+        """Filter matches date values against date-like strings."""
+        result = run('i. date: 10 =: date: "2025-12-31" .d + date ? date = "2026-01-05"')
+        assert isinstance(result, Relation)
+        assert len(result) == 1
+
 
 class TestRename:
     """Test @ (rename)."""

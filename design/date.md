@@ -18,22 +18,23 @@ A new `Date` type joins the `Value` union. Internally backed by Python `datetime
 ### Type promotion
 
 ```
-'2026-03-17' .d          → Date(2026, 3, 17)
+"2026-03-17" .d           → Date(2026, 3, 17)
 hire_date .d              → promote string attribute to Date
+"today" .d                → today's date (local time)
 ```
 
-Accepts ISO format (`YYYY-MM-DD`). Error on unparseable strings.
+Accepts ISO format (`YYYY-MM-DD`) or `"today"`. Error on unparseable strings.
 
 If the value is already a Date, `.d` is a no-op.
 
 ### Component extraction
 
 ```
-expr .d 'year'   → int     (2026)
-expr .d 'month'  → int     (3)
-expr .d 'day'    → int     (17)
-expr .d 'week'   → int     (ISO week number, 1-53)
-expr .d 'dow'    → int     (day of week, 1=Monday, 7=Sunday)
+expr .d "year"   → int     (2026)
+expr .d "month"  → int     (3)
+expr .d "day"    → int     (17)
+expr .d "week"   → int     (ISO week number, 1-53)
+expr .d "dow"    → int     (day of week, 1=Monday, 7=Sunday)
 ```
 
 A bare keyword (no `{}` braces) returns an integer. The set of keywords is fixed.
@@ -41,10 +42,10 @@ A bare keyword (no `{}` braces) returns an integer. The set of keywords is fixed
 ### Formatting
 
 ```
-expr .d '{yyyy}-{mm}-{dd}'     → "2026-03-17"
-expr .d '{dd} {mmm} {yyyy}'    → "17 MAR 2026"
-expr .d '{d}/{m}/{yy}'         → "17/3/26"
-expr .d '{dd}{mmm}{yy}'        → "17MAR26"
+expr .d "{yyyy}-{mm}-{dd}"     → "2026-03-17"
+expr .d "{dd} {mmm} {yyyy}"    → "17 MAR 2026"
+expr .d "{d}/{m}/{yy}"         → "17/3/26"
+expr .d "{dd}{mmm}{yy}"        → "17MAR26"
 ```
 
 A string containing `{` is a format pattern. Text outside braces is literal. Tokens inside braces:
@@ -92,7 +93,7 @@ This extends `_apply_binop` without changing its interface. The `_promote_numeri
 ## Example: date range for 2026
 
 ```
-i. day: 365 =: day: '2025-12-31' .d + day +: week: day .d 'week' # [day week]
+i. day: 365 =: day: "2025-12-31" .d + day +: week: day .d "week" # [day week]
 ```
 
 1. `i. day: 365` — generate {day} with 1..365
@@ -143,3 +144,10 @@ New token: `D_DOT`.
   - Contains `{` → format as string
 - `_apply_binop` gains Date cases before the existing numeric logic
 - `_promote_numeric` passes Date values through unchanged
+
+## Type coercion
+
+Dates coerce with strings in two contexts:
+
+- **Filter comparisons** (`?`): `? date = "2026-01-05"` works even when `date` is a Date value — `_coerce_pair` promotes the string to a Date before comparing.
+- **Natural join** (`*.`): `Tuple_.matches` uses `_values_equal` which promotes date-like strings when the other side is a Date. This allows joining a Date column against a string column containing ISO dates.

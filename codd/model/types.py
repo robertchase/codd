@@ -13,6 +13,38 @@ Value = Union[int, float, Decimal, str, bool, datetime.date, "Relation"]
 # Re-export after Relation is defined; at runtime the union resolves lazily.
 
 
+def _values_equal(a: Value, b: Value) -> bool:
+    """Coercion-aware equality for join matching and comparisons.
+
+    Handles date/string promotion (ISO format) and numeric/string promotion.
+    """
+    if a == b:
+        return True
+    # Date/string coercion.
+    if isinstance(a, datetime.date) and isinstance(b, str):
+        try:
+            return a == datetime.date.fromisoformat(b)
+        except ValueError:
+            return False
+    if isinstance(b, datetime.date) and isinstance(a, str):
+        try:
+            return datetime.date.fromisoformat(a) == b
+        except ValueError:
+            return False
+    # Numeric/string coercion.
+    if isinstance(a, str) and isinstance(b, (int, float, Decimal)):
+        try:
+            return Decimal(a) == b
+        except Exception:
+            return False
+    if isinstance(b, str) and isinstance(a, (int, float, Decimal)):
+        try:
+            return a == Decimal(b)
+        except Exception:
+            return False
+    return False
+
+
 class Tuple_:
     """An immutable, hashable tuple (set of named values).
 
@@ -58,9 +90,12 @@ class Tuple_:
         )
 
     def matches(self, other: Tuple_) -> bool:
-        """Check if this tuple matches another on their shared attributes."""
+        """Check if this tuple matches another on their shared attributes.
+
+        Uses coercion-aware equality (date/string, numeric/string).
+        """
         shared = self.attributes() & other.attributes()
-        return all(self._data[k] == other._data[k] for k in shared)
+        return all(_values_equal(self._data[k], other._data[k]) for k in shared)
 
     def merge(self, other: Tuple_) -> Tuple_:
         """Merge two tuples (for natural join). Shared attributes must agree."""

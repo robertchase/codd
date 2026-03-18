@@ -599,6 +599,8 @@ class Executor:
         if isinstance(value, datetime.date):
             return value
         if isinstance(value, str):
+            if value == "today":
+                return datetime.date.today()
             try:
                 return datetime.date.fromisoformat(value)
             except ValueError as e:
@@ -849,11 +851,22 @@ class _ReverseKey:
 
 
 def _coerce_pair(a: Value, b: Value) -> tuple[Value, Value]:
-    """Promote strings to match a numeric counterpart for comparison.
+    """Promote strings to match a numeric or date counterpart for comparison.
 
     If one side is numeric and the other is a string, promote the string.
     If both are strings, promote both (enables numeric comparison on str columns).
+    If one side is a date and the other is a date-like string, promote the string.
     """
+    if isinstance(a, datetime.date) and isinstance(b, str):
+        try:
+            return a, datetime.date.fromisoformat(b)
+        except ValueError:
+            return a, b
+    if isinstance(b, datetime.date) and isinstance(a, str):
+        try:
+            return datetime.date.fromisoformat(a), b
+        except ValueError:
+            return a, b
     if isinstance(a, str) and isinstance(b, (int, float, Decimal)):
         return _promote_numeric(a), b
     if isinstance(b, str) and isinstance(a, (int, float, Decimal)):
@@ -875,14 +888,11 @@ def _make_scalar_cmp(get_left, op: str, rval: Value):
     }
     fn = cmp_ops[op]
 
-    if isinstance(rval, (int, float, Decimal)):
-        # RHS is numeric — promote LHS strings for comparison
-        def pred(t: Tuple_) -> bool:
-            lval, rv = _coerce_pair(get_left(t), rval)
-            return fn(lval, rv)
-        return pred
-
-    return lambda t: fn(get_left(t), rval)
+    # Coerce types for comparison (numeric promotion, date promotion).
+    def pred(t: Tuple_) -> bool:
+        lval, rv = _coerce_pair(get_left(t), rval)
+        return fn(lval, rv)
+    return pred
 
 
 def _make_dynamic_cmp(get_left, op: str, get_right):
