@@ -372,6 +372,54 @@ class TestIota:
             parse("i. 0")
 
 
+class TestDateOp:
+    """Test .d (date) parsing."""
+
+    def test_promotion(self) -> None:
+        """.d with no RHS parses as DateOp(fmt=None)."""
+        result = parse("R +: d: col .d")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.DateOp)
+        assert expr.fmt is None
+        assert isinstance(expr.expr, ast.AttrRef)
+
+    def test_extraction(self) -> None:
+        """.d "year" parses as DateOp(fmt='year')."""
+        result = parse('R +: y: col .d "year"')
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.DateOp)
+        assert expr.fmt == "year"
+
+    def test_format_pattern(self) -> None:
+        """.d "{dd}/{mm}/{yyyy}" parses with format string."""
+        result = parse('R +: f: col .d "{dd}/{mm}/{yyyy}"')
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.DateOp)
+        assert expr.fmt == "{dd}/{mm}/{yyyy}"
+
+    def test_chains_with_arithmetic(self) -> None:
+        """.d promotes, then + adds days."""
+        result = parse("R +: d: col .d + 1")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.BinOp)
+        assert expr.op == "+"
+        assert isinstance(expr.left, ast.DateOp)
+        assert expr.left.fmt is None
+
+    def test_extraction_in_chain(self) -> None:
+        """.d "month" returns int, usable in arithmetic."""
+        result = parse('R +: x: col .d "month" + 1')
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.BinOp)
+        assert isinstance(expr.left, ast.DateOp)
+        assert expr.left.fmt == "month"
+
+
 class TestRename:
     """Test rename parsing."""
 

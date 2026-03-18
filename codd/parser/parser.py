@@ -627,6 +627,9 @@ class Parser:
             elif self._peek().type == TokenType.S_DOT:
                 self._advance()  # consume s.
                 left = self._parse_substring(left)
+            elif self._peek().type == TokenType.D_DOT:
+                self._advance()  # consume .d
+                left = self._parse_date_op(left)
             elif self._peek().type in self._ARITH_OPS:
                 op_tok = self._advance()
                 right = self._parse_computation_atom()
@@ -658,6 +661,17 @@ class Parser:
             return -int(tok.value)
         tok = self._expect(TokenType.INTEGER)
         return int(tok.value)
+
+    def _parse_date_op(self, expr: ast.Expr) -> ast.DateOp:
+        """Parse: .d or .d 'fmt'.
+
+        If a string literal follows, it is the format/extraction specifier.
+        Otherwise it is a bare promotion (string → Date).
+        """
+        fmt: str | None = None
+        if self._peek().type == TokenType.STRING:
+            fmt = self._advance().value
+        return ast.DateOp(expr=expr, fmt=fmt)
 
     def _parse_ternary_expr(self) -> ast.TernaryExpr:
         """Parse: ?: condition true_expr false_expr."""

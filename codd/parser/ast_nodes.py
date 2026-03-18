@@ -118,6 +118,19 @@ class Substring:
     end: int | None = None
 
 
+@dataclass(frozen=True)
+class DateOp:
+    """Date operator: expr .d [fmt].
+
+    fmt=None: type promotion (string → Date).
+    fmt=keyword (no braces): component extraction → int.
+    fmt=pattern (contains {): formatting → str.
+    """
+
+    expr: Expr
+    fmt: str | None = None
+
+
 # Expr is the union of all expression types
 Expr = (
     IntLiteral
@@ -132,6 +145,7 @@ Expr = (
     | TernaryExpr
     | Round
     | Substring
+    | DateOp
 )
 
 

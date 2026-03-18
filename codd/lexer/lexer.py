@@ -232,11 +232,15 @@ class Lexer:
             self._advance()
             return self._make_token(TokenType.DOLLAR_DOT, "$.", line, col)
 
-        # .s (dot-prefix scalar operators)
+        # .s .d (dot-prefix scalar operators)
         if ch == "." and ch2 == "s" and not (self._peek(2).isalnum() or self._peek(2) == "_"):
             self._advance()
             self._advance()
             return self._make_token(TokenType.S_DOT, ".s", line, col)
+        if ch == "." and ch2 == "d" and not (self._peek(2).isalnum() or self._peek(2) == "_"):
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.D_DOT, ".d", line, col)
 
         # --- Single-char operators ---
 

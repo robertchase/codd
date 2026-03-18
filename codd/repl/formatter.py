@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+from datetime import date
 from decimal import Decimal
 
 from codd.model.relation import Relation
@@ -19,6 +20,8 @@ def format_value(value: object) -> str:
         return "{" + tuples_str + "}"
     if isinstance(value, Decimal):
         return str(value)
+    if isinstance(value, date):
+        return value.isoformat()
     if isinstance(value, str):
         return value
     return str(value)

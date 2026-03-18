@@ -6,6 +6,8 @@ Uses isinstance dispatch (visitor-style without accept methods).
 
 from __future__ import annotations
 
+import datetime
+import re
 from decimal import Decimal
 
 from codd.executor.aggregates import _promote_numeric, agg_percent, get_aggregate
@@ -293,6 +295,9 @@ class Executor:
         if isinstance(expr, ast.Substring):
             value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
             return self._apply_substring(value, expr.start, expr.end)
+        if isinstance(expr, ast.DateOp):
+            value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
+            return self._apply_date_op(value, expr.fmt)
         if isinstance(expr, ast.AttrRef):
             raise ExecutionError(
                 f"Cannot reference attribute {expr.name!r} in summarize context"
@@ -419,6 +424,9 @@ class Executor:
         if isinstance(expr, ast.Substring):
             value = self._eval_expr(expr.expr, t, source)
             return self._apply_substring(value, expr.start, expr.end)
+        if isinstance(expr, ast.DateOp):
+            value = self._eval_expr(expr.expr, t, source)
+            return self._apply_date_op(value, expr.fmt)
         raise ExecutionError(f"Unknown expression type: {type(expr).__name__}")
 
     def _eval_attr_ref(self, ref: ast.AttrRef, t: Tuple_) -> Value:
@@ -453,7 +461,17 @@ class Executor:
         return self._apply_binop(expr.op, left, right)
 
     def _apply_binop(self, op: str, left: Value, right: Value) -> Value:
-        """Apply a binary arithmetic operator to two values."""
+        """Apply a binary arithmetic operator to two values.
+
+        Date-aware: date +/- int → date, date - date → int (days).
+        """
+        # --- Date arithmetic ---
+        left_is_date = isinstance(left, datetime.date)
+        right_is_date = isinstance(right, datetime.date)
+
+        if left_is_date or right_is_date:
+            return self._apply_date_binop(op, left, right)
+
         if isinstance(left, str) or isinstance(right, str):
             raise ExecutionError(
                 f"Cannot apply {op} to {left!r} and {right!r}"
@@ -475,6 +493,30 @@ class Executor:
         if op not in ops:
             raise ExecutionError(f"Unknown operator: {op}")
         return ops[op](left, right)
+
+    def _apply_date_binop(
+        self, op: str, left: Value, right: Value
+    ) -> Value:
+        """Apply arithmetic involving at least one date value."""
+        left_is_date = isinstance(left, datetime.date)
+        right_is_date = isinstance(right, datetime.date)
+
+        if op == "+":
+            if left_is_date and right_is_date:
+                raise ExecutionError("Cannot add two dates")
+            if left_is_date and isinstance(right, int):
+                return left + datetime.timedelta(days=right)
+            if right_is_date and isinstance(left, int):
+                return right + datetime.timedelta(days=left)
+        elif op == "-":
+            if left_is_date and right_is_date:
+                return (left - right).days
+            if left_is_date and isinstance(right, int):
+                return left - datetime.timedelta(days=right)
+
+        raise ExecutionError(
+            f"Cannot apply {op} to {left!r} and {right!r}"
+        )
 
     def _eval_ternary(
         self, expr: ast.TernaryExpr, t: Tuple_, source: Relation | None = None
@@ -515,6 +557,102 @@ class Executor:
         idx_end = max(0, min(idx_end, length))
 
         return s[idx_start:idx_end]
+
+    # --- Date operations ---
+
+    _DATE_COMPONENTS: dict[str, str] = {
+        "year": "year",
+        "month": "month",
+        "day": "day",
+        "week": "week",
+        "dow": "dow",
+    }
+
+    _MONTH_ABBR = [
+        "", "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+        "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+    ]
+
+    _DAY_ABBR = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+
+    def _apply_date_op(self, value: Value, fmt: str | None) -> Value:
+        """Apply the .d operator: promotion, extraction, or formatting.
+
+        fmt=None: promote string to datetime.date.
+        fmt=keyword: extract integer component.
+        fmt=pattern with {}: format as string.
+        """
+        d = self._to_date(value)
+        if fmt is None:
+            return d
+        if fmt in self._DATE_COMPONENTS:
+            return self._extract_date_component(d, fmt)
+        if "{" in fmt:
+            return self._format_date(d, fmt)
+        raise ExecutionError(
+            f"Unknown date format: {fmt!r} (use a component keyword "
+            "or a {{...}} format pattern)"
+        )
+
+    def _to_date(self, value: Value) -> datetime.date:
+        """Convert a value to datetime.date."""
+        if isinstance(value, datetime.date):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.date.fromisoformat(value)
+            except ValueError as e:
+                raise ExecutionError(
+                    f"Cannot parse date: {value!r} (expected YYYY-MM-DD)"
+                ) from e
+        raise ExecutionError(
+            f"Cannot convert {type(value).__name__} to date: {value!r}"
+        )
+
+    def _extract_date_component(self, d: datetime.date, component: str) -> int:
+        """Extract an integer component from a date."""
+        if component == "year":
+            return d.year
+        if component == "month":
+            return d.month
+        if component == "day":
+            return d.day
+        if component == "week":
+            return d.isocalendar().week
+        if component == "dow":
+            return d.isoweekday()
+        raise ExecutionError(f"Unknown date component: {component!r}")
+
+    _FORMAT_TOKEN_RE = re.compile(r"\{(\w+)\}")
+
+    def _format_date(self, d: datetime.date, pattern: str) -> str:
+        """Format a date using a {token} pattern."""
+
+        def _replace(match: re.Match[str]) -> str:
+            token = match.group(1)
+            if token == "d":
+                return str(d.day)
+            if token == "dd":
+                return f"{d.day:02d}"
+            if token == "m":
+                return str(d.month)
+            if token == "mm":
+                return f"{d.month:02d}"
+            if token == "mmm":
+                return self._MONTH_ABBR[d.month]
+            if token == "yy":
+                return f"{d.year % 100:02d}"
+            if token == "yyyy":
+                return str(d.year)
+            if token == "week":
+                return str(d.isocalendar().week)
+            if token == "dow":
+                return str(d.isoweekday())
+            if token == "ddd":
+                return self._DAY_ABBR[d.isoweekday() - 1]
+            raise ExecutionError(f"Unknown date format token: {{{token}}}")
+
+        return self._FORMAT_TOKEN_RE.sub(_replace, pattern)
 
     def _eval_aggregate_call(
         self, expr: ast.AggregateCall, t: Tuple_, source: Relation | None = None

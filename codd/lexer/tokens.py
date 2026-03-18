@@ -55,6 +55,7 @@ class TokenType(Enum):
     P_DOT = auto()          # p.  percent aggregate
     I_DOT = auto()          # i.  iota (generate)
     S_DOT = auto()          # s.  substring
+    D_DOT = auto()          # .d  date
     COLON_EQ = auto()       # :=  assign
     PIPE_DOT = auto()       # |.  union
     PIPE_EQ = auto()        # |=  insert

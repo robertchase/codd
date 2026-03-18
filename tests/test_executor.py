@@ -390,6 +390,143 @@ class TestIota:
         assert t["i"] == 1
 
 
+class TestDateOp:
+    """Test .d (date) operator."""
+
+    def test_promotion(self) -> None:
+        """String .d promotes to datetime.date."""
+        import datetime
+
+        result = run('E +: d: "2026-03-17" .d # [name d]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["d"] == datetime.date(2026, 3, 17)
+
+    def test_extract_year(self) -> None:
+        """.d "year" extracts year as int."""
+        result = run('E +: y: "2026-03-17" .d "year" # [name y]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["y"] == 2026
+
+    def test_extract_month(self) -> None:
+        """.d "month" extracts month as int."""
+        result = run('E +: m: "2026-03-17" .d "month" # [name m]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["m"] == 3
+
+    def test_extract_day(self) -> None:
+        """.d "day" extracts day as int."""
+        result = run('E +: d: "2026-03-17" .d "day" # [name d]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["d"] == 17
+
+    def test_extract_week(self) -> None:
+        """.d "week" extracts ISO week number."""
+        result = run('E +: w: "2026-01-05" .d "week" # [name w]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["w"] == 2
+
+    def test_extract_dow(self) -> None:
+        """.d "dow" extracts day of week (1=Mon)."""
+        # 2026-03-17 is a Tuesday
+        result = run('E +: d: "2026-03-17" .d "dow" # [name d]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["d"] == 2
+
+    def test_format_iso(self) -> None:
+        """.d "{yyyy}-{mm}-{dd}" formats as ISO string."""
+        result = run('E +: f: "2026-03-17" .d "{yyyy}-{mm}-{dd}" # [name f]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["f"] == "2026-03-17"
+
+    def test_format_dmy(self) -> None:
+        """.d "{dd} {mmm} {yyyy}" formats day-month-year."""
+        result = run('E +: f: "2026-03-17" .d "{dd} {mmm} {yyyy}" # [name f]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["f"] == "17 MAR 2026"
+
+    def test_format_compact(self) -> None:
+        """.d "{dd}{mmm}{yy}" formats compact."""
+        result = run('E +: f: "2026-01-01" .d "{dd}{mmm}{yy}" # [name f]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["f"] == "01JAN26"
+
+    def test_format_no_padding(self) -> None:
+        """.d "{d}/{m}/{yy}" uses unpadded values."""
+        result = run('E +: f: "2026-03-07" .d "{d}/{m}/{yy}" # [name f]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["f"] == "7/3/26"
+
+    def test_format_day_name(self) -> None:
+        """.d "{ddd}" formats day abbreviation."""
+        result = run('E +: f: "2026-03-17" .d "{ddd}" # [name f]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["f"] == "TUE"
+
+    def test_add_days(self) -> None:
+        """date + int adds days."""
+        import datetime
+
+        result = run('E +: d: "2026-03-17" .d + 5 # [name d]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["d"] == datetime.date(2026, 3, 22)
+
+    def test_subtract_days(self) -> None:
+        """date - int subtracts days."""
+        import datetime
+
+        result = run('E +: d: "2026-03-17" .d - 10 # [name d]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["d"] == datetime.date(2026, 3, 7)
+
+    def test_date_difference(self) -> None:
+        """date - date gives int days (parens for left-to-right)."""
+        result = run('E +: diff: "2026-03-17" .d - ("2026-03-10" .d) # [name diff]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["diff"] == 7
+
+    def test_iota_date_range(self) -> None:
+        """i. with .d builds a date range."""
+        import datetime
+
+        result = run('i. 3 =: i: "2025-12-31" .d + i')
+        assert isinstance(result, Relation)
+        assert len(result) == 3
+        values = {t["i"] for t in result}
+        assert values == {
+            datetime.date(2026, 1, 1),
+            datetime.date(2026, 1, 2),
+            datetime.date(2026, 1, 3),
+        }
+
+    def test_already_date_noop(self) -> None:
+        """.d on a date value is a no-op."""
+        import datetime
+
+        result = run('E +: d: "2026-03-17" .d .d # [name d]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["d"] == datetime.date(2026, 3, 17)
+
+    def test_bad_date_string(self) -> None:
+        """Non-date string .d raises error."""
+        with pytest.raises(ExecutionError, match="Cannot parse date"):
+            run('E +: d: "not-a-date" .d # [name d]')
+
+
 class TestRename:
     """Test @ (rename)."""
 

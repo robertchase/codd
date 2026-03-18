@@ -37,6 +37,7 @@ _EXPRESSIONS = [
     ("+ - * /", "Arithmetic", "salary * 0.1"),
     ("~", "Precision", "%. salary ~ 2"),
     (".s", "Substring", "name .s [1 3]  or  name .s [-2]"),
+    (".d", "Date", "col .d  or  col .d 'year'  or  col .d '{dd}/{mm}/{yyyy}'"),
     ("?:", "Ternary", '?: dept_id = 10 "eng" "other"'),
 ]
 
