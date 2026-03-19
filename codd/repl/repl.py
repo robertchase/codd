@@ -14,7 +14,12 @@ from codd.model.relation import Relation
 from codd.parser import ast_nodes as ast
 from codd.parser.parser import Parser, ParseError
 from codd.cli.ops_cmd import ops_output
-from codd.repl.formatter import format_array, format_relation
+from codd.repl.formatter import (
+    format_array,
+    format_array_csv,
+    format_csv,
+    format_relation,
+)
 
 # Tracks the last-used save path for \save with no args.
 _last_save_path: Path | None = None
@@ -36,8 +41,8 @@ def run_repl(env: Environment | None = None) -> None:
 
     print(f"Codd REPL v{__version__}")
     print(
-        "Commands: \\load <file> [name], \\save [file], \\drop <name>, "
-        "\\env, \\ops, \\quit"
+        "Commands: \\load <file> [name], \\save [file], \\export <file> <expr>, "
+        "\\drop <name>, \\env, \\ops, \\quit"
     )
     print()
 
@@ -92,6 +97,8 @@ def _handle_command(line: str, env: Environment) -> None:
         _cmd_drop(args, env)
     elif cmd == "\\env":
         _cmd_env(env)
+    elif cmd == "\\export":
+        _cmd_export(args, env)
     elif cmd == "\\ops":
         print(ops_output())
     else:
@@ -200,6 +207,43 @@ def _cmd_save(args: list[str], env: Environment) -> None:
         print(f"Saved workspace to {path}")
     except Exception as e:
         print(f"Error saving workspace: {e}")
+
+
+def _cmd_export(args: list[str], env: Environment) -> None:
+    """Handle \\export: export a relation to a CSV file.
+
+    Usage: \\export <file> <expr>
+    The expression is evaluated and the result is written as CSV.
+    """
+    if len(args) < 2:
+        print("Usage: \\export <file> <expression>")
+        return
+
+    path = Path(args[0])
+    expr_str = " ".join(args[1:])
+
+    try:
+        tokens = Lexer(expr_str).tokenize()
+        tree = Parser(tokens).parse()
+        result = Executor(env).execute(tree)
+    except (LexError, ParseError, ExecutionError) as e:
+        print(f"Error: {e}")
+        return
+
+    if isinstance(result, list):
+        csv_text = format_array_csv(result)
+    elif isinstance(result, Relation):
+        csv_text = format_csv(result)
+    else:
+        print(f"Error: cannot export {type(result).__name__} (expected a relation)")
+        return
+
+    try:
+        path.write_text(csv_text + "\n")
+        count = len(result)
+        print(f"Exported {count} rows to {path}")
+    except OSError as e:
+        print(f"Error writing {path}: {e}")
 
 
 def _cmd_drop(args: list[str], env: Environment) -> None:
