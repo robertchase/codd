@@ -279,6 +279,32 @@ class TestLeftToRightArithmetic:
             if t["name"] == "Alice":
                 assert t["x"] == 82000
 
+    def test_integer_divide(self) -> None:
+        """salary // 1000 gives integer quotient."""
+        result = run("E +: x: salary // 1000 # [name x]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["x"] == 80
+            elif t["name"] == "Eve":
+                assert t["x"] == 45
+
+    def test_remainder(self) -> None:
+        """salary % 1000 gives remainder."""
+        result = run("E +: x: salary % 7 # [name x]")
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                # 80000 % 7 == 4
+                assert t["x"] == 80000 % 7
+
+    def test_integer_divide_chain(self) -> None:
+        """i // 3 % 2 chains left-to-right."""
+        result = run("i. 6 +: x: i // 3 % 2")
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["x"] == (t["i"] // 3) % 2
+
 
 class TestSubstring:
     """Test .s (substring)."""

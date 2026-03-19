@@ -56,6 +56,8 @@ class TokenType(Enum):
     I_DOT = auto()          # i.  iota (generate)
     S_DOT = auto()          # s.  substring
     D_DOT = auto()          # .d  date
+    DOUBLE_SLASH = auto()   # //  integer divide
+    PERCENT = auto()        # %   remainder
     COLON_EQ = auto()       # :=  assign
     PIPE_DOT = auto()       # |.  union
     PIPE_EQ = auto()        # |=  insert

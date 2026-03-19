@@ -489,6 +489,8 @@ class Executor:
             "-": lambda a, b: a - b,
             "*": lambda a, b: a * b,
             "/": lambda a, b: a / b,
+            "//": lambda a, b: a // b,
+            "%": lambda a, b: a % b,
         }
         if op not in ops:
             raise ExecutionError(f"Unknown operator: {op}")

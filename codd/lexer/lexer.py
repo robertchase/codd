@@ -118,6 +118,10 @@ class Lexer:
             self._advance()
             self._advance()
             return self._make_token(TokenType.SLASH_COLON, "/:", line, col)
+        if ch == "/" and ch2 == "/":
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.DOUBLE_SLASH, "//", line, col)
 
         # +: +.
         if ch == "+" and ch2 == ":":
@@ -254,6 +258,7 @@ class Lexer:
             "|": TokenType.PIPE,
             "&": TokenType.AMPERSAND,
             "/": TokenType.SLASH,
+            "%": TokenType.PERCENT,
             "$": TokenType.DOLLAR,
             "^": TokenType.CARET,
             ">": TokenType.GT,

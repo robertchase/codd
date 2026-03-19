@@ -58,7 +58,7 @@ The parser knows which context it's in because extend computation parsing uses `
 
 ### Left-to-right arithmetic
 
-Computation expressions evaluate strictly left-to-right with no operator precedence, matching the relational chain. `_parse_left_to_right_expr` handles `+`, `-`, `*`, `/`, and `~` all at the same level in a single loop. So `a + b * 2` parses as `(a + b) * 2` and `a / b ~ 2` parses as `(a / b) ~ 2`. Use parentheses for standard math order: `a + (b * 2)`.
+Computation expressions evaluate strictly left-to-right with no operator precedence, matching the relational chain. `_parse_left_to_right_expr` handles `+`, `-`, `*`, `/`, `//`, `%`, and `~` all at the same level in a single loop. So `a + b * 2` parses as `(a + b) * 2` and `a / b ~ 2` parses as `(a / b) ~ 2`. Use parentheses for standard math order: `a + (b * 2)`. `//` is integer divide, `%` is remainder.
 
 ### Precision primitive (~)
 

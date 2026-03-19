@@ -628,6 +628,8 @@ class Parser:
         TokenType.MINUS: "-",
         TokenType.STAR: "*",
         TokenType.SLASH: "/",
+        TokenType.DOUBLE_SLASH: "//",
+        TokenType.PERCENT: "%",
     }
 
     def _parse_left_to_right_expr(self) -> ast.Expr:

@@ -286,6 +286,22 @@ class TestLeftToRightArithmetic:
         assert expr.left.places == 2
         assert isinstance(expr.right, ast.AttrRef)
 
+    def test_integer_divide(self) -> None:
+        """a // b parses as BinOp with op '//'."""
+        result = parse("R +: x: a // b")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.BinOp)
+        assert expr.op == "//"
+
+    def test_remainder(self) -> None:
+        """a % b parses as BinOp with op '%'."""
+        result = parse("R +: x: a % b")
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.BinOp)
+        assert expr.op == "%"
+
 
 class TestSubstring:
     """Test .s (substring) parsing."""
