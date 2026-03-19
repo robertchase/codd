@@ -84,6 +84,54 @@ class TestProject:
         assert result.attributes == frozenset({"name", "salary"})
 
 
+class TestBacktickIdent:
+    """Test backtick-quoted identifiers for column names with spaces."""
+
+    def test_project(self) -> None:
+        """Backtick idents work in project."""
+        env = Environment()
+        env.bind("T", Relation(frozenset({
+            Tuple_({"Account Name": "Alice", "Amount": 100}),
+            Tuple_({"Account Name": "Bob", "Amount": 200}),
+        })))
+        result = run("T # `Account Name`", env)
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"Account Name"})
+        assert len(result) == 2
+
+    def test_filter(self) -> None:
+        """Backtick idents work in filter conditions."""
+        env = Environment()
+        env.bind("T", Relation(frozenset({
+            Tuple_({"Account Name": "Alice", "Amount": 100}),
+            Tuple_({"Account Name": "Bob", "Amount": 200}),
+        })))
+        result = run('T ? `Account Name` = "Alice"', env)
+        assert isinstance(result, Relation)
+        assert len(result) == 1
+
+    def test_extend(self) -> None:
+        """Backtick idents work in extend computations."""
+        env = Environment()
+        env.bind("T", Relation(frozenset({
+            Tuple_({"Unit Price": 10, "Qty": 5}),
+        })))
+        result = run("T +: Total: `Unit Price` * Qty", env)
+        assert isinstance(result, Relation)
+        t = next(iter(result))
+        assert t["Total"] == 50
+
+    def test_rename(self) -> None:
+        """Backtick idents work in rename."""
+        env = Environment()
+        env.bind("T", Relation(frozenset({
+            Tuple_({"Account Name": "Alice"}),
+        })))
+        result = run("T @ `Account Name` -> name", env)
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"name"})
+
+
 class TestRemove:
     """Test #! (remove)."""
 

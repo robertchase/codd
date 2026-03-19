@@ -286,6 +286,11 @@ class Lexer:
         if ch == '"':
             return self._read_string(line, col)
 
+        # --- Backtick-quoted identifiers ---
+
+        if ch == '`':
+            return self._read_backtick_ident(line, col)
+
         # --- Number literals ---
 
         if ch.isdigit():
@@ -315,6 +320,21 @@ class Lexer:
             else:
                 chars.append(self._advance())
         raise LexError("Unterminated string literal", line, col)
+
+    def _read_backtick_ident(self, line: int, col: int) -> Token:
+        """Read a backtick-quoted identifier: `Account Name`."""
+        self._advance()  # consume opening `
+        chars: list[str] = []
+        while self._pos < len(self._source):
+            ch = self._peek()
+            if ch == '`':
+                self._advance()  # consume closing `
+                value = "".join(chars)
+                if not value:
+                    raise LexError("Empty backtick identifier", line, col)
+                return self._make_token(TokenType.IDENT, value, line, col)
+            chars.append(self._advance())
+        raise LexError("Unterminated backtick identifier", line, col)
 
     def _read_number(self, line: int, col: int) -> Token:
         """Read an integer or float literal."""

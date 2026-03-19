@@ -217,6 +217,34 @@ class TestIdentifiers:
         assert toks[0].value == "table2"
 
 
+    def test_backtick_basic(self) -> None:
+        """Backtick-quoted identifier with spaces."""
+        toks = Lexer('`Account Name`').tokenize()
+        assert toks[0].type == TokenType.IDENT
+        assert toks[0].value == "Account Name"
+
+    def test_backtick_in_expression(self) -> None:
+        """Backtick identifiers work in expressions."""
+        result = types('R # [`Account Name` `Processed Date`]')
+        assert result == [
+            TokenType.IDENT, TokenType.HASH,
+            TokenType.LBRACKET, TokenType.IDENT, TokenType.IDENT, TokenType.RBRACKET,
+        ]
+        vals = values('R # [`Account Name` `Processed Date`]')
+        assert vals[3] == "Account Name"
+        assert vals[4] == "Processed Date"
+
+    def test_backtick_empty_error(self) -> None:
+        """Empty backtick identifier is an error."""
+        with pytest.raises(LexError, match="Empty backtick"):
+            Lexer('``').tokenize()
+
+    def test_backtick_unterminated_error(self) -> None:
+        """Unterminated backtick identifier is an error."""
+        with pytest.raises(LexError, match="Unterminated backtick"):
+            Lexer('`foo').tokenize()
+
+
 class TestComplexExpressions:
     """Test tokenizing full expressions."""
 
