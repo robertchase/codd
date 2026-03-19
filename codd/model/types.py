@@ -165,3 +165,13 @@ class OrderedArray(list["Tuple_"]):
         super().__init__(tuples)
         # Use object.__setattr__ style to avoid conflicts, but list is mutable
         self.column_order = column_order
+
+
+class RotatedArray(list["Tuple_"]):
+    """A list of tuples for rotated (vertical) display.
+
+    Each tuple is displayed as attr: value rows, with tuples
+    separated by blank lines.
+    """
+
+    pass

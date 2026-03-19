@@ -13,7 +13,7 @@ from decimal import Decimal
 from codd.executor.aggregates import _promote_numeric, agg_percent, get_aggregate
 from codd.executor.environment import Environment
 from codd.model.relation import Relation
-from codd.model.types import OrderedArray, Tuple_, Value, str_to_date
+from codd.model.types import OrderedArray, RotatedArray, Tuple_, Value, str_to_date
 from codd.parser import ast_nodes as ast
 
 
@@ -106,6 +106,8 @@ class Executor:
             return self._eval_iota(node)
         if isinstance(node, ast.RelationLiteral):
             return self._eval_relation_literal(node)
+        if isinstance(node, ast.Rotate):
+            return self._eval_rotate(node)
         raise ExecutionError(f"Unknown node type: {type(node).__name__}")
 
     def _as_relation(self, node: ast.RelExpr) -> Relation:
@@ -359,6 +361,11 @@ class Executor:
             return tuple(parts)
 
         return source.sort(sort_key)
+
+    def _eval_rotate(self, node: ast.Rotate) -> RotatedArray:
+        """Evaluate: source r. — rotated (vertical) display."""
+        source = self._as_relation(node.source)
+        return RotatedArray(list(source))
 
     def _eval_order_columns(self, node: ast.OrderColumns) -> OrderedArray:
         """Evaluate: source $. [col1 col2 ...].

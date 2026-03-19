@@ -257,6 +257,9 @@ class Parser:
                 left = self._parse_order_columns(left)
             elif tok.type == TokenType.CARET:
                 left = self._parse_take(left)
+            elif tok.type == TokenType.R_DOT:
+                self._advance()  # consume r.
+                left = ast.Rotate(source=left)
             else:
                 break
         return left

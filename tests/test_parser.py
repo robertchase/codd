@@ -388,6 +388,22 @@ class TestIota:
             parse("i. 0")
 
 
+class TestRotate:
+    """Test r. (rotate) parsing."""
+
+    def test_basic(self) -> None:
+        """E r. parses as Rotate."""
+        result = parse("E r.")
+        assert isinstance(result, ast.Rotate)
+        assert isinstance(result.source, ast.RelName)
+
+    def test_after_filter(self) -> None:
+        """E ? salary > 50000 r. chains correctly."""
+        result = parse("E ? salary > 50000 r.")
+        assert isinstance(result, ast.Rotate)
+        assert isinstance(result.source, ast.Filter)
+
+
 class TestRelationLiteral:
     """Test {} (relation literal) parsing."""
 

@@ -416,6 +416,36 @@ class TestIota:
         assert t["i"] == 1
 
 
+class TestRotate:
+    """Test r. (rotate)."""
+
+    def test_returns_rotated_array(self) -> None:
+        """r. returns a RotatedArray."""
+        from codd.model.types import RotatedArray
+
+        result = run("E ? name = \"Alice\" r.")
+        assert isinstance(result, RotatedArray)
+        assert len(result) == 1
+        assert result[0]["name"] == "Alice"
+
+    def test_multi_tuple(self) -> None:
+        """r. on multiple tuples returns all of them."""
+        from codd.model.types import RotatedArray
+
+        result = run("E ? dept_id = 10 r.")
+        assert isinstance(result, RotatedArray)
+        assert len(result) == 3
+
+    def test_preserves_data(self) -> None:
+        """r. preserves all attribute values."""
+        from codd.model.types import RotatedArray
+
+        result = run("i. 3 r.")
+        assert isinstance(result, RotatedArray)
+        values = {t["i"] for t in result}
+        assert values == {1, 2, 3}
+
+
 class TestRelationLiteral:
     """Test {} (relation literal)."""
 

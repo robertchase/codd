@@ -8,7 +8,7 @@ from datetime import date
 from decimal import Decimal
 
 from codd.model.relation import Relation
-from codd.model.types import OrderedArray, Tuple_
+from codd.model.types import OrderedArray, RotatedArray, Tuple_
 
 
 def format_value(value: object) -> str:
@@ -128,3 +128,25 @@ def _build_table(headers: list[str], rows: list[list[str]]) -> str:
     lines.append(sep)
 
     return "\n".join(lines)
+
+
+def format_rotated(arr: RotatedArray) -> str:
+    """Format a rotated array: each tuple as attr: value rows.
+
+    Attribute names are right-aligned. Tuples separated by blank lines.
+    """
+    if not arr:
+        return "(empty)"
+
+    attrs = sorted(arr[0].data.keys())
+    max_attr_len = max(len(a) for a in attrs)
+
+    blocks: list[str] = []
+    for t in arr:
+        lines = []
+        for a in attrs:
+            label = a.rjust(max_attr_len)
+            lines.append(f"{label}: {format_value(t[a])}")
+        blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks)

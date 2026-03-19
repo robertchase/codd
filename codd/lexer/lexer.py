@@ -337,6 +337,7 @@ class Lexer:
         "i": TokenType.I_DOT,
         "n": TokenType.N_DOT,
         "p": TokenType.P_DOT,
+        "r": TokenType.R_DOT,
     }
 
     def _read_ident(self, line: int, col: int) -> Token:

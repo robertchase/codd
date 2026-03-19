@@ -370,6 +370,13 @@ class Iota:
 
 
 @dataclass(frozen=True)
+class Rotate:
+    """Rotate display: r. — transposes tuples for vertical display."""
+
+    source: RelExpr
+
+
+@dataclass(frozen=True)
 class RelationLiteral:
     """Inline relation literal: {header; row; row; ...}.
 
@@ -404,6 +411,7 @@ RelExpr = (
     | OrderColumns
     | Take
     | Iota
+    | Rotate
     | RelationLiteral
 )
 

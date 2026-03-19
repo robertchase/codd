@@ -54,6 +54,7 @@ class TokenType(Enum):
     N_DOT = auto()          # n.  collect aggregate
     P_DOT = auto()          # p.  percent aggregate
     I_DOT = auto()          # i.  iota (generate)
+    R_DOT = auto()          # r.  rotate display
     S_DOT = auto()          # s.  substring
     D_DOT = auto()          # .d  date
     DOUBLE_SLASH = auto()   # //  integer divide

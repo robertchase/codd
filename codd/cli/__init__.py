@@ -156,12 +156,14 @@ def _run_eval(
     from codd.executor.executor import Executor, ExecutionError
     from codd.lexer.lexer import Lexer, LexError
     from codd.model.relation import Relation
+    from codd.model.types import RotatedArray
     from codd.parser.parser import Parser, ParseError
     from codd.repl.formatter import (
         format_array,
         format_array_csv,
         format_csv,
         format_relation,
+        format_rotated,
     )
 
     # Bash history expansion escapes '!' to '\!'.
@@ -173,7 +175,9 @@ def _run_eval(
         tree = Parser(tokens).parse()
         result = Executor(env).execute(tree)
 
-        if isinstance(result, list):
+        if isinstance(result, RotatedArray):
+            click.echo(format_rotated(result))
+        elif isinstance(result, list):
             click.echo(
                 format_array_csv(result, header=header)
                 if output_csv else format_array(result)
@@ -238,12 +242,14 @@ def _run_file(
     from codd.executor.executor import Executor, ExecutionError
     from codd.lexer.lexer import Lexer, LexError
     from codd.model.relation import Relation
+    from codd.model.types import RotatedArray
     from codd.parser.parser import Parser, ParseError
     from codd.repl.formatter import (
         format_array,
         format_array_csv,
         format_csv,
         format_relation,
+        format_rotated,
     )
 
     try:
@@ -275,7 +281,9 @@ def _run_file(
 
         # Print the last result.
         header = not no_header
-        if isinstance(result, list):
+        if isinstance(result, RotatedArray):
+            click.echo(format_rotated(result))
+        elif isinstance(result, list):
             click.echo(
                 format_array_csv(result, header=header)
                 if output_csv else format_array(result)

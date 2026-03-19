@@ -21,6 +21,7 @@ _RELATIONAL = [
     ("$", "Sort", "E $ salary-"),
     ("$.", "Order columns", "E $. [salary name]"),
     ("^", "Take", "E $ salary- ^ 3"),
+    ("r.", "Rotate", "E ? name = \"Alice\" r."),
 ]
 
 _AGGREGATES = [

@@ -14,11 +14,13 @@ from codd.model.relation import Relation
 from codd.parser import ast_nodes as ast
 from codd.parser.parser import Parser, ParseError
 from codd.cli.ops_cmd import ops_output
+from codd.model.types import RotatedArray
 from codd.repl.formatter import (
     format_array,
     format_array_csv,
     format_csv,
     format_relation,
+    format_rotated,
 )
 
 # Tracks the last-used save path for \save with no args.
@@ -67,7 +69,9 @@ def run_repl(env: Environment | None = None) -> None:
 
             if isinstance(tree, ast.Assignment):
                 print(f"{tree.name} := ", end="")
-            if isinstance(result, list):
+            if isinstance(result, RotatedArray):
+                print(format_rotated(result))
+            elif isinstance(result, list):
                 print(format_array(result))
             elif isinstance(result, Relation):
                 print(format_relation(result))
