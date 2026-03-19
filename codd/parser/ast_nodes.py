@@ -369,6 +369,18 @@ class Iota:
     name: str = "i"
 
 
+@dataclass(frozen=True)
+class RelationLiteral:
+    """Inline relation literal: {header; row; row; ...}.
+
+    Header is a tuple of attribute names.
+    Each row is a tuple of literal values (str, int, float, bool).
+    """
+
+    attributes: tuple[str, ...]
+    rows: tuple[tuple[str | int | float | bool, ...], ...]
+
+
 # RelExpr is the union of all relational expression types
 RelExpr = (
     RelName
@@ -392,6 +404,7 @@ RelExpr = (
     | OrderColumns
     | Take
     | Iota
+    | RelationLiteral
 )
 
 

@@ -43,6 +43,7 @@ _EXPRESSIONS = [
 
 _SOURCES = [
     ("i.", "Iota (generate)", "i. 5  or  i. month: 12"),
+    ("{}", "Relation literal", '{name age; "Alice" 30; "Bob" 25}'),
 ]
 
 _OTHER = [

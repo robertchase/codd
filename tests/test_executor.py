@@ -416,6 +416,69 @@ class TestIota:
         assert t["i"] == 1
 
 
+class TestRelationLiteral:
+    """Test {} (relation literal)."""
+
+    def test_basic(self) -> None:
+        """Two-column relation with mixed types."""
+        result = run('{name age; "Alice" 30; "Bob" 25}')
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"name", "age"})
+        assert len(result) == 2
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["age"] == 30
+            elif t["name"] == "Bob":
+                assert t["age"] == 25
+
+    def test_single_column(self) -> None:
+        """Single-column relation."""
+        result = run("{x; 1; 2; 3}")
+        assert isinstance(result, Relation)
+        assert len(result) == 3
+        values = {t["x"] for t in result}
+        assert values == {1, 2, 3}
+
+    def test_chain_filter(self) -> None:
+        """Filter on a relation literal."""
+        result = run("{x; 1; 2; 3; 4; 5} ? x > 3")
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        values = {t["x"] for t in result}
+        assert values == {4, 5}
+
+    def test_chain_extend(self) -> None:
+        """Extend a relation literal."""
+        result = run("{x; 10; 20} +: y: x * 2")
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["y"] == t["x"] * 2
+
+    def test_join_inline(self) -> None:
+        """Join a relation literal with an existing relation."""
+        result = run('{dept_id label; 10 "eng"; 20 "sales"} *. E # [name label]')
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["label"] == "eng"
+            elif t["name"] == "Carol":
+                assert t["label"] == "sales"
+
+    def test_empty_rows(self) -> None:
+        """Header with no data rows produces an empty relation."""
+        result = run("{x}")
+        assert isinstance(result, Relation)
+        assert len(result) == 0
+        assert result.attributes == frozenset({"x"})
+
+    def test_negative_values(self) -> None:
+        """Negative numbers work."""
+        result = run("{x; -5; -10}")
+        assert isinstance(result, Relation)
+        values = {t["x"] for t in result}
+        assert values == {-5, -10}
+
+
 class TestDateOp:
     """Test .d (date) operator."""
 

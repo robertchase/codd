@@ -274,6 +274,7 @@ class Lexer:
             ":": TokenType.COLON,
             ".": TokenType.DOT,
             ",": TokenType.COMMA,
+            ";": TokenType.SEMICOLON,
         }
 
         if ch in single_map:

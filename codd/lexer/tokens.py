@@ -83,6 +83,7 @@ class TokenType(Enum):
     COLON = auto()          # :
     DOT = auto()            # .
     COMMA = auto()          # ,
+    SEMICOLON = auto()      # ;
 
     # Special
     EOF = auto()

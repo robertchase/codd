@@ -112,6 +112,8 @@ class Parser:
             return expr
         if tok.type == TokenType.I_DOT:
             return self._parse_iota()
+        if tok.type == TokenType.LBRACE:
+            return self._parse_relation_literal()
         raise ParseError(f"Expected relation name or '(', got {tok.value!r}", tok)
 
     def _parse_iota(self) -> ast.Iota:
@@ -134,6 +136,85 @@ class Parser:
         if count <= 0:
             raise ParseError("i. count must be a positive integer", tok)
         return ast.Iota(count=count, name=name)
+
+    # Value tokens that can appear in relation literal rows.
+    _LITERAL_VALUE_TYPES = frozenset({
+        TokenType.STRING,
+        TokenType.INTEGER,
+        TokenType.FLOAT,
+        TokenType.BOOLEAN,
+    })
+
+    def _parse_relation_literal(self) -> ast.RelationLiteral:
+        """Parse: {header; row; row; ...}.
+
+        Header is a sequence of IDENT tokens (attribute names).
+        Each row is a sequence of literal values separated by whitespace.
+        Rows are separated by semicolons.
+        """
+        self._advance()  # consume {
+
+        # Parse header: sequence of IDENTs until SEMICOLON.
+        attrs: list[str] = []
+        while self._peek().type == TokenType.IDENT:
+            attrs.append(self._advance().value)
+        if not attrs:
+            raise ParseError(
+                "Relation literal must start with attribute names",
+                self._peek(),
+            )
+
+        # Parse rows.
+        rows: list[tuple[str | int | float | bool, ...]] = []
+        while self._peek().type == TokenType.SEMICOLON:
+            self._advance()  # consume ;
+            if self._peek().type == TokenType.RBRACE:
+                break  # trailing semicolon
+            row = self._parse_literal_row(len(attrs))
+            rows.append(tuple(row))
+
+        self._expect(TokenType.RBRACE)
+        return ast.RelationLiteral(
+            attributes=tuple(attrs),
+            rows=tuple(rows),
+        )
+
+    def _parse_literal_row(
+        self, expected_cols: int
+    ) -> list[str | int | float | bool]:
+        """Parse a single row of literal values."""
+        values: list[str | int | float | bool] = []
+        while (
+            self._peek().type in self._LITERAL_VALUE_TYPES
+            or self._peek().type == TokenType.MINUS
+        ):
+            if self._peek().type == TokenType.MINUS:
+                self._advance()  # consume -
+                tok = self._peek()
+                if tok.type == TokenType.INTEGER:
+                    self._advance()
+                    values.append(-int(tok.value))
+                elif tok.type == TokenType.FLOAT:
+                    self._advance()
+                    values.append(-float(tok.value))
+                else:
+                    raise ParseError(
+                        "Expected number after '-' in relation literal", tok
+                    )
+            elif self._peek().type == TokenType.STRING:
+                values.append(self._advance().value)
+            elif self._peek().type == TokenType.INTEGER:
+                values.append(int(self._advance().value))
+            elif self._peek().type == TokenType.FLOAT:
+                values.append(float(self._advance().value))
+            elif self._peek().type == TokenType.BOOLEAN:
+                values.append(self._advance().value == "true")
+        if len(values) != expected_cols:
+            raise ParseError(
+                f"Row has {len(values)} values but header has {expected_cols} columns",
+                self._peek(),
+            )
+        return values
 
     def _parse_postfix_chain(self, left: ast.RelExpr) -> ast.RelExpr:
         """Parse a chain of postfix operators applied to left."""

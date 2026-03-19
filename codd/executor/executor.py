@@ -104,6 +104,8 @@ class Executor:
             return self._eval_take(node)
         if isinstance(node, ast.Iota):
             return self._eval_iota(node)
+        if isinstance(node, ast.RelationLiteral):
+            return self._eval_relation_literal(node)
         raise ExecutionError(f"Unknown node type: {type(node).__name__}")
 
     def _as_relation(self, node: ast.RelExpr) -> Relation:
@@ -124,6 +126,14 @@ class Executor:
             Tuple_({node.name: i}) for i in range(1, node.count + 1)
         )
         return Relation(tuples, attributes=frozenset({node.name}))
+
+    def _eval_relation_literal(self, node: ast.RelationLiteral) -> Relation:
+        """Evaluate an inline relation literal."""
+        attrs = node.attributes
+        tuples = frozenset(
+            Tuple_(dict(zip(attrs, row))) for row in node.rows
+        )
+        return Relation(tuples, attributes=frozenset(attrs))
 
     def _eval_rel_name(self, node: ast.RelName) -> Relation:
         """Look up a named relation in the environment."""
@@ -499,7 +509,15 @@ class Executor:
     def _apply_date_binop(
         self, op: str, left: Value, right: Value
     ) -> Value:
-        """Apply arithmetic involving at least one date value."""
+        """Apply arithmetic involving at least one date value.
+
+        Auto-promotes string operands to dates when the other is a date.
+        """
+        if isinstance(left, datetime.date) and isinstance(right, str):
+            right = self._to_date(right)
+        elif isinstance(right, datetime.date) and isinstance(left, str):
+            left = self._to_date(left)
+
         left_is_date = isinstance(left, datetime.date)
         right_is_date = isinstance(right, datetime.date)
 

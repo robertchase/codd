@@ -388,6 +388,60 @@ class TestIota:
             parse("i. 0")
 
 
+class TestRelationLiteral:
+    """Test {} (relation literal) parsing."""
+
+    def test_basic(self) -> None:
+        """Parses a simple two-column relation."""
+        result = parse('{name age; "Alice" 30; "Bob" 25}')
+        assert isinstance(result, ast.RelationLiteral)
+        assert result.attributes == ("name", "age")
+        assert len(result.rows) == 2
+        assert ("Alice", 30) in result.rows
+        assert ("Bob", 25) in result.rows
+
+    def test_single_column(self) -> None:
+        """Single-column relation."""
+        result = parse("{x; 1; 2; 3}")
+        assert isinstance(result, ast.RelationLiteral)
+        assert result.attributes == ("x",)
+        assert result.rows == ((1,), (2,), (3,))
+
+    def test_chain(self) -> None:
+        """Relation literal feeds into postfix chain."""
+        result = parse('{x; 1; 2; 3} ? x > 1')
+        assert isinstance(result, ast.Filter)
+        assert isinstance(result.source, ast.RelationLiteral)
+
+    def test_negative_values(self) -> None:
+        """Negative numbers in rows."""
+        result = parse("{x; -1; -2}")
+        assert isinstance(result, ast.RelationLiteral)
+        assert result.rows == ((-1,), (-2,))
+
+    def test_mixed_types(self) -> None:
+        """String, int, float, bool in one row."""
+        result = parse('{s n f b; "hi" 1 2.5 true}')
+        assert isinstance(result, ast.RelationLiteral)
+        assert result.rows == (("hi", 1, 2.5, True),)
+
+    def test_wrong_column_count_error(self) -> None:
+        """Row with wrong number of values is an error."""
+        with pytest.raises(ParseError, match="values but header has"):
+            parse("{a b; 1}")
+
+    def test_trailing_semicolon(self) -> None:
+        """Trailing semicolon is allowed."""
+        result = parse("{x; 1; 2;}")
+        assert isinstance(result, ast.RelationLiteral)
+        assert result.rows == ((1,), (2,))
+
+    def test_empty_header_error(self) -> None:
+        """Empty braces with no header is an error."""
+        with pytest.raises(ParseError, match="attribute names"):
+            parse("{; 1}")
+
+
 class TestDateOp:
     """Test .d (date) parsing."""
 
