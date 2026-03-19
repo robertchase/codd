@@ -363,8 +363,13 @@ class Executor:
         return source.sort(sort_key)
 
     def _eval_rotate(self, node: ast.Rotate) -> RotatedArray:
-        """Evaluate: source r. — rotated (vertical) display."""
-        source = self._as_relation(node.source)
+        """Evaluate: source r. — rotated (vertical) display.
+
+        Accepts both relations and arrays (e.g. after $ sort).
+        """
+        source = self._eval_rel(node.source)
+        if isinstance(source, list):
+            return RotatedArray(source)
         return RotatedArray(list(source))
 
     def _eval_order_columns(self, node: ast.OrderColumns) -> OrderedArray:
