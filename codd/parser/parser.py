@@ -733,6 +733,9 @@ class Parser:
             elif self._peek().type == TokenType.D_DOT:
                 self._advance()  # consume .d
                 left = self._parse_date_op(left)
+            elif self._peek().type == TokenType.F_DOT:
+                self._advance()  # consume .f
+                left = ast.FormatStr(expr=left)
             elif self._peek().type in self._ARITH_OPS:
                 op_tok = self._advance()
                 right = self._parse_computation_atom()

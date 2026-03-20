@@ -310,6 +310,10 @@ class Executor:
         if isinstance(expr, ast.DateOp):
             value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
             return self._apply_date_op(value, expr.fmt)
+        if isinstance(expr, ast.FormatStr):
+            raise ExecutionError(
+                "Cannot use .f in summarize context (no tuple for attribute references)"
+            )
         if isinstance(expr, ast.AttrRef):
             raise ExecutionError(
                 f"Cannot reference attribute {expr.name!r} in summarize context"
@@ -449,6 +453,9 @@ class Executor:
         if isinstance(expr, ast.DateOp):
             value = self._eval_expr(expr.expr, t, source)
             return self._apply_date_op(value, expr.fmt)
+        if isinstance(expr, ast.FormatStr):
+            value = self._eval_expr(expr.expr, t, source)
+            return self._apply_format_str(str(value), t)
         raise ExecutionError(f"Unknown expression type: {type(expr).__name__}")
 
     def _eval_attr_ref(self, ref: ast.AttrRef, t: Tuple_) -> Value:
@@ -589,6 +596,25 @@ class Executor:
         idx_end = max(0, min(idx_end, length))
 
         return s[idx_start:idx_end]
+
+    # --- Format string ---
+
+    _FORMAT_REF_RE = re.compile(r"\{([^}]+)\}")
+
+    def _apply_format_str(self, template: str, t: Tuple_) -> str:
+        """Resolve {attr} references in a template string against a tuple."""
+        from codd.repl.formatter import format_value
+
+        def _replace(match: re.Match[str]) -> str:
+            attr = match.group(1)
+            try:
+                return format_value(t[attr])
+            except KeyError:
+                raise ExecutionError(
+                    f"Unknown attribute {attr!r} in format string"
+                )
+
+        return self._FORMAT_REF_RE.sub(_replace, template)
 
     # --- Date operations ---
 

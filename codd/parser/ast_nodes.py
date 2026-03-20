@@ -131,6 +131,16 @@ class DateOp:
     fmt: str | None = None
 
 
+@dataclass(frozen=True)
+class FormatStr:
+    """Format string operator: expr .f.
+
+    Resolves {attr} references in the string against the current tuple.
+    """
+
+    expr: Expr
+
+
 # Expr is the union of all expression types
 Expr = (
     IntLiteral
@@ -146,6 +156,7 @@ Expr = (
     | Round
     | Substring
     | DateOp
+    | FormatStr
 )
 
 

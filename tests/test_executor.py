@@ -718,6 +718,53 @@ class TestDateOp:
         assert len(result) == 1
 
 
+class TestFormatStr:
+    """Test .f (format string)."""
+
+    def test_basic(self) -> None:
+        """Simple attribute interpolation."""
+        result = run('E +: lbl: "{name} in {dept_id}" .f # [name lbl]')
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["lbl"] == "Alice in 10"
+
+    def test_multiple_attrs(self) -> None:
+        """Multiple attributes in one template."""
+        result = run('E +: lbl: "{name}/{role}/{salary}" .f # [name lbl]')
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Bob":
+                assert t["lbl"] == "Bob/manager/60000"
+
+    def test_literal_text(self) -> None:
+        """Text without braces passes through."""
+        result = run('E +: lbl: "hello world" .f # [name lbl]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["lbl"] == "hello world"
+
+    def test_unknown_attr_error(self) -> None:
+        """Referencing unknown attribute raises error."""
+        with pytest.raises(ExecutionError, match="Unknown attribute"):
+            run('E +: lbl: "{nonexistent}" .f')
+
+    def test_chain_with_substring(self) -> None:
+        """.f result can be chained with .s."""
+        result = run('E +: x: "{name}" .f .s [1 3] # [name x]')
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["x"] == "Ali"
+
+    def test_date_value_formatting(self) -> None:
+        """Date values in .f display as ISO strings."""
+        result = run('E +: d: "2026-03-17" .d +: lbl: "date={d}" .f # [name lbl]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["lbl"] == "date=2026-03-17"
+
+
 class TestRename:
     """Test @ (rename)."""
 

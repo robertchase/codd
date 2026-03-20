@@ -506,6 +506,27 @@ class TestDateOp:
         assert expr.left.fmt == "month"
 
 
+class TestFormatStr:
+    """Test .f (format string) parsing."""
+
+    def test_basic(self) -> None:
+        """String .f parses as FormatStr."""
+        result = parse('R +: lbl: "{name} - {dept_id}" .f')
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.FormatStr)
+        assert isinstance(expr.expr, ast.StringLiteral)
+        assert expr.expr.value == "{name} - {dept_id}"
+
+    def test_chains(self) -> None:
+        """.f can chain with other operators (result is a string)."""
+        result = parse('R +: x: "{name}" .f .s [1 3]')
+        assert isinstance(result, ast.Extend)
+        expr = result.computations[0].expr
+        assert isinstance(expr, ast.Substring)
+        assert isinstance(expr.expr, ast.FormatStr)
+
+
 class TestRename:
     """Test rename parsing."""
 

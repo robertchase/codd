@@ -57,6 +57,7 @@ class TokenType(Enum):
     R_DOT = auto()          # r.  rotate display
     S_DOT = auto()          # s.  substring
     D_DOT = auto()          # .d  date
+    F_DOT = auto()          # .f  format string
     DOUBLE_SLASH = auto()   # //  integer divide
     PERCENT = auto()        # %   remainder
     COLON_EQ = auto()       # :=  assign
