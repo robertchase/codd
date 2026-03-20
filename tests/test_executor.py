@@ -127,7 +127,7 @@ class TestBacktickIdent:
         env.bind("T", Relation(frozenset({
             Tuple_({"Account Name": "Alice"}),
         })))
-        result = run("T @ `Account Name` -> name", env)
+        result = run("T @ `Account Name` name", env)
         assert isinstance(result, Relation)
         assert result.attributes == frozenset({"name"})
 
@@ -770,7 +770,7 @@ class TestRename:
 
     def test_rename(self) -> None:
         """Rename changes an attribute name in the relation."""
-        result = run("ContractorPay @ [pay -> salary]")
+        result = run("ContractorPay @ [pay salary]")
         assert isinstance(result, Relation)
         assert "salary" in result.attributes
         assert "pay" not in result.attributes
@@ -781,7 +781,7 @@ class TestSetOps:
 
     def test_union(self) -> None:
         """Union combines tuples from two compatible relations."""
-        result = run("ContractorPay @ [pay -> salary] |. (E # [name salary])")
+        result = run("ContractorPay @ [pay salary] |. (E # [name salary])")
         assert isinstance(result, Relation)
         assert len(result) == 6
 

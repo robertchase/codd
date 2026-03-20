@@ -192,7 +192,7 @@ Relation literals define a relation inline: header row first, then data rows sep
 | `<:` | Unnest | `nested <: phones` |
 | `+:` | Extend | `E +: bonus: salary * 0.1` |
 | `=:` | Modify | `E =: salary: salary * 1.1` |
-| `@` | Rename | `E @ [pay -> salary]` |
+| `@` | Rename | `E @ [pay salary]` |
 | `|.` | Union | `A |. (B)` |
 | `-.` | Difference | `A -. (B)` |
 | `&.` | Intersect | `A &. (B)` |
@@ -325,7 +325,7 @@ For column names with spaces (common in CSV files), use backtick quoting:
 T # [`Account Name` `Processed Date`]
 T ? `Account Name` = "Alice"
 T +: total: `Unit Price` * Qty
-T @ `Account Name` -> name
+T @ `Account Name` name
 ```
 
 Backtick-quoted identifiers work everywhere regular identifiers do.

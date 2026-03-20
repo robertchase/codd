@@ -378,7 +378,7 @@ class TestIota:
 
     def test_in_subquery(self) -> None:
         """i. works inside parenthesized subqueries."""
-        result = parse("E *. (i. 5 @ i -> emp_id)")
+        result = parse("E *. (i. 5 @ i emp_id)")
         assert isinstance(result, ast.NaturalJoin)
         assert isinstance(result.right, ast.Rename)
 
@@ -532,13 +532,13 @@ class TestRename:
 
     def test_single(self) -> None:
         """Single attribute rename mapping."""
-        result = parse("E @ pay -> salary")
+        result = parse("E @ pay salary")
         assert isinstance(result, ast.Rename)
         assert result.mappings == (("pay", "salary"),)
 
     def test_multiple(self) -> None:
         """Multiple bracketed rename mappings."""
-        result = parse("E @ [pay -> salary  dept -> department]")
+        result = parse("E @ [pay salary  dept department]")
         assert isinstance(result, ast.Rename)
         assert len(result.mappings) == 2
 
@@ -766,7 +766,7 @@ class TestComplexExpressions:
 
     def test_union_with_rename(self) -> None:
         """Union where the left side has a rename."""
-        result = parse("ContractorPay @ [pay -> salary] |. (E # [name salary])")
+        result = parse("ContractorPay @ [pay salary] |. (E # [name salary])")
         assert isinstance(result, ast.Union)
         assert isinstance(result.source, ast.Rename)
 

@@ -323,7 +323,7 @@ class Parser:
         return ast.Modify(source=source, computations=tuple(computations))
 
     def _parse_rename(self, source: ast.RelExpr) -> ast.Rename:
-        """Parse: @ old -> new or @ [old1 -> new1  old2 -> new2]."""
+        """Parse: @ old new or @ [old1 new1  old2 new2]."""
         self._advance()  # consume @
         mappings = self._parse_rename_list()
         return ast.Rename(source=source, mappings=tuple(mappings))
@@ -447,20 +447,18 @@ class Parser:
             return (tok.value,)
 
     def _parse_rename_list(self) -> list[tuple[str, str]]:
-        """Parse: old -> new or [old1 -> new1  old2 -> new2]."""
+        """Parse: @ old new or @ [old1 new1  old2 new2]."""
         if self._peek().type == TokenType.LBRACKET:
             self._advance()
             mappings: list[tuple[str, str]] = []
             while self._peek().type != TokenType.RBRACKET:
                 old = self._expect(TokenType.IDENT).value
-                self._expect(TokenType.ARROW)
                 new = self._expect(TokenType.IDENT).value
                 mappings.append((old, new))
             self._expect(TokenType.RBRACKET)
             return mappings
         else:
             old = self._expect(TokenType.IDENT).value
-            self._expect(TokenType.ARROW)
             new = self._expect(TokenType.IDENT).value
             return [(old, new)]
 

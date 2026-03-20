@@ -12,7 +12,7 @@ _RELATIONAL = [
     ("<:", "Unnest", "E <: phones"),
     ("+:", "Extend", "E +: bonus: salary * 0.1"),
     ("=:", "Modify", "E =: salary: salary * 1.1"),
-    ("@", "Rename", "E @ [pay -> salary]"),
+    ("@", "Rename", "E @ [pay salary]"),
     ("|.", "Union", "E |. (D)"),
     ("-.", "Difference", "E -. (D)"),
     ("&.", "Intersect", "E &. (D)"),

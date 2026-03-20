@@ -169,16 +169,16 @@ class TestRenameExamples:
     """Test rename examples from algebra.md."""
 
     def test_rename(self) -> None:
-        """ContractorPay @ [pay -> salary] -> (name: Frank, salary: 70000)."""
-        result = run("ContractorPay @ [pay -> salary]")
+        """ContractorPay @ [pay salary] -> (name: Frank, salary: 70000)."""
+        result = run("ContractorPay @ [pay salary]")
         assert len(result) == 1
         t = next(iter(result))
         assert t["name"] == "Frank"
         assert t["salary"] == 70000
 
     def test_rename_then_union(self) -> None:
-        """ContractorPay @ [pay -> salary] |. (E # [name salary]) -> 6 tuples."""
-        result = run("ContractorPay @ [pay -> salary] |. (E # [name salary])")
+        """ContractorPay @ [pay salary] |. (E # [name salary]) -> 6 tuples."""
+        result = run("ContractorPay @ [pay salary] |. (E # [name salary])")
         assert len(result) == 6
         names = {t["name"] for t in result}
         assert "Frank" in names
