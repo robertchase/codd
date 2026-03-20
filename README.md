@@ -70,8 +70,10 @@ cat data.csv | uv run -m codd.cli -           # stdin loaded as "stdin"
 | `--arg NAME=VALUE` | Substitute `{{NAME}}` in `-f` scripts |
 | `--sample` / `--load` | Load sample data (E, D, Phone, ContractorPay) |
 | `--csv` | Output as CSV instead of ASCII table |
+| `--no-header` | Omit header row from CSV output (implies `--csv`) |
 | `--genkey` | Add synthetic `{name}_id` key column to each loaded file |
 | `--ops` | Print language primitives reference and exit |
+| `--version` | Print version and exit |
 
 ## The REPL
 
@@ -81,8 +83,9 @@ The REPL reads one expression per line, parses it, executes it, and prints the r
 $ uv run -m codd.cli --sample
 Sample data loaded: E, D, Phone, ContractorPay
 Loaded: ContractorPay, D, E, Phone
-Codd REPL
-Commands: \load <file> [name], \save [file], \drop <name>, \env, \ops, \quit
+Codd REPL v1.3.6
+Commands: \load <file> [name], \save [file], \export <file> <expr>,
+          \drop <name>, \env, \ops, \quit
 
 codd> E # name
 +-------+
@@ -139,6 +142,7 @@ codd> E # [name salary] $ salary- ^ 3
 | `\load file.csv` | Load a CSV file (stem becomes relation name) |
 | `\load file.csv name` | Load a CSV file with an explicit name |
 | `\save [file]` | Save workspace to a `.codd` file |
+| `\export file expr` | Export expression result as CSV to a file |
 | `\drop name` | Remove a relation from the environment |
 | `\env` | List all loaded relations with tuple counts and attributes |
 | `\ops` | Print language primitives reference |
@@ -162,6 +166,19 @@ Use `{{name}}` placeholders for parameters, supplied via `--arg name=value`. Val
 
 ## Operators
 
+### Sources
+
+Sources produce relations. They appear at the start of an expression chain.
+
+| Op | Name | Example |
+|----|------|---------|
+| `i.` | Iota (generate) | `i. 5` or `i. month: 12` |
+| `{}` | Relation literal | `{name age; "Alice" 30; "Bob" 25}` |
+
+`i.` generates a single-attribute relation of consecutive integers 1..N. An optional `name:` prefix sets the attribute name (default `i`).
+
+Relation literals define a relation inline: header row first, then data rows separated by semicolons.
+
 ### Relational
 
 | Op | Name | Example |
@@ -174,6 +191,7 @@ Use `{{name}}` placeholders for parameters, supplied via `--arg name=value`. Val
 | `*:` | Nest join | `E *: Phone -> phones` |
 | `<:` | Unnest | `nested <: phones` |
 | `+:` | Extend | `E +: bonus: salary * 0.1` |
+| `=:` | Modify | `E =: salary: salary * 1.1` |
 | `@` | Rename | `E @ [pay -> salary]` |
 | `|.` | Union | `A |. (B)` |
 | `-.` | Difference | `A -. (B)` |
@@ -183,8 +201,9 @@ Use `{{name}}` placeholders for parameters, supplied via `--arg name=value`. Val
 | `$` | Sort | `E $ salary-` or `E $ [dept_id salary-]` |
 | `$.` | Order columns | `E $. [salary name]` |
 | `^` | Take | `E $ salary- ^ 3` |
+| `r.` | Rotate | `E ? name = "Alice" r.` |
 
-Expressions chain left-to-right. Each operator transforms the result of the previous step. `$` and `$.` leave the relational world (returning an ordered list); only `^` and `$.` can follow them.
+Expressions chain left-to-right. Each operator transforms the result of the previous step. `$`, `$.`, and `r.` leave the relational world (returning display-oriented output); only `^` and `$.` can follow `$`.
 
 ### Aggregates (used inside `/.` and `+:`)
 
@@ -198,18 +217,128 @@ Expressions chain left-to-right. Each operator transforms the result of the prev
 | `n.` | Collect | `n. activity` |
 | `p.` | Percent | `p. salary ~ 1` |
 
-### Expressions (used inside `+:` extend)
+### Expressions (used inside `+:` and `=:`)
 
 | Op | Name | Example |
 |----|------|---------|
 | `+ - * /` | Arithmetic | `salary * 0.1` |
+| `// %` | Integer divide / remainder | `salary // 1000` or `i % 2` |
 | `~` | Precision | `%. salary ~ 2` |
+| `.s` | Substring | `name .s [1 3]` or `name .s [-2]` |
+| `.d` | Date | `col .d` or `col .d "year"` |
 | `?:` | Ternary | `?: dept_id = 10 "eng" "other"` |
 
-Arithmetic evaluates left-to-right with no precedence — use parentheses to override.
+All expression operators evaluate left-to-right with no precedence. Use parentheses to override.
 
 ### Other
 
 | Op | Name | Example |
 |----|------|---------|
 | `:=` | Assignment | `high := E ? salary > 70000` |
+
+## Dates
+
+The `.d` operator introduces dates as a first-class type.
+
+### Promotion
+
+Convert a string to a Date value:
+
+```
+"2026-03-17" .d              -- ISO format (YYYY-MM-DD)
+"today" .d                   -- today's date (local time)
+hire_date .d                 -- promote a string attribute
+```
+
+Once promoted, dates carry their type through the pipeline. If a value is already a Date, `.d` is a no-op.
+
+### Component extraction
+
+Extract an integer component from a date:
+
+```
+date_col .d "year"           -- 2026
+date_col .d "month"          -- 3
+date_col .d "day"            -- 17
+date_col .d "week"           -- ISO week number (1-53)
+date_col .d "dow"            -- day of week (1=Monday, 7=Sunday)
+```
+
+### Formatting
+
+Format a date as a string using `{token}` patterns:
+
+```
+date_col .d "{yyyy}-{mm}-{dd}"       -- "2026-03-17"
+date_col .d "{dd} {mmm} {yyyy}"      -- "17 MAR 2026"
+date_col .d "{d}/{m}/{yy}"           -- "17/3/26"
+date_col .d "{dd}{mmm}{yy}"          -- "17MAR26"
+date_col .d "{ddd}"                  -- "TUE"
+```
+
+| Token | Example | Meaning |
+|-------|---------|---------|
+| `{d}` | 7 | Day, no padding |
+| `{dd}` | 07 | Day, zero-padded |
+| `{m}` | 3 | Month number |
+| `{mm}` | 03 | Month, zero-padded |
+| `{mmm}` | MAR | Month abbreviation |
+| `{yy}` | 26 | 2-digit year |
+| `{yyyy}` | 2026 | 4-digit year |
+| `{week}` | 12 | ISO week number |
+| `{dow}` | 2 | Day of week (1=Mon) |
+| `{ddd}` | TUE | Day abbreviation |
+
+### Date arithmetic
+
+Dates participate in arithmetic with `+` and `-`:
+
+| Expression | Result | Meaning |
+|------------|--------|---------|
+| `date + int` | Date | Add N days |
+| `date - int` | Date | Subtract N days |
+| `date - date` | int | Difference in days |
+
+When one operand is a Date and the other is a date-like string, the string is auto-promoted. This means `date_col - "2026-01-01"` works without explicit `.d` on the string.
+
+### Date coercion
+
+Dates coerce with strings in filters and joins:
+
+- **Filter**: `? date_col = "2026-01-05"` works when `date_col` holds Date values
+- **Join**: `*.` matches Date columns against string columns containing ISO dates
+- **Scalar filter RHS**: `? date_col = ("today" .d - 14)` — parenthesized expressions as filter values
+
+### Example: generate a week-number calendar
+
+```
+i. day: 365 =: day: "2025-12-31" .d + day +: week: day .d "week" # [day week]
+```
+
+## Identifiers
+
+Standard identifiers are alphanumeric with underscores: `salary`, `dept_id`, `table2`.
+
+For column names with spaces (common in CSV files), use backtick quoting:
+
+```
+T # [`Account Name` `Processed Date`]
+T ? `Account Name` = "Alice"
+T +: total: `Unit Price` * Qty
+T @ `Account Name` -> name
+```
+
+Backtick-quoted identifiers work everywhere regular identifiers do.
+
+## Substring
+
+The `.s` operator extracts substrings with 1-based inclusive indexing:
+
+```
+name .s [1 3]           -- first 3 characters: "Alice" → "Ali"
+name .s [3]             -- from position 3 to end: "Alice" → "ice"
+name .s [-2]            -- last 2 characters: "Alice" → "ce"
+name .s [-4 -2]         -- range from end: "Alice" → "lic"
+```
+
+Positive indices count from 1, negative from the end. Out-of-bounds indices are clamped silently.
