@@ -917,3 +917,41 @@ class TestErrors:
         """ParseError on unclosed bracket in projection."""
         with pytest.raises(ParseError):
             parse("E # [name salary")
+
+
+class TestSchemaOp:
+    """Test :: (schema) operator parsing."""
+
+    def test_apply_schema(self) -> None:
+        """R :: S parses as ApplySchema."""
+        result = parse("R :: S")
+        assert isinstance(result, ast.ApplySchema)
+        assert isinstance(result.source, ast.RelName)
+        assert result.source.name == "R"
+        assert isinstance(result.schema_rel, ast.RelName)
+        assert result.schema_rel.name == "S"
+
+    def test_extract_schema(self) -> None:
+        """R :: (no RHS) parses as ExtractSchema."""
+        result = parse("R ::")
+        assert isinstance(result, ast.ExtractSchema)
+        assert isinstance(result.source, ast.RelName)
+        assert result.source.name == "R"
+
+    def test_apply_schema_with_literal(self) -> None:
+        """R :: {attr type; ...} parses as ApplySchema with literal RHS."""
+        result = parse('R :: {attr type; "salary" "int"}')
+        assert isinstance(result, ast.ApplySchema)
+        assert isinstance(result.schema_rel, ast.RelationLiteral)
+
+    def test_schema_chains_after_filter(self) -> None:
+        """Schema op chains after other operators."""
+        result = parse('R ? salary > 50000 :: S')
+        assert isinstance(result, ast.ApplySchema)
+        assert isinstance(result.source, ast.Filter)
+
+    def test_extract_schema_chains(self) -> None:
+        """Extract schema chains after project."""
+        result = parse("R # [name salary] ::")
+        assert isinstance(result, ast.ExtractSchema)
+        assert isinstance(result.source, ast.Project)

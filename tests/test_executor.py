@@ -1504,3 +1504,110 @@ class TestPercentAggregate:
 
                 # 80000/330000 * 100 / 100 = 80000/330000 ≈ 0.2424
                 assert t["pct"] == Decimal("0.2424")
+
+
+class TestSchemaOps:
+    """Test :: (schema) operator."""
+
+    def test_extract_schema(self) -> None:
+        """R :: extracts schema as a relation with {attr, type} columns."""
+        result = run("E ::")
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"attr", "type"})
+        attrs = {t["attr"] for t in result}
+        assert "name" in attrs
+        assert "salary" in attrs
+
+    def test_apply_schema_coerces(self) -> None:
+        """R :: S coerces column values per the schema."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset(
+                    {
+                        Tuple_(name="Alice", salary="80000"),
+                        Tuple_(name="Bob", salary="60000"),
+                    }
+                )
+            ),
+        )
+        env.bind(
+            "S",
+            Relation(
+                frozenset(
+                    {
+                        Tuple_(attr="salary", type="int"),
+                    }
+                )
+            ),
+        )
+        result = run("R :: S", env)
+        assert isinstance(result, Relation)
+        for t in result:
+            assert isinstance(t["salary"], int)
+        salaries = {t["salary"] for t in result}
+        assert salaries == {80000, 60000}
+
+    def test_apply_schema_with_inline_literal(self) -> None:
+        """R :: {attr type; ...} with inline schema literal."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset(
+                    {
+                        Tuple_(x="1", y="2.5"),
+                    }
+                )
+            ),
+        )
+        result = run('R :: {attr type; "x" "int"; "y" "float"}', env)
+        assert isinstance(result, Relation)
+        for t in result:
+            assert isinstance(t["x"], int)
+            assert isinstance(t["y"], float)
+            assert t["x"] == 1
+            assert t["y"] == 2.5
+
+    def test_extract_schema_after_coercion(self) -> None:
+        """Schema survives coercion and is extractable."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({Tuple_(a="10", b="hello")}),
+            ),
+        )
+        env.bind(
+            "S",
+            Relation(frozenset({Tuple_(attr="a", type="int")})),
+        )
+        # Apply schema, then extract it
+        result = run("R :: S ::", env)
+        assert isinstance(result, Relation)
+        schema_dict = {t["attr"]: t["type"] for t in result}
+        assert schema_dict["a"] == "int"
+        assert schema_dict["b"] == "str"
+
+    def test_apply_schema_unknown_attr_error(self) -> None:
+        """Applying schema with unknown attribute raises ExecutionError."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(a="1")})))
+        env.bind(
+            "S",
+            Relation(frozenset({Tuple_(attr="nonexistent", type="int")})),
+        )
+        with pytest.raises(ExecutionError):
+            run("R :: S", env)
+
+    def test_apply_schema_bad_coercion_error(self) -> None:
+        """Coercion failure raises ExecutionError."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(a="not_a_number")})))
+        env.bind(
+            "S",
+            Relation(frozenset({Tuple_(attr="a", type="int")})),
+        )
+        with pytest.raises(ExecutionError):
+            run("R :: S", env)

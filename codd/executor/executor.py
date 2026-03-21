@@ -108,6 +108,10 @@ class Executor:
             return self._eval_relation_literal(node)
         if isinstance(node, ast.Rotate):
             return self._eval_rotate(node)
+        if isinstance(node, ast.ApplySchema):
+            return self._eval_apply_schema(node)
+        if isinstance(node, ast.ExtractSchema):
+            return self._eval_extract_schema(node)
         raise ExecutionError(f"Unknown node type: {type(node).__name__}")
 
     def _as_relation(self, node: ast.RelExpr) -> Relation:
@@ -375,6 +379,29 @@ class Executor:
         if isinstance(source, list):
             return RotatedArray(source)
         return RotatedArray(list(source))
+
+    def _eval_apply_schema(self, node: ast.ApplySchema) -> Relation:
+        """Evaluate: R :: S — apply schema relation S to relation R."""
+        from codd.model.coerce import (
+            CoercionError,
+            apply_schema,
+            schema_from_relation,
+        )
+
+        source = self._as_relation(node.source)
+        schema_rel = self._as_relation(node.schema_rel)
+        try:
+            schema_dict = schema_from_relation(schema_rel)
+            return apply_schema(source, schema_dict)
+        except CoercionError as e:
+            raise ExecutionError(str(e)) from e
+
+    def _eval_extract_schema(self, node: ast.ExtractSchema) -> Relation:
+        """Evaluate: R :: — extract schema as a relation."""
+        from codd.model.coerce import extract_schema
+
+        source = self._as_relation(node.source)
+        return extract_schema(source)
 
     def _eval_order_columns(self, node: ast.OrderColumns) -> OrderedArray:
         """Evaluate: source $. [col1 col2 ...].

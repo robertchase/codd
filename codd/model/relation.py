@@ -14,12 +14,13 @@ class Relation:
     All relational operations return new Relations.
     """
 
-    __slots__ = ("_tuples", "_attributes", "_hash")
+    __slots__ = ("_tuples", "_attributes", "_schema", "_hash")
 
     def __init__(
         self,
         tuples: frozenset[Tuple_] | set[Tuple_] | list[Tuple_],
         attributes: frozenset[str] | None = None,
+        schema: dict[str, str] | None = None,
     ) -> None:
         if isinstance(tuples, frozenset):
             fs = tuples
@@ -34,6 +35,9 @@ class Relation:
             object.__setattr__(self, "_attributes", first.attributes())
         else:
             object.__setattr__(self, "_attributes", frozenset())
+
+        # Schema: attr name → type name.  None means untyped (implicit str).
+        object.__setattr__(self, "_schema", schema)
         object.__setattr__(self, "_hash", None)
 
     @property
@@ -46,6 +50,16 @@ class Relation:
         """Return the set of attribute names."""
         return self._attributes
 
+    @property
+    def schema(self) -> dict[str, str]:
+        """Return the schema: attr name → type name.
+
+        If no explicit schema was set, all attributes default to 'str'.
+        """
+        if self._schema is not None:
+            return dict(self._schema)
+        return {a: "str" for a in sorted(self._attributes)}
+
     def __len__(self) -> int:
         return len(self._tuples)
 
@@ -54,6 +68,20 @@ class Relation:
 
     def __contains__(self, item: Tuple_) -> bool:
         return item in self._tuples
+
+    def _project_schema(self, attrs: frozenset[str]) -> dict[str, str] | None:
+        """Return schema filtered to the given attributes, or None."""
+        if self._schema is None:
+            return None
+        return {a: t for a, t in self._schema.items() if a in attrs}
+
+    def _merge_schema(self, other: Relation) -> dict[str, str] | None:
+        """Merge schemas from two relations, or None if neither has one."""
+        if self._schema is None and other._schema is None:
+            return None
+        s1 = self._schema or {}
+        s2 = other._schema or {}
+        return {**s1, **s2}
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Relation):
@@ -81,7 +109,7 @@ class Relation:
         if unknown:
             raise ValueError(f"project references unknown attributes: {sorted(unknown)}")
         projected = frozenset(t.project(attrs) for t in self._tuples)
-        return Relation(projected, attributes=attrs)
+        return Relation(projected, attributes=attrs, schema=self._project_schema(attrs))
 
     def remove(self, attrs: frozenset[str]) -> Relation:
         """Remove: drop the specified attributes, keep the rest (#!)."""
@@ -93,7 +121,7 @@ class Relation:
     def where(self, predicate: Callable[[Tuple_], bool]) -> Relation:
         """Filter: keep tuples matching the predicate (?)."""
         filtered = frozenset(t for t in self._tuples if predicate(t))
-        return Relation(filtered, attributes=self._attributes)
+        return Relation(filtered, attributes=self._attributes, schema=self._schema)
 
     def natural_join(self, other: Relation) -> Relation:
         """Natural join: combine on shared attributes (*)."""
@@ -103,7 +131,8 @@ class Relation:
             for t2 in other._tuples:
                 if t1.matches(t2):
                     result.add(t1.merge(t2))
-        return Relation(frozenset(result), attributes=result_attrs)
+        return Relation(frozenset(result), attributes=result_attrs,
+                        schema=self._merge_schema(other))
 
     def nest_join(self, other: Relation, nest_name: str) -> Relation:
         """Nest join: like natural join but nests unmatched as empty sets (*:).
@@ -142,7 +171,7 @@ class Relation:
             result.add(t.extend(new_values))
         if new_attrs is None:
             new_attrs = self._attributes
-        return Relation(frozenset(result), attributes=new_attrs)
+        return Relation(frozenset(result), attributes=new_attrs, schema=self._schema)
 
     def modify(self, compute: Callable[[Tuple_], dict[str, Value]]) -> Relation:
         """Modify: replace existing attributes (+:)."""
@@ -155,7 +184,8 @@ class Relation:
                     f"modify references unknown attributes: {sorted(unknown)}"
                 )
             result.add(t.extend(new_values))
-        return Relation(frozenset(result), attributes=self._attributes)
+        return Relation(frozenset(result), attributes=self._attributes,
+                        schema=self._schema)
 
     def rename(self, mapping: dict[str, str]) -> Relation:
         """Rename: change attribute names (@)."""
@@ -164,7 +194,10 @@ class Relation:
             raise ValueError(f"rename references unknown attributes: {sorted(unknown)}")
         new_attrs = frozenset(mapping.get(a, a) for a in self._attributes)
         result = frozenset(t.rename(mapping) for t in self._tuples)
-        return Relation(result, attributes=new_attrs)
+        new_schema = None
+        if self._schema is not None:
+            new_schema = {mapping.get(a, a): t for a, t in self._schema.items()}
+        return Relation(result, attributes=new_attrs, schema=new_schema)
 
     def _check_same_heading(self, other: Relation, op: str) -> None:
         """Raise ValueError if two relations have different attributes."""
@@ -178,21 +211,24 @@ class Relation:
         """Union: tuples in either relation (|)."""
         self._check_same_heading(other, "union")
         return Relation(
-            self._tuples | other._tuples, attributes=self._attributes
+            self._tuples | other._tuples, attributes=self._attributes,
+            schema=self._schema,
         )
 
     def difference(self, other: Relation) -> Relation:
         """Difference: tuples in self but not in other (-)."""
         self._check_same_heading(other, "difference")
         return Relation(
-            self._tuples - other._tuples, attributes=self._attributes
+            self._tuples - other._tuples, attributes=self._attributes,
+            schema=self._schema,
         )
 
     def intersect(self, other: Relation) -> Relation:
         """Intersect: tuples in both relations (&)."""
         self._check_same_heading(other, "intersect")
         return Relation(
-            self._tuples & other._tuples, attributes=self._attributes
+            self._tuples & other._tuples, attributes=self._attributes,
+            schema=self._schema,
         )
 
     def summarize(

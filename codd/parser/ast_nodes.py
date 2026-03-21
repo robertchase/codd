@@ -388,6 +388,21 @@ class Rotate:
 
 
 @dataclass(frozen=True)
+class ApplySchema:
+    """Apply schema: R :: S.  Coerces columns in R per schema relation S."""
+
+    source: RelExpr
+    schema_rel: RelExpr
+
+
+@dataclass(frozen=True)
+class ExtractSchema:
+    """Extract schema: R :: (no RHS).  Returns the schema as a relation."""
+
+    source: RelExpr
+
+
+@dataclass(frozen=True)
 class RelationLiteral:
     """Inline relation literal: {header; row; row; ...}.
 
@@ -424,6 +439,8 @@ RelExpr = (
     | Iota
     | Rotate
     | RelationLiteral
+    | ApplySchema
+    | ExtractSchema
 )
 
 

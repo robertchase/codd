@@ -260,6 +260,8 @@ class Parser:
             elif tok.type == TokenType.R_DOT:
                 self._advance()  # consume r.
                 left = ast.Rotate(source=left)
+            elif tok.type == TokenType.COLON_COLON:
+                left = self._parse_schema_op(left)
             else:
                 break
         return left
@@ -422,6 +424,28 @@ class Parser:
         self._advance()  # consume ^
         tok = self._expect(TokenType.INTEGER)
         return ast.Take(source=source, count=int(tok.value))
+
+    def _parse_schema_op(
+        self, source: ast.RelExpr
+    ) -> ast.ApplySchema | ast.ExtractSchema:
+        """Parse: :: [schema_rel] — apply or extract schema.
+
+        R :: S  → ApplySchema(source=R, schema_rel=S)
+        R ::    → ExtractSchema(source=R)
+        """
+        self._advance()  # consume ::
+        # If next token can start an atom, parse schema RHS
+        tok = self._peek()
+        if tok.type in (
+            TokenType.IDENT,
+            TokenType.LPAREN,
+            TokenType.LBRACE,
+            TokenType.I_DOT,
+        ):
+            schema_rel = self._parse_atom()
+            return ast.ApplySchema(source=source, schema_rel=schema_rel)
+        # No RHS — extract schema
+        return ast.ExtractSchema(source=source)
 
     # --- Helper parsers ---
 

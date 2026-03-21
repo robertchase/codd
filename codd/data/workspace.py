@@ -75,8 +75,11 @@ def _validate_workspace(doc: Any, path: Path) -> None:
 def _serialize_relation(rel: Relation) -> dict[str, Any]:
     """Serialize a Relation to a JSON-compatible dict."""
     attr_types = _infer_attr_types(rel)
-    tuples = [_serialize_tuple(t, attr_types) for t in rel]
-    return {"attributes": attr_types, "tuples": tuples}
+    result: dict[str, Any] = {"attributes": attr_types, "tuples": [_serialize_tuple(t, attr_types) for t in rel]}
+    # Persist explicit schema if present.
+    if rel._schema is not None:
+        result["schema"] = dict(rel._schema)
+    return result
 
 
 def _infer_attr_types(rel: Relation) -> dict[str, str]:
@@ -141,7 +144,9 @@ def _deserialize_relation(data: dict[str, Any]) -> Relation:
     for raw in raw_tuples:
         tuples.add(_deserialize_tuple(raw, attr_types))
 
-    return Relation(frozenset(tuples), attributes=attributes)
+    # Restore explicit schema if saved.
+    schema = data.get("schema")
+    return Relation(frozenset(tuples), attributes=attributes, schema=schema)
 
 
 def _deserialize_tuple(

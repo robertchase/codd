@@ -1,0 +1,115 @@
+# Type System
+
+## Overview
+
+Every relation has a schema that defines the type of each column.
+Types are enforced at boundaries (load, coercion, modify) and
+the runtime is free to optimize internal representation.
+
+## Rules
+
+1. **No mixed types** — every value in a column conforms to the column's declared type.
+2. **Expressions don't retype columns** — `date .d "week"` yields an int in expression context but does not change the `date` column's type.
+3. **Representation may differ from declaration** — a `date` column may store `datetime.date` objects internally, but the column type is `date`. The value must behave according to the type's contract. This explicitly allows optimization (cf. APL's boolean compaction).
+
+## Built-in Types
+
+| Type | Description |
+|------|-------------|
+| `str` | String (default for CSV loads) |
+| `int` | Integer |
+| `float` | Floating point |
+| `decimal` | Arbitrary precision decimal |
+| `date` | Calendar date (ISO 8601) |
+| `bool` | Boolean (true/false) |
+
+Future: `decimal` may support precision (`decimal(2)`), custom types.
+
+## Schema as a Relation
+
+A schema is a regular two-column relation with attributes `attr` and `type`:
+
+```
+Orders := {attr type; date date; amount int; status str}
+```
+
+This means schemas can be composed, filtered, and inspected using
+standard relational operators:
+
+```
+-- extend a base schema
+Base := {attr type; id int; created date}
+OrderSchema := Base |. {attr type; amount decimal; status str}
+
+-- inspect
+OrderSchema # type
+```
+
+## Applying a Schema
+
+### At load time
+
+```
+\load orders.csv :: Orders o
+```
+
+Loads `orders.csv`, coerces columns through the `Orders` schema
+relation, binds the result as `o`. Columns not in the schema stay
+as-is. Columns in the schema but missing from the CSV are an error.
+
+Without `::`, loading works as today (all strings, with numeric
+auto-promotion).
+
+### Inline coercion
+
+```
+R :: S
+```
+
+Applies schema relation `S` to relation `R`. Coerces each column
+named in `S` to the declared type. Returns a new relation with
+typed values. Columns in `R` not mentioned in `S` are unchanged.
+
+### Every relation has a schema
+
+Even untyped relations have an implicit schema (all `str` for CSV
+loads, inferred from values for literals and expressions). The
+schema can be extracted:
+
+```
+R ::
+```
+
+With no RHS, `::` returns the schema relation for `R`.
+
+## Coercion Rules
+
+When applying a schema, each value is coerced to the target type:
+
+| From | To | Rule |
+|------|----|------|
+| str | int | Parse as integer, error if invalid |
+| str | float | Parse as float, error if invalid |
+| str | decimal | Parse as Decimal, error if invalid |
+| str | date | Parse as ISO date (or "today"), error if invalid |
+| str | bool | "true"→true, "false"→false, error otherwise |
+| int | float | Widen |
+| int | decimal | Widen |
+| float | decimal | Convert via string to preserve digits |
+| date | str | ISO format |
+| * | str | `str()` conversion |
+
+## Type Enforcement Points
+
+- **\load :: Schema** — coerce at CSV import
+- **R :: S** — explicit coercion operator
+- **=: (modify)** — assigned value must be coercible to column type
+- **+: (extend)** — new column type inferred from expression result
+- **{} literals** — column type inferred from values
+
+## Future Directions
+
+- Custom types: user-defined types with init/actions/serialization
+- Decimal precision: `decimal(2)` for fixed-point
+- Type constraints: `int > 0`, `str ~ /pattern/`
+- Schema validation without coercion (check but don't convert)
