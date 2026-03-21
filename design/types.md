@@ -99,12 +99,57 @@ When applying a schema, each value is coerced to the target type:
 | date | str | ISO format |
 | * | str | `str()` conversion |
 
+## Referential Constraints — `in(Relation, attr)`
+
+A type string can reference another relation, constraining the column
+to values that exist in that relation's attribute:
+
+```
+Statuses := {name desc; "open" "Open"; "closed" "Closed"; "pending" "Pending"}
+Schema := {attr type; "status" "in(Statuses, name)"; "amount" "int"}
+Orders :: Schema
+```
+
+### Semantics
+
+- **Coercion**: the constrained column takes the type of the referenced
+  column.  If `Statuses` has a schema saying `name` is `str`, then
+  `Orders.status` is coerced to `str`.
+- **Validation**: every value in `Orders.status` must exist in
+  `Statuses.name`.  Violations raise a coercion error.
+- **Environment lookup**: the referenced relation is resolved from the
+  environment at the time `::` is applied.  The type string
+  `"in(Statuses, name)"` is metadata — inert until applied.
+
+### Continuous enforcement
+
+Once a relation has a schema (via `::` or `\load ::`), all operations
+that produce or change values enforce it:
+
+- **`+:` (extend)** — new column values are validated against the schema
+- **`=:` (modify)** — changed values are validated against the schema
+- **`|.` (union)**, **`|=` (insert)** — incoming values are validated
+- **`::` re-application** — re-validates against current environment
+
+Operations that don't introduce new values (project, filter, join,
+sort, rename, difference, intersect) propagate the schema but don't
+need to re-validate.
+
+### Error messages
+
+Violations produce clear messages:
+
+```
+value 'invalid' not in Statuses.name
+```
+
 ## Type Enforcement Points
 
 - **\load :: Schema** — coerce at CSV import
 - **R :: S** — explicit coercion operator
-- **=: (modify)** — assigned value must be coercible to column type
-- **+: (extend)** — new column type inferred from expression result
+- **=: (modify)** — new values validated against schema
+- **+: (extend)** — new column values validated against schema
+- **|. (union)**, **|= (insert)** — incoming values validated
 - **{} literals** — column type inferred from values
 
 ## Future Directions
@@ -113,3 +158,5 @@ When applying a schema, each value is coerced to the target type:
 - Decimal precision: `decimal(2)` for fixed-point
 - Type constraints: `int > 0`, `str ~ /pattern/`
 - Schema validation without coercion (check but don't convert)
+- Mutation guarding: block changes to referenced relations that
+  would orphan constrained values (cascading delete vs rejection)

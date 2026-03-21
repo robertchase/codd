@@ -1,11 +1,13 @@
 """Type coercion for schema enforcement.
 
 Converts values to declared types when applying a schema to a relation.
+Supports built-in types and referential constraints via ``in(Relation, attr)``.
 """
 
 from __future__ import annotations
 
 import datetime
+import re
 from decimal import Decimal, InvalidOperation
 
 from codd.model.relation import Relation
@@ -15,13 +17,33 @@ from codd.model.types import Tuple_, Value, str_to_date
 # Canonical built-in type names.
 BUILTIN_TYPES = frozenset({"str", "int", "float", "decimal", "date", "bool"})
 
+# Pattern for in(Relation, attr) constraint strings.
+_IN_PATTERN = re.compile(r"^in\(\s*(\w+)\s*,\s*(\w+)\s*\)$")
+
 
 class CoercionError(Exception):
     """Raised when a value cannot be coerced to the target type."""
 
 
+def parse_type_string(type_str: str) -> tuple[str, tuple[str, str] | None]:
+    """Parse a type string into (base_type, in_constraint).
+
+    Returns:
+        (base_type, None) for built-in types like ``"int"``.
+        (base_type, (relation_name, attr_name)) for ``"in(R, a)"``.
+        The base_type for ``in()`` constraints is resolved later from
+        the referenced relation's schema.
+    """
+    m = _IN_PATTERN.match(type_str)
+    if m:
+        return ("in", (m.group(1), m.group(2)))
+    if type_str in BUILTIN_TYPES:
+        return (type_str, None)
+    raise CoercionError(f"Unknown type: {type_str!r}")
+
+
 def coerce_value(value: Value, target_type: str) -> Value:
-    """Coerce a single value to the target type.
+    """Coerce a single value to a built-in target type.
 
     Raises CoercionError if conversion fails.
     """
@@ -43,12 +65,19 @@ def coerce_value(value: Value, target_type: str) -> Value:
     raise CoercionError(f"Unknown type: {target_type!r}")
 
 
-def apply_schema(rel: Relation, schema: dict[str, str]) -> Relation:
+def apply_schema(
+    rel: Relation,
+    schema: dict[str, str],
+    env: object | None = None,
+) -> Relation:
     """Apply a schema to a relation, coercing column values.
 
     Columns in the schema are coerced.  Columns not in the schema
     are left unchanged.  Schema columns missing from the relation
     raise CoercionError.
+
+    For ``in(Relation, attr)`` constraints, *env* must be provided
+    (an object with a ``lookup(name)`` method returning a Relation).
     """
     unknown = frozenset(schema.keys()) - rel.attributes
     if unknown:
@@ -56,24 +85,132 @@ def apply_schema(rel: Relation, schema: dict[str, str]) -> Relation:
             f"Schema references unknown attributes: {sorted(unknown)}"
         )
 
+    # Resolve in() constraints: find base type and valid value sets.
+    resolved: dict[str, str] = {}  # attr → base type for coercion
+    in_constraints: dict[str, tuple[str, str, frozenset]] = {}  # attr → (rel, col, values)
+    for attr, type_str in schema.items():
+        base_type, constraint = parse_type_string(type_str)
+        if constraint is not None:
+            ref_rel_name, ref_attr = constraint
+            if env is None:
+                raise CoercionError(
+                    f"Cannot resolve in({ref_rel_name}, {ref_attr}): "
+                    "no environment available"
+                )
+            try:
+                ref_rel = env.lookup(ref_rel_name)
+            except KeyError:
+                raise CoercionError(
+                    f"Unknown relation {ref_rel_name!r} in "
+                    f"in({ref_rel_name}, {ref_attr})"
+                )
+            if ref_attr not in ref_rel.attributes:
+                raise CoercionError(
+                    f"Attribute {ref_attr!r} not in {ref_rel_name}"
+                )
+            # Determine base type from referenced relation's schema.
+            ref_schema = ref_rel.schema
+            ref_type = ref_schema.get(ref_attr, "str")
+            # If the referenced column itself is an in() constraint, use its
+            # base type for coercion (don't cascade the constraint resolution).
+            ref_base, _ = parse_type_string(ref_type)
+            if ref_base == "in":
+                ref_type = "str"
+            resolved[attr] = ref_type
+            valid_values = frozenset(t[ref_attr] for t in ref_rel)
+            in_constraints[attr] = (ref_rel_name, ref_attr, valid_values)
+        else:
+            resolved[attr] = base_type
+
     # Merge: explicit schema overrides, existing schema fills gaps.
     merged_schema = dict(rel.schema)
-    merged_schema.update(schema)
+    merged_schema.update(schema)  # keep original type strings (e.g. "in(...)")
 
     result: set[Tuple_] = set()
     for t in rel:
         data = t.data
-        for attr, type_name in schema.items():
+        for attr, base_type in resolved.items():
             try:
-                data[attr] = coerce_value(data[attr], type_name)
+                data[attr] = coerce_value(data[attr], base_type)
             except (CoercionError, ValueError, TypeError) as e:
                 raise CoercionError(
-                    f"Cannot coerce {attr}={data[attr]!r} to {type_name}: {e}"
+                    f"Cannot coerce {attr}={data[attr]!r} to {base_type}: {e}"
                 ) from e
+            # Check in() membership after coercion.
+            if attr in in_constraints:
+                ref_rel_name, ref_attr, valid = in_constraints[attr]
+                if data[attr] not in valid:
+                    raise CoercionError(
+                        f"value {data[attr]!r} not in "
+                        f"{ref_rel_name}.{ref_attr}"
+                    )
         result.add(Tuple_(data))
 
     return Relation(frozenset(result), attributes=rel.attributes,
                     schema=merged_schema)
+
+
+def validate_schema(
+    rel: Relation,
+    env: object | None = None,
+    attrs: frozenset[str] | None = None,
+) -> None:
+    """Validate that a relation's values conform to its schema.
+
+    If *attrs* is given, only those attributes are checked (used after
+    extend/modify to check only the changed columns).  Otherwise all
+    schema-typed columns are checked.
+
+    Raises CoercionError on the first violation.
+    """
+    schema_dict = rel.schema
+    if not rel._schema:
+        return  # no explicit schema, nothing to enforce
+
+    check_attrs = attrs if attrs is not None else frozenset(schema_dict.keys())
+
+    for attr in check_attrs:
+        type_str = schema_dict.get(attr)
+        if type_str is None or type_str == "str":
+            continue  # str is the untyped default — no enforcement
+        base_type, constraint = parse_type_string(type_str)
+        # Resolve in() constraint values.
+        valid_values: frozenset | None = None
+        if constraint is not None:
+            ref_rel_name, ref_attr = constraint
+            if env is None:
+                raise CoercionError(
+                    f"Cannot resolve in({ref_rel_name}, {ref_attr}): "
+                    "no environment available"
+                )
+            try:
+                ref_rel = env.lookup(ref_rel_name)
+            except KeyError:
+                raise CoercionError(
+                    f"Unknown relation {ref_rel_name!r} in "
+                    f"in({ref_rel_name}, {ref_attr})"
+                )
+            valid_values = frozenset(t[ref_attr] for t in ref_rel)
+            # Use referenced column's base type.
+            ref_type = ref_rel.schema.get(ref_attr, "str")
+            ref_base, _ = parse_type_string(ref_type)
+            base_type = ref_type if ref_base != "in" else "str"
+
+        for t in rel:
+            val = t[attr]
+            # Type check.
+            if base_type != "in":
+                expected_python = _EXPECTED_TYPES.get(base_type)
+                if expected_python and not isinstance(val, expected_python):
+                    raise CoercionError(
+                        f"{attr}={val!r} is not {base_type}"
+                    )
+            # Membership check.
+            if valid_values is not None and val not in valid_values:
+                ref_rel_name, ref_attr = constraint  # type: ignore[misc]
+                raise CoercionError(
+                    f"value {val!r} not in {ref_rel_name}.{ref_attr}"
+                )
 
 
 def extract_schema(rel: Relation) -> Relation:
@@ -102,7 +239,10 @@ def infer_type(value: Value) -> str:
 
 
 def schema_from_relation(rel: Relation) -> dict[str, str]:
-    """Build a schema-relation (attr→type) from a relation's {attr, type} tuples."""
+    """Build a schema dict (attr→type) from a relation's {attr, type} tuples.
+
+    Accepts both built-in type names and ``in(Relation, attr)`` constraints.
+    """
     if not ({"attr", "type"} <= rel.attributes):
         raise CoercionError(
             "Schema relation must have 'attr' and 'type' attributes, "
@@ -112,10 +252,24 @@ def schema_from_relation(rel: Relation) -> dict[str, str]:
     for t in rel:
         attr = str(t["attr"])
         type_name = str(t["type"])
-        if type_name not in BUILTIN_TYPES:
+        # Validate: must be a built-in type or in() constraint.
+        try:
+            parse_type_string(type_name)
+        except CoercionError:
             raise CoercionError(f"Unknown type {type_name!r} for attribute {attr!r}")
         schema[attr] = type_name
     return schema
+
+
+# Map from type name to expected Python types (for validate_schema checks).
+_EXPECTED_TYPES: dict[str, tuple[type, ...]] = {
+    "str": (str,),
+    "int": (int,),
+    "float": (float,),
+    "decimal": (Decimal,),
+    "date": (datetime.date,),
+    "bool": (bool,),
+}
 
 
 # --- Type conversion helpers ---

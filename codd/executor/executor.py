@@ -121,6 +121,21 @@ class Executor:
             raise ExecutionError("Expected a relation, got an array (did you sort?)")
         return result
 
+    def _enforce_schema(
+        self, rel: Relation, changed_attrs: frozenset[str] | None = None
+    ) -> None:
+        """Validate a relation against its schema after mutation.
+
+        Only checks *changed_attrs* (if given) for efficiency.
+        Raises ExecutionError on violation.
+        """
+        from codd.model.coerce import CoercionError, validate_schema
+
+        try:
+            validate_schema(rel, env=self._env, attrs=changed_attrs)
+        except CoercionError as e:
+            raise ExecutionError(str(e)) from e
+
     # --- Node evaluators ---
 
     def _eval_iota(self, node: ast.Iota) -> Relation:
@@ -190,6 +205,7 @@ class Executor:
     def _eval_extend(self, node: ast.Extend) -> Relation:
         """Evaluate: source + computations."""
         source = self._as_relation(node.source)
+        new_names = frozenset(c.name for c in node.computations)
 
         def compute(t: Tuple_) -> dict[str, Value]:
             result: dict[str, Value] = {}
@@ -197,11 +213,14 @@ class Executor:
                 result[comp.name] = self._eval_expr(comp.expr, t, source)
             return result
 
-        return source.extend(compute)
+        result = source.extend(compute)
+        self._enforce_schema(result, changed_attrs=new_names)
+        return result
 
     def _eval_modify(self, node: ast.Modify) -> Relation:
         """Evaluate: source =: computations (update existing attributes)."""
         source = self._as_relation(node.source)
+        changed_names = frozenset(c.name for c in node.computations)
 
         def compute(t: Tuple_) -> dict[str, Value]:
             result: dict[str, Value] = {}
@@ -209,7 +228,9 @@ class Executor:
                 result[comp.name] = self._eval_expr(comp.expr, t, source)
             return result
 
-        return source.modify(compute)
+        result = source.modify(compute)
+        self._enforce_schema(result, changed_attrs=changed_names)
+        return result
 
     def _eval_rename(self, node: ast.Rename) -> Relation:
         """Evaluate: source @ mappings."""
@@ -221,7 +242,9 @@ class Executor:
         """Evaluate: source | right."""
         left = self._as_relation(node.source)
         right = self._as_relation(node.right)
-        return left.union(right)
+        result = left.union(right)
+        self._enforce_schema(result)
+        return result
 
     def _eval_difference(self, node: ast.Difference) -> Relation:
         """Evaluate: source - right."""
@@ -392,7 +415,7 @@ class Executor:
         schema_rel = self._as_relation(node.schema_rel)
         try:
             schema_dict = schema_from_relation(schema_rel)
-            return apply_schema(source, schema_dict)
+            return apply_schema(source, schema_dict, env=self._env)
         except CoercionError as e:
             raise ExecutionError(str(e)) from e
 

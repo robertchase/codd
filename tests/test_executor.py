@@ -1611,3 +1611,120 @@ class TestSchemaOps:
         )
         with pytest.raises(ExecutionError):
             run("R :: S", env)
+
+    def test_apply_in_constraint(self) -> None:
+        """R :: S with in() constraint validates membership."""
+        env = Environment()
+        env.bind(
+            "Status",
+            Relation(frozenset({Tuple_(name="open"), Tuple_(name="closed")})),
+        )
+        env.bind(
+            "R",
+            Relation(frozenset({Tuple_(status="open")})),
+        )
+        env.bind(
+            "S",
+            Relation(
+                frozenset({Tuple_(attr="status", type='in(Status, name)')})
+            ),
+        )
+        result = run("R :: S", env)
+        assert len(result) == 1
+        assert result.schema["status"] == "in(Status, name)"
+
+    def test_apply_in_constraint_rejects_invalid(self) -> None:
+        """in() constraint rejects values not in referenced relation."""
+        env = Environment()
+        env.bind(
+            "Status",
+            Relation(frozenset({Tuple_(name="open")})),
+        )
+        env.bind(
+            "R",
+            Relation(frozenset({Tuple_(status="invalid")})),
+        )
+        env.bind(
+            "S",
+            Relation(
+                frozenset({Tuple_(attr="status", type='in(Status, name)')})
+            ),
+        )
+        with pytest.raises(ExecutionError, match="not in Status.name"):
+            run("R :: S", env)
+
+    def test_modify_enforces_schema(self) -> None:
+        """=: on a schema-carrying relation enforces type."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({Tuple_(a=1, b="hello")}),
+                schema={"a": "int", "b": "str"},
+            ),
+        )
+        # Modifying b to a string should work fine
+        result = run('R =: b: "world"', env)
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["b"] == "world"
+
+    def test_modify_enforces_in_constraint(self) -> None:
+        """=: rejects values violating in() constraint."""
+        env = Environment()
+        env.bind(
+            "Status",
+            Relation(frozenset({Tuple_(name="open"), Tuple_(name="closed")})),
+        )
+        env.bind(
+            "R",
+            Relation(
+                frozenset({Tuple_(status="open")}),
+                schema={"status": "in(Status, name)"},
+            ),
+        )
+        with pytest.raises(ExecutionError, match="not in Status.name"):
+            run('R =: status: "invalid"', env)
+
+    def test_union_enforces_schema(self) -> None:
+        """|. on a schema-carrying relation validates incoming values."""
+        env = Environment()
+        env.bind(
+            "Status",
+            Relation(frozenset({Tuple_(name="open"), Tuple_(name="closed")})),
+        )
+        env.bind(
+            "R",
+            Relation(
+                frozenset({Tuple_(status="open")}),
+                schema={"status": "in(Status, name)"},
+            ),
+        )
+        # Union with a valid value should work
+        env.bind(
+            "R2",
+            Relation(frozenset({Tuple_(status="closed")})),
+        )
+        result = run("R |. R2", env)
+        assert len(result) == 2
+
+    def test_union_enforces_in_constraint_rejects(self) -> None:
+        """|. rejects union when incoming values violate in() constraint."""
+        env = Environment()
+        env.bind(
+            "Status",
+            Relation(frozenset({Tuple_(name="open")})),
+        )
+        env.bind(
+            "R",
+            Relation(
+                frozenset({Tuple_(status="open")}),
+                schema={"status": "in(Status, name)"},
+            ),
+        )
+        env.bind(
+            "R2",
+            Relation(frozenset({Tuple_(status="invalid")})),
+        )
+        with pytest.raises(ExecutionError, match="not in Status.name"):
+            run("R |. R2", env)

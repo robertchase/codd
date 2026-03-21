@@ -199,7 +199,7 @@ def _load_csv_file(
                 return
             try:
                 schema_dict = schema_from_relation(schema_rel)
-                rel = apply_schema(rel, schema_dict)
+                rel = apply_schema(rel, schema_dict, env=env)
             except CoercionError as e:
                 print(f"Error applying schema: {e}")
                 return
