@@ -616,12 +616,36 @@ class Parser:
             left = ast.BoolCombination(left=left, op=op_tok.value, right=right)
         return left
 
-    def _parse_comparison(self) -> ast.Comparison:
-        """Parse: attr op value, or aggregate op value."""
+    def _parse_comparison(self) -> ast.Comparison | ast.MembershipTest:
+        """Parse: attr op value, aggregate op value, or value in. rel_expr."""
+        # Check for literal LHS followed by in. membership test.
+        if self._peek().type in (
+            TokenType.STRING,
+            TokenType.INTEGER,
+            TokenType.FLOAT,
+            TokenType.BOOLEAN,
+        ) and self._peek(1).type == TokenType.IN_DOT:
+            left_tok = self._advance()
+            if left_tok.type == TokenType.STRING:
+                left_expr: ast.Expr = ast.StringLiteral(value=left_tok.value)
+            elif left_tok.type == TokenType.INTEGER:
+                left_expr = ast.IntLiteral(value=int(left_tok.value))
+            elif left_tok.type == TokenType.FLOAT:
+                left_expr = ast.FloatLiteral(value=float(left_tok.value))
+            else:
+                left_expr = ast.BoolLiteral(value=left_tok.value == "true")
+            self._advance()  # consume in.
+            rel_expr = self._parse_expr()
+            return ast.MembershipTest(left=left_expr, rel_expr=rel_expr)
         if self._peek().type in self._AGG_TOKENS:
             left: ast.AttrRef | ast.AggregateCall = self._parse_aggregate_call()
         else:
             left = self._parse_attr_ref()
+        # Check for in. membership test.
+        if self._peek().type == TokenType.IN_DOT:
+            self._advance()  # consume in.
+            rel_expr = self._parse_expr()
+            return ast.MembershipTest(left=left, rel_expr=rel_expr)
         comp_ops = {
             TokenType.EQ: "=",
             TokenType.BANG_EQ: "!=",

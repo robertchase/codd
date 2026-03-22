@@ -955,3 +955,43 @@ class TestSchemaOp:
         result = parse("R # [name salary] ::")
         assert isinstance(result, ast.ExtractSchema)
         assert isinstance(result.source, ast.Project)
+
+
+class TestMembershipOp:
+    """Test in. (membership) operator parsing."""
+
+    def test_attr_in_relation(self) -> None:
+        """attr in. R # col parses as Filter with MembershipTest."""
+        result = parse("R ? status in. S # name")
+        assert isinstance(result, ast.Filter)
+        cond = result.condition
+        assert isinstance(cond, ast.MembershipTest)
+        assert isinstance(cond.left, ast.AttrRef)
+        assert cond.left.name == "status"
+        assert isinstance(cond.rel_expr, ast.Project)
+
+    def test_literal_in_relation(self) -> None:
+        """Literal in. R parses as MembershipTest with literal LHS."""
+        result = parse('R ? "abc" in. S # foo')
+        assert isinstance(result, ast.Filter)
+        cond = result.condition
+        assert isinstance(cond, ast.MembershipTest)
+        assert isinstance(cond.left, ast.StringLiteral)
+        assert cond.left.value == "abc"
+
+    def test_int_literal_in_relation(self) -> None:
+        """Integer literal in. R parses correctly."""
+        result = parse("R ? 42 in. S # id")
+        assert isinstance(result, ast.Filter)
+        cond = result.condition
+        assert isinstance(cond, ast.MembershipTest)
+        assert isinstance(cond.left, ast.IntLiteral)
+        assert cond.left.value == 42
+
+    def test_in_with_bool_combination(self) -> None:
+        """in. works inside boolean combinations."""
+        result = parse("R ? (status in. S # name & active = true)")
+        assert isinstance(result, ast.Filter)
+        cond = result.condition
+        assert isinstance(cond, ast.BoolCombination)
+        assert isinstance(cond.left, ast.MembershipTest)

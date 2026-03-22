@@ -356,9 +356,10 @@ class Lexer:
         value = self._source[start : self._pos]
         return self._make_token(TokenType.INTEGER, value, line, col)
 
-    # Alphabetic operators: single letter + '.' (extensible for p., d., etc.)
+    # Alphabetic operators: letter(s) + '.' (extensible for p., d., etc.)
     _ALPHA_OPS: dict[str, TokenType] = {
         "i": TokenType.I_DOT,
+        "in": TokenType.IN_DOT,
         "n": TokenType.N_DOT,
         "p": TokenType.P_DOT,
         "r": TokenType.R_DOT,
@@ -374,7 +375,7 @@ class Lexer:
         value = self._source[start : self._pos]
         if value in ("true", "false"):
             return self._make_token(TokenType.BOOLEAN, value, line, col)
-        if len(value) == 1 and self._peek() == "." and value in self._ALPHA_OPS:
+        if self._peek() == "." and value in self._ALPHA_OPS:
             self._advance()  # consume '.'
             return self._make_token(self._ALPHA_OPS[value], value + ".", line, col)
         return self._make_token(TokenType.IDENT, value, line, col)

@@ -32,16 +32,19 @@ def agg_count(rel: Relation, attr: str | None = None) -> int:
     return len(rel)
 
 
-def agg_sum(rel: Relation, attr: str | None = None) -> int | float:
+def agg_sum(rel: Relation, attr: str | None = None) -> int | float | Decimal:
     """Sum an attribute across tuples (+.).
 
-    Returns int when all values are int, float otherwise.
+    Returns int when all values are int, Decimal when any value is Decimal,
+    float otherwise.
     """
     if attr is None:
         raise ValueError("+. requires an attribute name")
     values = _extract_values(rel, attr)
     if all(isinstance(v, int) for v in values):
         return sum(values)
+    if any(isinstance(v, Decimal) for v in values):
+        return sum(Decimal(str(v)) for v in values)
     return sum(float(v) for v in values)
 
 
@@ -61,14 +64,19 @@ def agg_min(rel: Relation, attr: str | None = None) -> int | float | str:
     return min(values)
 
 
-def agg_mean(rel: Relation, attr: str | None = None) -> float:
-    """Mean of an attribute across tuples (%.)."""
+def agg_mean(rel: Relation, attr: str | None = None) -> float | Decimal:
+    """Mean of an attribute across tuples (%.).
+
+    Returns Decimal when any value is Decimal, float otherwise.
+    """
     if attr is None:
         raise ValueError("%. requires an attribute name")
     values = _extract_values(rel, attr)
     count = len(values)
     if count == 0:
         raise ValueError("%. on empty relation")
+    if any(isinstance(v, Decimal) for v in values):
+        return sum(Decimal(str(v)) for v in values) / count
     return sum(float(v) for v in values) / count
 
 
@@ -83,15 +91,27 @@ def agg_collect(rel: Relation, attr: str | None = None) -> Relation:
     return rel
 
 
-def agg_percent(group_rel: Relation, attr: str | None, whole_rel: Relation) -> float:
+def agg_percent(
+    group_rel: Relation, attr: str | None, whole_rel: Relation
+) -> float | Decimal:
     """Percent of group total relative to whole total (p.).
 
     Returns (sum(group.attr) / sum(whole.attr)) * 100.
+    Returns Decimal when any value is Decimal, float otherwise.
     """
     if attr is None:
         raise ValueError("p. requires an attribute name")
     group_values = _extract_values(group_rel, attr)
     whole_values = _extract_values(whole_rel, attr)
+    use_decimal = any(isinstance(v, Decimal) for v in group_values) or any(
+        isinstance(v, Decimal) for v in whole_values
+    )
+    if use_decimal:
+        group_sum = sum(Decimal(str(v)) for v in group_values)
+        whole_sum = sum(Decimal(str(v)) for v in whole_values)
+        if whole_sum == 0:
+            raise ValueError("p. division by zero: total is 0")
+        return group_sum / whole_sum * 100
     group_sum = sum(float(v) for v in group_values)
     whole_sum = sum(float(v) for v in whole_values)
     if whole_sum == 0:

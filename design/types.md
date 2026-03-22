@@ -20,10 +20,11 @@ the runtime is free to optimize internal representation.
 | `int` | Integer |
 | `float` | Floating point |
 | `decimal` | Arbitrary precision decimal |
+| `decimal(N)` | Decimal quantized to N places (ROUND_HALF_UP) |
 | `date` | Calendar date (ISO 8601) |
 | `bool` | Boolean (true/false) |
 
-Future: `decimal` may support precision (`decimal(2)`), custom types.
+Future: custom types.
 
 ## Schema as a Relation
 

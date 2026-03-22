@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import datetime
 import re
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from codd.model.relation import Relation
 from codd.model.types import Tuple_, Value, str_to_date
@@ -20,30 +20,40 @@ BUILTIN_TYPES = frozenset({"str", "int", "float", "decimal", "date", "bool"})
 # Pattern for in(Relation, attr) constraint strings.
 _IN_PATTERN = re.compile(r"^in\(\s*(\w+)\s*,\s*(\w+)\s*\)$")
 
+# Pattern for decimal(N) precision strings.
+_DECIMAL_PATTERN = re.compile(r"^decimal\(\s*(\d+)\s*\)$")
+
 
 class CoercionError(Exception):
     """Raised when a value cannot be coerced to the target type."""
 
 
 def parse_type_string(type_str: str) -> tuple[str, tuple[str, str] | None]:
-    """Parse a type string into (base_type, in_constraint).
+    """Parse a type string into (base_type, constraint_info).
 
     Returns:
         (base_type, None) for built-in types like ``"int"``.
-        (base_type, (relation_name, attr_name)) for ``"in(R, a)"``.
+        ("in", (relation_name, attr_name)) for ``"in(R, a)"``.
+        ("decimal", ("precision", N_str)) for ``"decimal(N)"``.
         The base_type for ``in()`` constraints is resolved later from
         the referenced relation's schema.
     """
     m = _IN_PATTERN.match(type_str)
     if m:
         return ("in", (m.group(1), m.group(2)))
+    m = _DECIMAL_PATTERN.match(type_str)
+    if m:
+        return ("decimal", ("precision", m.group(1)))
     if type_str in BUILTIN_TYPES:
         return (type_str, None)
     raise CoercionError(f"Unknown type: {type_str!r}")
 
 
-def coerce_value(value: Value, target_type: str) -> Value:
+def coerce_value(value: Value, target_type: str, precision: int | None = None) -> Value:
     """Coerce a single value to a built-in target type.
+
+    For ``decimal`` types, *precision* specifies the number of decimal
+    places to quantize to (e.g. 2 → ``0.01``).  Uses ROUND_HALF_UP.
 
     Raises CoercionError if conversion fails.
     """
@@ -57,7 +67,7 @@ def coerce_value(value: Value, target_type: str) -> Value:
     if target_type == "float":
         return _to_float(value)
     if target_type == "decimal":
-        return _to_decimal(value)
+        return _to_decimal(value, precision=precision)
     if target_type == "date":
         return _to_date(value)
     if target_type == "bool":
@@ -85,12 +95,12 @@ def apply_schema(
             f"Schema references unknown attributes: {sorted(unknown)}"
         )
 
-    # Resolve in() constraints: find base type and valid value sets.
-    resolved: dict[str, str] = {}  # attr → base type for coercion
+    # Resolve types: find base type, precision, and in() constraint values.
+    resolved: dict[str, tuple[str, int | None]] = {}  # attr → (base_type, precision)
     in_constraints: dict[str, tuple[str, str, frozenset]] = {}  # attr → (rel, col, values)
     for attr, type_str in schema.items():
         base_type, constraint = parse_type_string(type_str)
-        if constraint is not None:
+        if base_type == "in" and constraint is not None:
             ref_rel_name, ref_attr = constraint
             if env is None:
                 raise CoercionError(
@@ -116,11 +126,15 @@ def apply_schema(
             ref_base, _ = parse_type_string(ref_type)
             if ref_base == "in":
                 ref_type = "str"
-            resolved[attr] = ref_type
+            resolved[attr] = (ref_type, None)
             valid_values = frozenset(t[ref_attr] for t in ref_rel)
             in_constraints[attr] = (ref_rel_name, ref_attr, valid_values)
+        elif base_type == "decimal" and constraint is not None:
+            # decimal(N) — constraint holds ("precision", N_str)
+            prec = int(constraint[1])
+            resolved[attr] = ("decimal", prec)
         else:
-            resolved[attr] = base_type
+            resolved[attr] = (base_type, None)
 
     # Merge: explicit schema overrides, existing schema fills gaps.
     merged_schema = dict(rel.schema)
@@ -129,9 +143,9 @@ def apply_schema(
     result: set[Tuple_] = set()
     for t in rel:
         data = t.data
-        for attr, base_type in resolved.items():
+        for attr, (base_type, precision) in resolved.items():
             try:
-                data[attr] = coerce_value(data[attr], base_type)
+                data[attr] = coerce_value(data[attr], base_type, precision=precision)
             except (CoercionError, ValueError, TypeError) as e:
                 raise CoercionError(
                     f"Cannot coerce {attr}={data[attr]!r} to {base_type}: {e}"
@@ -174,6 +188,14 @@ def validate_schema(
         if type_str is None or type_str == "str":
             continue  # str is the untyped default — no enforcement
         base_type, constraint = parse_type_string(type_str)
+        # decimal(N) — base check is just Decimal isinstance.
+        if base_type == "decimal" and constraint is not None:
+            # Precision was applied at coercion time; just check it's a Decimal.
+            for t in rel:
+                val = t[attr]
+                if not isinstance(val, Decimal):
+                    raise CoercionError(f"{attr}={val!r} is not decimal")
+            continue
         # Resolve in() constraint values.
         valid_values: frozenset | None = None
         if constraint is not None:
@@ -324,22 +346,31 @@ def _to_float(value: Value) -> float:
     raise CoercionError(f"Cannot coerce {type(value).__name__} to float")
 
 
-def _to_decimal(value: Value) -> Decimal:
-    """Convert to Decimal."""
+def _to_decimal(value: Value, precision: int | None = None) -> Decimal:
+    """Convert to Decimal, optionally quantizing to *precision* places.
+
+    Uses ROUND_HALF_UP when precision is specified.
+    """
     if isinstance(value, bool):
         raise CoercionError(f"Cannot coerce bool to decimal: {value!r}")
     if isinstance(value, Decimal):
-        return value
-    if isinstance(value, int):
-        return Decimal(value)
-    if isinstance(value, float):
-        return Decimal(str(value))
-    if isinstance(value, str):
+        result = value
+    elif isinstance(value, int):
+        result = Decimal(value)
+    elif isinstance(value, float):
+        result = Decimal(str(value))
+    elif isinstance(value, str):
         try:
-            return Decimal(value)
+            result = Decimal(value)
         except InvalidOperation:
             raise CoercionError(f"Cannot coerce {value!r} to decimal")
-    raise CoercionError(f"Cannot coerce {type(value).__name__} to decimal")
+    else:
+        raise CoercionError(f"Cannot coerce {type(value).__name__} to decimal")
+
+    if precision is not None:
+        quantizer = Decimal(10) ** -precision
+        result = result.quantize(quantizer, rounding=ROUND_HALF_UP)
+    return result
 
 
 def _to_date(value: Value) -> datetime.date:

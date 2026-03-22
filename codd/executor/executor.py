@@ -272,7 +272,9 @@ class Executor:
 
             agg_fns[comp.name] = make_fn(expr)
 
-        return source.summarize(frozenset(node.group_attrs), agg_fns)
+        agg_schema = self._build_agg_schema(node.computations, source)
+        return source.summarize(frozenset(node.group_attrs), agg_fns,
+                                agg_schema=agg_schema)
 
     def _eval_summarize_all(self, node: ast.SummarizeAll) -> Relation:
         """Evaluate: source /. [computations]."""
@@ -288,7 +290,31 @@ class Executor:
 
             agg_fns[comp.name] = make_fn(expr)
 
-        return source.summarize_all(agg_fns)
+        agg_schema = self._build_agg_schema(node.computations, source)
+        return source.summarize_all(agg_fns, agg_schema=agg_schema)
+
+    @staticmethod
+    def _build_agg_schema(
+        computations: list, source: Relation
+    ) -> dict[str, str] | None:
+        """Build schema for aggregate output columns.
+
+        If the source has a schema and an aggregate references a single
+        column (e.g. ``+. amount``), the output column inherits that
+        column's type.
+        """
+        if source._schema is None:
+            return None
+        schema: dict[str, str] = {}
+        src_schema = source.schema
+        for comp in computations:
+            expr = comp.expr
+            # Simple aggregate on a single column: inherit its type.
+            if isinstance(expr, ast.AggregateCall) and expr.arg is not None:
+                src_attr = expr.arg.parts[0]
+                if src_attr in src_schema:
+                    schema[comp.name] = src_schema[src_attr]
+        return schema if schema else None
 
     def _eval_summarize_expr(
         self, expr: ast.Expr, group_rel: Relation, whole_rel: Relation
@@ -611,7 +637,7 @@ class Executor:
         self, expr: ast.TernaryExpr, t: Tuple_, source: Relation | None = None
     ) -> Value:
         """Evaluate a ternary (conditional) expression."""
-        predicate = self._compile_comparison(expr.condition)
+        predicate = self._compile_condition(expr.condition)
         if predicate(t):
             return self._eval_expr(expr.true_expr, t, source)
         return self._eval_expr(expr.false_expr, t, source)
@@ -851,6 +877,8 @@ class Executor:
         """Compile a condition AST node into a predicate function."""
         if isinstance(cond, ast.Comparison):
             return self._compile_comparison(cond)
+        if isinstance(cond, ast.MembershipTest):
+            return self._compile_membership(cond)
         if isinstance(cond, ast.BoolCombination):
             left_fn = self._compile_condition(cond.left)
             right_fn = self._compile_condition(cond.right)
@@ -937,6 +965,54 @@ class Executor:
         dummy = Tuple_({})
         rval = self._eval_expr(right_expr, dummy, None)
         return _make_scalar_cmp(get_left, op, rval)
+
+    def _compile_membership(self, node: ast.MembershipTest):
+        """Compile: value in. rel_expr — membership test.
+
+        The RHS must evaluate to a single-column relation.  The LHS
+        can be an attribute reference, literal, or scalar expression.
+        """
+        # Evaluate the RHS relation once (eagerly).
+        rel = self._as_relation(node.rel_expr)
+        if len(rel.attributes) != 1:
+            raise ExecutionError(
+                f"in. requires a single-column relation, "
+                f"got {len(rel.attributes)} columns: {sorted(rel.attributes)}"
+            )
+        attr = next(iter(rel.attributes))
+        member_set = frozenset(t[attr] for t in rel)
+        negated = node.negated
+
+        left = node.left
+        if isinstance(left, ast.AttrRef):
+            parts = left.parts
+
+            def predicate(t: Tuple_) -> bool:
+                val = t[parts[0]]
+                for p in parts[1:]:
+                    val = val[p]
+                result = val in member_set
+                return not result if negated else result
+        elif isinstance(left, (ast.StringLiteral, ast.IntLiteral,
+                               ast.FloatLiteral, ast.BoolLiteral)):
+            # Constant LHS — evaluate once.
+            const_val = left.value
+            const_result = const_val in member_set
+            if negated:
+                const_result = not const_result
+
+            def predicate(t: Tuple_) -> bool:
+                return const_result
+        else:
+            # General expression LHS.
+            expr = left
+
+            def predicate(t: Tuple_) -> bool:
+                val = self._eval_expr(expr, t, None)
+                result = val in member_set
+                return not result if negated else result
+
+        return predicate
 
 
 class _ReverseKey:

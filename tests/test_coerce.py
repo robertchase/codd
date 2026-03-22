@@ -231,10 +231,73 @@ class TestParseTypeString:
         """in() with whitespace is accepted."""
         assert parse_type_string("in( Status , name )") == ("in", ("Status", "name"))
 
+    def test_decimal_precision(self) -> None:
+        """decimal(N) returns ('decimal', ('precision', 'N'))."""
+        assert parse_type_string("decimal(2)") == ("decimal", ("precision", "2"))
+
+    def test_decimal_precision_spaces(self) -> None:
+        """decimal( N ) with whitespace is accepted."""
+        assert parse_type_string("decimal( 4 )") == ("decimal", ("precision", "4"))
+
     def test_unknown_type(self) -> None:
         """Unknown type raises CoercionError."""
         with pytest.raises(CoercionError):
             parse_type_string("vector")
+
+
+class TestDecimalPrecision:
+    """Test decimal(N) precision coercion."""
+
+    def test_coerce_str_to_decimal2(self) -> None:
+        """String coerces to 2-place decimal."""
+        result = coerce_value("11.599", "decimal", precision=2)
+        assert result == Decimal("11.60")
+
+    def test_coerce_rounds_half_up(self) -> None:
+        """ROUND_HALF_UP: 2.345 → 2.35."""
+        result = coerce_value("2.345", "decimal", precision=2)
+        assert result == Decimal("2.35")
+
+    def test_coerce_int_to_decimal2(self) -> None:
+        """Integer gets two decimal places."""
+        result = coerce_value(42, "decimal", precision=2)
+        assert result == Decimal("42.00")
+
+    def test_coerce_float_to_decimal3(self) -> None:
+        """Float quantized to 3 places."""
+        result = coerce_value(1.5, "decimal", precision=3)
+        assert result == Decimal("1.500")
+
+    def test_coerce_decimal_requantized(self) -> None:
+        """Existing Decimal is re-quantized."""
+        result = coerce_value(Decimal("3.14159"), "decimal", precision=2)
+        assert result == Decimal("3.14")
+
+    def test_bare_decimal_no_quantize(self) -> None:
+        """Bare decimal (no precision) leaves value as-is."""
+        result = coerce_value("3.14159", "decimal", precision=None)
+        assert result == Decimal("3.14159")
+
+    def test_apply_schema_decimal_precision(self) -> None:
+        """apply_schema with decimal(2) quantizes values."""
+        rel = Relation(
+            frozenset({
+                Tuple_(amount="11.599"),
+                Tuple_(amount="3.7"),
+            })
+        )
+        result = apply_schema(rel, {"amount": "decimal(2)"})
+        amounts = {t["amount"] for t in result}
+        assert amounts == {Decimal("11.60"), Decimal("3.70")}
+        assert result.schema["amount"] == "decimal(2)"
+
+    def test_schema_from_relation_accepts_decimal_precision(self) -> None:
+        """schema_from_relation accepts decimal(N) type strings."""
+        schema_rel = Relation(
+            frozenset({Tuple_(attr="price", type="decimal(2)")})
+        )
+        result = schema_from_relation(schema_rel)
+        assert result == {"price": "decimal(2)"}
 
 
 class TestInConstraint:

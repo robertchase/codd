@@ -843,6 +843,46 @@ class TestSummarize:
         assert t["n"] == 5
         assert t["total"] == 330000
 
+    def test_summarize_inherits_schema(self) -> None:
+        """Summarize propagates source column types to aggregate output."""
+        from decimal import Decimal
+
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(cat="A", amount=Decimal("10.50")),
+                    Tuple_(cat="A", amount=Decimal("20.30")),
+                    Tuple_(cat="B", amount=Decimal("5.00")),
+                }),
+                schema={"cat": "str", "amount": "decimal(2)"},
+            ),
+        )
+        result = run("R /. cat [total: +. amount]", env)
+        assert isinstance(result, Relation)
+        assert result.schema["cat"] == "str"
+        assert result.schema["total"] == "decimal(2)"
+
+    def test_summarize_all_inherits_schema(self) -> None:
+        """Summarize-all propagates source column types to aggregate output."""
+        from decimal import Decimal
+
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(amount=Decimal("10.50")),
+                    Tuple_(amount=Decimal("20.30")),
+                }),
+                schema={"amount": "decimal(2)"},
+            ),
+        )
+        result = run("R /. [total: +. amount]", env)
+        assert isinstance(result, Relation)
+        assert result.schema["total"] == "decimal(2)"
+
 
 class TestNestBy:
     """Test /: (nest by)."""
@@ -1612,6 +1652,20 @@ class TestSchemaOps:
         with pytest.raises(ExecutionError):
             run("R :: S", env)
 
+    def test_apply_decimal_precision(self) -> None:
+        """R :: S with decimal(2) quantizes values."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(frozenset({Tuple_(price="11.599"), Tuple_(price="3.7")})),
+        )
+        result = run('R :: {attr type; "price" "decimal(2)"}', env)
+        assert isinstance(result, Relation)
+        from decimal import Decimal
+
+        prices = {t["price"] for t in result}
+        assert prices == {Decimal("11.60"), Decimal("3.70")}
+
     def test_apply_in_constraint(self) -> None:
         """R :: S with in() constraint validates membership."""
         env = Environment()
@@ -1652,6 +1706,140 @@ class TestSchemaOps:
         )
         with pytest.raises(ExecutionError, match="not in Status.name"):
             run("R :: S", env)
+
+
+class TestMembershipOp:
+    """Test in. (membership) operator."""
+
+    def test_filter_by_membership(self) -> None:
+        """Filter rows where attr value is in another relation."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(name="Alice", dept="eng"),
+                    Tuple_(name="Bob", dept="sales"),
+                    Tuple_(name="Carol", dept="eng"),
+                    Tuple_(name="Dave", dept="hr"),
+                })
+            ),
+        )
+        env.bind(
+            "Valid",
+            Relation(
+                frozenset({Tuple_(dept="eng"), Tuple_(dept="sales")})
+            ),
+        )
+        result = run("R ? dept in. Valid # dept", env)
+        assert isinstance(result, Relation)
+        assert len(result) == 3
+        names = {t["name"] for t in result}
+        assert names == {"Alice", "Bob", "Carol"}
+
+    def test_filter_by_membership_excludes(self) -> None:
+        """Rows not in the membership set are excluded."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(frozenset({Tuple_(x=1), Tuple_(x=2), Tuple_(x=3)})),
+        )
+        env.bind(
+            "S",
+            Relation(frozenset({Tuple_(v=1), Tuple_(v=3)})),
+        )
+        result = run("R ? x in. S # v", env)
+        assert len(result) == 2
+        assert {t["x"] for t in result} == {1, 3}
+
+    def test_literal_in_relation(self) -> None:
+        """Literal value membership check."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(frozenset({Tuple_(a=1), Tuple_(a=2)})),
+        )
+        env.bind(
+            "S",
+            Relation(frozenset({Tuple_(v="abc"), Tuple_(v="def")})),
+        )
+        # "abc" is in S#v, so all rows pass
+        result = run('R ? "abc" in. S # v', env)
+        assert len(result) == 2
+
+    def test_literal_not_in_relation(self) -> None:
+        """Literal value not in set filters all rows."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(frozenset({Tuple_(a=1), Tuple_(a=2)})),
+        )
+        env.bind(
+            "S",
+            Relation(frozenset({Tuple_(v="abc")})),
+        )
+        result = run('R ? "xyz" in. S # v', env)
+        assert len(result) == 0
+
+    def test_in_with_ternary(self) -> None:
+        """in. works in ternary expressions."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(name="Alice", dept="eng"),
+                    Tuple_(name="Bob", dept="hr"),
+                })
+            ),
+        )
+        env.bind(
+            "CoreDepts",
+            Relation(frozenset({Tuple_(d="eng"), Tuple_(d="sales")})),
+        )
+        result = run(
+            'R +: core: ?: dept in. CoreDepts # d "yes" "no"', env
+        )
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["core"] == "yes"
+            elif t["name"] == "Bob":
+                assert t["core"] == "no"
+
+    def test_in_multi_column_error(self) -> None:
+        """in. with multi-column RHS raises error."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(x=1)})))
+        env.bind(
+            "S",
+            Relation(frozenset({Tuple_(a=1, b=2)})),
+        )
+        with pytest.raises(ExecutionError, match="single-column"):
+            run("R ? x in. S", env)
+
+    def test_in_with_boolean_combination(self) -> None:
+        """in. works with & and | in conditions."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(name="Alice", dept="eng", active=True),
+                    Tuple_(name="Bob", dept="eng", active=False),
+                    Tuple_(name="Carol", dept="hr", active=True),
+                })
+            ),
+        )
+        env.bind(
+            "CoreDepts",
+            Relation(frozenset({Tuple_(d="eng")})),
+        )
+        result = run(
+            "R ? (dept in. CoreDepts # d & active = true)", env
+        )
+        assert len(result) == 1
+        assert next(iter(result))["name"] == "Alice"
 
     def test_modify_enforces_schema(self) -> None:
         """=: on a schema-carrying relation enforces type."""

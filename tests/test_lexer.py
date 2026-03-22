@@ -244,6 +244,18 @@ class TestIdentifiers:
         with pytest.raises(LexError, match="Unterminated backtick"):
             Lexer('`foo').tokenize()
 
+    def test_in_dot_token(self) -> None:
+        """'in.' lexes as IN_DOT token."""
+        toks = Lexer("in.").tokenize()
+        assert toks[0].type == TokenType.IN_DOT
+        assert toks[0].value == "in."
+
+    def test_in_as_ident(self) -> None:
+        """'in' without dot is a plain identifier."""
+        toks = Lexer("in").tokenize()
+        assert toks[0].type == TokenType.IDENT
+        assert toks[0].value == "in"
+
 
 class TestComplexExpressions:
     """Test tokenizing full expressions."""

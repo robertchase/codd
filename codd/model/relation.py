@@ -235,10 +235,12 @@ class Relation:
         self,
         group_attrs: frozenset[str],
         aggregates: dict[str, Callable[[Relation], Value]],
+        agg_schema: dict[str, str] | None = None,
     ) -> Relation:
         """Summarize: group by key attrs, compute aggregates (/).
 
         Returns a relation with the grouping key(s) plus the named aggregates.
+        *agg_schema* optionally provides type names for the aggregate columns.
         """
         unknown = group_attrs - self._attributes
         if unknown:
@@ -256,15 +258,27 @@ class Relation:
             group_rel = Relation(frozenset(members), attributes=self._attributes)
             agg_values = {name: fn(group_rel) for name, fn in aggregates.items()}
             result.add(key_tuple.extend(agg_values))
-        return Relation(frozenset(result), attributes=result_attrs)
+        # Schema: group key types from source, aggregate types from agg_schema.
+        schema = self._project_schema(group_attrs)
+        if agg_schema:
+            if schema is None:
+                schema = {}
+            schema.update(agg_schema)
+        return Relation(frozenset(result), attributes=result_attrs, schema=schema)
 
     def summarize_all(
-        self, aggregates: dict[str, Callable[[Relation], Value]]
+        self,
+        aggregates: dict[str, Callable[[Relation], Value]],
+        agg_schema: dict[str, str] | None = None,
     ) -> Relation:
         """Summarize all: collapse entire relation, no grouping key (/.)."""
         agg_values = {name: fn(self) for name, fn in aggregates.items()}
         result_attrs = frozenset(aggregates.keys())
-        return Relation(frozenset({Tuple_(agg_values)}), attributes=result_attrs)
+        return Relation(
+            frozenset({Tuple_(agg_values)}),
+            attributes=result_attrs,
+            schema=agg_schema,
+        )
 
     def nest_by(
         self, group_attrs: frozenset[str], nest_name: str

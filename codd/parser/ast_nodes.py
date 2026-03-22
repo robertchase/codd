@@ -185,7 +185,20 @@ class BoolCombination:
     right: Condition
 
 
-Condition = Comparison | BoolCombination
+@dataclass(frozen=True)
+class MembershipTest:
+    """Membership test: value in. relation_expr.
+
+    Checks whether a value (attr ref, literal, or scalar expr) exists
+    in a single-column relation.  Used in filters and ternary conditions.
+    """
+
+    left: AttrRef | Expr
+    rel_expr: "RelExpr"
+    negated: bool = False
+
+
+Condition = Comparison | BoolCombination | MembershipTest
 
 
 # --- Relational expressions (chain operations on relations) ---
