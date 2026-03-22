@@ -838,8 +838,9 @@ class Parser:
     def _parse_ternary_branch(self) -> ast.Expr:
         """Parse a single branch of a ternary expression.
 
-        Handles atoms, aggregate calls, and nested ternaries.
-        Binary arithmetic in branches requires parentheses.
+        Each branch is a single atom (literal, attr ref, aggregate,
+        nested ternary, or parenthesized expression).  Use parentheses
+        for arithmetic: ``?: cond (a + b) c``.
         """
         if self._peek().type == TokenType.QUESTION_COLON:
             return self._parse_ternary_expr()
