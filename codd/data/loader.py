@@ -19,6 +19,7 @@ def load_csv(
     name: str,
     *,
     genkey: str | None = None,
+    genkey_col: str | None = None,
 ) -> Relation:
     """Read CSV data from a text stream and return a Relation.
 
@@ -28,6 +29,8 @@ def load_csv(
 
     If *genkey* is provided, a synthetic key column named ``{genkey}_id``
     is prepended with sequential integers starting at 1.
+    If *genkey_col* is provided, it is used as the exact column name
+    (overrides *genkey*).
     """
     reader = csv.reader(source)
     try:
@@ -38,7 +41,9 @@ def load_csv(
     headers = [h.strip() for h in headers]
 
     key_col: str | None = None
-    if genkey is not None:
+    if genkey_col is not None:
+        key_col = genkey_col
+    elif genkey is not None:
         key_col = f"{genkey}_id"
         if key_col in headers:
             raise LoadError(

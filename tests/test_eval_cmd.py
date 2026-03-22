@@ -235,3 +235,67 @@ class TestOpsFlag:
         assert result.exit_code == 0
         assert "Relational" in result.output
         assert "#." in result.output
+
+
+class TestPerFileGenkey:
+    """Test +key per-file genkey syntax."""
+
+    def test_plus_key(self, tmp_path: Path) -> None:
+        """file.csv+key adds {stem}_id column."""
+        csv_file = tmp_path / "items.csv"
+        csv_file.write_text("name,price\nApple,1.50\nBanana,0.75\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, [f"{csv_file}+key", "-e", "items # items_id"],
+        )
+        assert result.exit_code == 0
+        assert "1" in result.output
+        assert "2" in result.output
+
+    def test_plus_key_custom_name(self, tmp_path: Path) -> None:
+        """file.csv+key=oid names the column exactly 'oid'."""
+        csv_file = tmp_path / "items.csv"
+        csv_file.write_text("name,price\nApple,1.50\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, [f"{csv_file}+key=oid", "-e", "items # oid"],
+        )
+        assert result.exit_code == 0
+        assert "1" in result.output
+
+    def test_alias_plus_key(self, tmp_path: Path) -> None:
+        """n=file.csv+key uses alias for key column name."""
+        csv_file = tmp_path / "data.csv"
+        csv_file.write_text("x\n1\n2\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, [f"R={csv_file}+key", "-e", "R # R_id"],
+        )
+        assert result.exit_code == 0
+        assert "1" in result.output
+        assert "2" in result.output
+
+    def test_per_file_without_global(self, tmp_path: Path) -> None:
+        """Only the +key file gets a key; other files don't."""
+        csv_a = tmp_path / "a.csv"
+        csv_a.write_text("x\n1\n")
+        csv_b = tmp_path / "b.csv"
+        csv_b.write_text("y\n2\n")
+
+        runner = CliRunner()
+        # Only a gets +key
+        result = runner.invoke(
+            main, [f"{csv_a}+key", str(csv_b), "-e", "a :: "],
+        )
+        assert result.exit_code == 0
+        assert "a_id" in result.output
+
+        # b should not have b_id
+        result = runner.invoke(
+            main, [f"{csv_a}+key", str(csv_b), "-e", "b :: "],
+        )
+        assert result.exit_code == 0
+        assert "b_id" not in result.output
