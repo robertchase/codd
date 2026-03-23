@@ -84,7 +84,7 @@ def format_csv(rel: Relation, *, header: bool = True) -> str:
     """Format a relation as CSV text."""
     attrs = sorted(rel.attributes)
     buf = io.StringIO()
-    writer = csv.writer(buf)
+    writer = csv.writer(buf, lineterminator="\n")
     if header:
         writer.writerow(attrs)
     for t in rel:
@@ -98,7 +98,7 @@ def format_array_csv(arr: list[Tuple_], *, header: bool = True) -> str:
         return ""
     attrs = _array_attrs(arr)
     buf = io.StringIO()
-    writer = csv.writer(buf)
+    writer = csv.writer(buf, lineterminator="\n")
     if header:
         writer.writerow(attrs)
     for t in arr:
