@@ -1550,13 +1550,14 @@ class TestSchemaOps:
     """Test :: (schema) operator."""
 
     def test_extract_schema(self) -> None:
-        """R :: extracts schema as a relation with {attr, type} columns."""
+        """R :: extracts schema as a sorted list of {attr, type} tuples."""
         result = run("E ::")
-        assert isinstance(result, Relation)
-        assert result.attributes == frozenset({"attr", "type"})
-        attrs = {t["attr"] for t in result}
+        assert isinstance(result, list)
+        attrs = [t["attr"] for t in result]
         assert "name" in attrs
         assert "salary" in attrs
+        # Sorted by attr name.
+        assert attrs == sorted(attrs)
 
     def test_apply_schema_coerces(self) -> None:
         """R :: S coerces column values per the schema."""
@@ -1625,7 +1626,7 @@ class TestSchemaOps:
         )
         # Apply schema, then extract it
         result = run("R :: S ::", env)
-        assert isinstance(result, Relation)
+        assert isinstance(result, list)
         schema_dict = {t["attr"]: t["type"] for t in result}
         assert schema_dict["a"] == "int"
         assert schema_dict["b"] == "str"
