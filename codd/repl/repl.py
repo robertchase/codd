@@ -68,8 +68,12 @@ def run_repl(env: Environment | None = None) -> None:
             result = executor.execute(tree)
 
             if isinstance(tree, ast.Assignment):
-                print(f"{tree.name} := ", end="")
-            if isinstance(result, RotatedArray):
+                # Assignments bind silently; just confirm the name and size.
+                if isinstance(result, Relation):
+                    print(f"{tree.name} := ({len(result)} tuples)")
+                else:
+                    print(f"{tree.name} := (assigned)")
+            elif isinstance(result, RotatedArray):
                 print(format_rotated(result))
             elif isinstance(result, list):
                 print(format_array(result))
