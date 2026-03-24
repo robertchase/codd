@@ -225,6 +225,38 @@ class TestFileEval:
         assert "+-" not in result.output
 
 
+class TestScriptCommands:
+    """Test backslash commands in -f scripts."""
+
+    def test_load_in_script(self, tmp_path: Path) -> None:
+        """\\load works inside a -f script."""
+        csv_file = tmp_path / "data.csv"
+        csv_file.write_text("x,y\n1,2\n3,4\n")
+
+        script = tmp_path / "query.codd"
+        script.write_text(f"\\load {csv_file} d\nd # x\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["-f", str(script)])
+        assert result.exit_code == 0
+        assert "1" in result.output
+        assert "3" in result.output
+
+    def test_export_in_script(self, tmp_path: Path) -> None:
+        """\\export works inside a -f script."""
+        out_file = tmp_path / "out.csv"
+
+        script = tmp_path / "query.codd"
+        script.write_text(f"\\export {out_file} E # name\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--sample", "-f", str(script)])
+        assert result.exit_code == 0
+        assert out_file.exists()
+        content = out_file.read_text()
+        assert "Alice" in content
+
+
 class TestOpsFlag:
     """Test --ops flag."""
 

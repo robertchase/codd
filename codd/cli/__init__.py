@@ -327,6 +327,9 @@ def _run_file(
     try:
         for line in lines:
             line = line.replace("\\!", "!")
+            if line.startswith("\\"):
+                _run_script_command(line, env)
+                continue
             tokens = Lexer(line).tokenize()
             tree = Parser(tokens).parse()
             result = executor.execute(tree)
@@ -353,6 +356,29 @@ def _run_file(
             click.echo(result)
     except (LexError, ParseError, ExecutionError) as e:
         raise click.ClickException(str(e))
+
+
+def _run_script_command(line: str, env: Environment) -> None:
+    """Handle a backslash command inside a -f script.
+
+    Supports \\load and \\export.  Other commands are ignored with a warning.
+    """
+    parts = line.split()
+    cmd = parts[0].lower()
+    args = parts[1:]
+
+    if cmd == "\\load":
+        from codd.repl.repl import _cmd_load
+
+        _cmd_load(args, env)
+    elif cmd == "\\export":
+        from codd.repl.repl import _cmd_export
+
+        _cmd_export(args, env)
+    elif cmd in ("\\quit", "\\q"):
+        raise SystemExit(0)
+    else:
+        click.echo(f"Warning: command {cmd} not supported in scripts, skipping")
 
 
 def _enter_repl(env: Environment, stdin_consumed: bool) -> None:
