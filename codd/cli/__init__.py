@@ -226,15 +226,19 @@ def _run_eval(
         if isinstance(result, RotatedArray):
             click.echo(format_rotated(result))
         elif isinstance(result, list):
-            click.echo(
+            output = (
                 format_array_csv(result, header=header)
                 if output_csv else format_array(result)
             )
+            if output:
+                click.echo(output)
         elif isinstance(result, Relation):
-            click.echo(
+            output = (
                 format_csv(result, header=header)
                 if output_csv else format_relation(result)
             )
+            if output:
+                click.echo(output)
         else:
             click.echo(result)
     except (LexError, ParseError, ExecutionError) as e:
@@ -332,15 +336,19 @@ def _run_file(
         if isinstance(result, RotatedArray):
             click.echo(format_rotated(result))
         elif isinstance(result, list):
-            click.echo(
+            output = (
                 format_array_csv(result, header=header)
                 if output_csv else format_array(result)
             )
+            if output:
+                click.echo(output)
         elif isinstance(result, Relation):
-            click.echo(
+            output = (
                 format_csv(result, header=header)
                 if output_csv else format_relation(result)
             )
+            if output:
+                click.echo(output)
         elif result is not None:
             click.echo(result)
     except (LexError, ParseError, ExecutionError) as e:
