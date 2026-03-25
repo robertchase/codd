@@ -256,6 +256,50 @@ class TestScriptCommands:
         content = out_file.read_text()
         assert "Alice" in content
 
+    def test_load_silent_in_script(self, tmp_path: Path) -> None:
+        """\\load success messages are suppressed in -f scripts."""
+        csv_file = tmp_path / "data.csv"
+        csv_file.write_text("x\n1\n2\n")
+
+        script = tmp_path / "query.codd"
+        script.write_text(f"\\load {csv_file} d\nd\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["-f", str(script)])
+        assert result.exit_code == 0
+        assert "Loaded" not in result.output
+
+    def test_export_silent_in_script(self, tmp_path: Path) -> None:
+        """\\export success messages are suppressed in -f scripts."""
+        out_file = tmp_path / "out.csv"
+
+        script = tmp_path / "query.codd"
+        script.write_text(f"\\export {out_file} E # name\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--sample", "-f", str(script)])
+        assert result.exit_code == 0
+        assert "Exported" not in result.output
+
+    def test_assignment_silent_in_script(self, tmp_path: Path) -> None:
+        """Assignments produce no output when they are the last line in -f."""
+        script = tmp_path / "query.codd"
+        script.write_text("X := E ? dept_id = 10\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--sample", "-f", str(script)])
+        assert result.exit_code == 0
+        assert result.output.strip() == ""
+
+    def test_assignment_silent_in_eval(self) -> None:
+        """Assignments produce no output in -e mode."""
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--sample", "-e", "X := E ? dept_id = 10"]
+        )
+        assert result.exit_code == 0
+        assert result.output.strip() == ""
+
 
 class TestOpsFlag:
     """Test --ops flag."""

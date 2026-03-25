@@ -105,7 +105,7 @@ def main(
         from codd.data.sample import load_sample_data
 
         load_sample_data(env)
-        if expression is None:
+        if expression is None and script_file is None:
             click.echo("Sample data loaded: E, D, Phone, ContractorPay")
 
     def _parse_file_arg(arg: str) -> tuple[str | None, str, str | None]:
@@ -214,6 +214,8 @@ def _run_eval(
         format_rotated,
     )
 
+    from codd.parser import ast_nodes as ast
+
     # Bash history expansion escapes '!' to '\!'.
     expression = expression.replace("\\!", "!")
     header = not no_header
@@ -222,6 +224,10 @@ def _run_eval(
         tokens = Lexer(expression).tokenize()
         tree = Parser(tokens).parse()
         result = Executor(env).execute(tree)
+
+        # Assignments are silent in non-REPL mode.
+        if isinstance(tree, ast.Assignment):
+            return
 
         if isinstance(result, RotatedArray):
             click.echo(format_rotated(result))
@@ -321,24 +327,32 @@ def _run_file(
     if not lines:
         raise click.ClickException(f"No expressions in {script_file}")
 
+    from codd.parser import ast_nodes as ast
+
     executor = Executor(env)
     result = None
+    last_was_assignment = False
 
     try:
         for line in lines:
             line = line.replace("\\!", "!")
             if line.startswith("\\"):
                 _run_script_command(line, env)
+                last_was_assignment = False
                 continue
             tokens = Lexer(line).tokenize()
             tree = Parser(tokens).parse()
             result = executor.execute(tree)
+            last_was_assignment = isinstance(tree, ast.Assignment)
 
-        # Print the last result.
-        header = not no_header
-        if isinstance(result, RotatedArray):
+        # Print the last result (assignments are silent).
+        if last_was_assignment:
+            pass
+        elif isinstance(result, RotatedArray):
+            header = not no_header
             click.echo(format_rotated(result))
         elif isinstance(result, list):
+            header = not no_header
             output = (
                 format_array_csv(result, header=header)
                 if output_csv else format_array(result)
@@ -346,6 +360,7 @@ def _run_file(
             if output:
                 click.echo(output)
         elif isinstance(result, Relation):
+            header = not no_header
             output = (
                 format_csv(result, header=header)
                 if output_csv else format_relation(result)
@@ -370,11 +385,11 @@ def _run_script_command(line: str, env: Environment) -> None:
     if cmd == "\\load":
         from codd.repl.repl import _cmd_load
 
-        _cmd_load(args, env)
+        _cmd_load(args, env, quiet=True)
     elif cmd == "\\export":
         from codd.repl.repl import _cmd_export
 
-        _cmd_export(args, env)
+        _cmd_export(args, env, quiet=True)
     elif cmd in ("\\quit", "\\q"):
         raise SystemExit(0)
     else:

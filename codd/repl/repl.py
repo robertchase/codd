@@ -113,14 +113,17 @@ def _handle_command(line: str, env: Environment) -> None:
         print(f"Unknown command: {cmd}")
 
 
-def _cmd_load(args: list[str], env: Environment) -> None:
+def _cmd_load(args: list[str], env: Environment, *, quiet: bool = False) -> None:
     """Handle \\load: load sample data, a CSV file, or a workspace file.
 
     Syntax: \\load file [:: SchemaName] [name] [--genkey[=Name]] [+key=Col]
+
+    When *quiet* is True, success messages are suppressed (errors still print).
     """
     if not args:
         load_sample_data(env)
-        print("Loaded: E (Employee), D (Department), Phone, ContractorPay")
+        if not quiet:
+            print("Loaded: E (Employee), D (Department), Phone, ContractorPay")
         return
 
     # Parse options: --genkey, --genkey=Name, +key=Col, :: SchemaName.
@@ -179,12 +182,12 @@ def _cmd_load(args: list[str], env: Environment) -> None:
         if schema_name:
             print("Error: :: schema cannot be used with workspace files")
             return
-        _load_workspace_file(path, env)
+        _load_workspace_file(path, env, quiet=quiet)
     else:
         # Resolve genkey name: explicit name, or derive from relation name.
         if genkey_seen and genkey is None:
             genkey = alias if alias else path.stem
-        _load_csv_file(path, env, alias, genkey, schema_name, genkey_col)
+        _load_csv_file(path, env, alias, genkey, schema_name, genkey_col, quiet=quiet)
 
 
 def _load_csv_file(
@@ -194,6 +197,7 @@ def _load_csv_file(
     genkey: str | None = None,
     schema_name: str | None = None,
     genkey_col: str | None = None,
+    quiet: bool = False,
 ) -> None:
     """Load a CSV file into the environment, optionally applying a schema."""
     name = alias if alias else path.stem
@@ -219,22 +223,26 @@ def _load_csv_file(
                 print(f"Error applying schema: {e}")
                 return
         env.bind(name, rel)
-        print(f"Loaded {name}: {len(rel)} tuples, attrs: {sorted(rel.attributes)}")
+        if not quiet:
+            print(f"Loaded {name}: {len(rel)} tuples, attrs: {sorted(rel.attributes)}")
     except LoadError as e:
         print(f"Error: {e}")
     except Exception as e:
         print(f"Error loading {path}: {e}")
 
 
-def _load_workspace_file(path: Path, env: Environment) -> None:
+def _load_workspace_file(
+    path: Path, env: Environment, *, quiet: bool = False
+) -> None:
     """Load a .codd workspace file into the environment."""
     global _last_save_path
     try:
         relations = load_workspace(path)
         for name, rel in relations.items():
             env.bind(name, rel)
-        names = sorted(relations.keys())
-        print(f"Loaded workspace: {', '.join(names)}")
+        if not quiet:
+            names = sorted(relations.keys())
+            print(f"Loaded workspace: {', '.join(names)}")
         _last_save_path = path
     except Exception as e:
         print(f"Error loading workspace {path}: {e}")
@@ -260,11 +268,13 @@ def _cmd_save(args: list[str], env: Environment) -> None:
         print(f"Error saving workspace: {e}")
 
 
-def _cmd_export(args: list[str], env: Environment) -> None:
+def _cmd_export(args: list[str], env: Environment, *, quiet: bool = False) -> None:
     """Handle \\export: export a relation to a CSV file.
 
     Usage: \\export <file> <expr>
     The expression is evaluated and the result is written as CSV.
+
+    When *quiet* is True, success messages are suppressed (errors still print).
     """
     if len(args) < 2:
         print("Usage: \\export <file> <expression>")
@@ -291,8 +301,9 @@ def _cmd_export(args: list[str], env: Environment) -> None:
 
     try:
         path.write_text(csv_text + "\n")
-        count = len(result)
-        print(f"Exported {count} rows to {path}")
+        if not quiet:
+            count = len(result)
+            print(f"Exported {count} rows to {path}")
     except OSError as e:
         print(f"Error writing {path}: {e}")
 
