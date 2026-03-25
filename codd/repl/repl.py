@@ -116,20 +116,21 @@ def _handle_command(line: str, env: Environment) -> None:
 def _cmd_load(args: list[str], env: Environment) -> None:
     """Handle \\load: load sample data, a CSV file, or a workspace file.
 
-    Syntax: \\load file [:: SchemaName] [name] [--genkey[=Name]]
+    Syntax: \\load file [:: SchemaName] [name] [--genkey[=Name]] [+key=Col]
     """
     if not args:
         load_sample_data(env)
         print("Loaded: E (Employee), D (Department), Phone, ContractorPay")
         return
 
-    # Parse options: --genkey, --genkey=Name, :: SchemaName.
+    # Parse options: --genkey, --genkey=Name, +key=Col, :: SchemaName.
     # Positional: file [:: SchemaName] [name]
     file_arg = None
     alias = None
     schema_name: str | None = None
     genkey: str | None = None
     genkey_seen = False
+    genkey_col: str | None = None
     i = 0
     while i < len(args):
         arg = args[i]
@@ -138,6 +139,8 @@ def _cmd_load(args: list[str], env: Environment) -> None:
         elif arg.startswith("--genkey="):
             genkey_seen = True
             genkey = arg[len("--genkey="):]
+        elif arg.startswith("+key="):
+            genkey_col = arg[len("+key="):]
         elif arg == "::" and i + 1 < len(args):
             i += 1
             schema_name = args[i]
@@ -149,6 +152,10 @@ def _cmd_load(args: list[str], env: Environment) -> None:
             print(f"Error: unexpected argument: {arg}")
             return
         i += 1
+
+    if genkey_seen and genkey_col is not None:
+        print("Error: --genkey and +key= cannot be used together")
+        return
 
     if file_arg is None:
         print("Error: \\load requires a filename")
@@ -166,6 +173,9 @@ def _cmd_load(args: list[str], env: Environment) -> None:
         if genkey_seen:
             print("Error: --genkey cannot be used with workspace files")
             return
+        if genkey_col is not None:
+            print("Error: +key= cannot be used with workspace files")
+            return
         if schema_name:
             print("Error: :: schema cannot be used with workspace files")
             return
@@ -174,7 +184,7 @@ def _cmd_load(args: list[str], env: Environment) -> None:
         # Resolve genkey name: explicit name, or derive from relation name.
         if genkey_seen and genkey is None:
             genkey = alias if alias else path.stem
-        _load_csv_file(path, env, alias, genkey, schema_name)
+        _load_csv_file(path, env, alias, genkey, schema_name, genkey_col)
 
 
 def _load_csv_file(
@@ -183,12 +193,13 @@ def _load_csv_file(
     alias: str | None,
     genkey: str | None = None,
     schema_name: str | None = None,
+    genkey_col: str | None = None,
 ) -> None:
     """Load a CSV file into the environment, optionally applying a schema."""
     name = alias if alias else path.stem
     try:
         with open(path) as f:
-            rel = load_csv(f, name, genkey=genkey)
+            rel = load_csv(f, name, genkey=genkey, genkey_col=genkey_col)
         if schema_name:
             from codd.model.coerce import (
                 CoercionError,

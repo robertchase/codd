@@ -174,6 +174,46 @@ class TestLoadCommand:
         out = capsys.readouterr().out
         assert "--genkey cannot be used with workspace" in out
 
+    def test_load_csv_with_key(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """+key=col adds a synthetic key column with the exact name."""
+        csv_file = tmp_path / "items.csv"
+        csv_file.write_text("name,price\nApple,1.50\nBanana,0.75\n")
+
+        env = Environment()
+        _handle_command(f"\\load {csv_file} +key=id", env)
+
+        rel = env.lookup("items")
+        assert "id" in rel.attributes
+        assert len(rel) == 2
+        vals = {t["id"] for t in rel}
+        assert vals == {1, 2}
+
+    def test_load_csv_key_rejects_with_genkey(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """+key= and --genkey are mutually exclusive."""
+        csv_file = tmp_path / "data.csv"
+        csv_file.write_text("x\n1\n")
+
+        env = Environment()
+        _handle_command(f"\\load {csv_file} --genkey +key=id", env)
+        out = capsys.readouterr().out
+        assert "--genkey and +key= cannot be used together" in out
+
+    def test_load_workspace_rejects_key(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """+key= is rejected for workspace files."""
+        ws_path = tmp_path / "test.codd"
+        ws_path.write_text('{"version": 1, "relations": {}}')
+
+        env = Environment()
+        _handle_command(f"\\load {ws_path} +key=id", env)
+        out = capsys.readouterr().out
+        assert "+key= cannot be used with workspace" in out
+
 
 class TestSaveCommand:
     """Test \\save command."""
