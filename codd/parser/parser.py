@@ -653,6 +653,8 @@ class Parser:
             TokenType.LT: "<",
             TokenType.GT_EQ: ">=",
             TokenType.LT_EQ: "<=",
+            TokenType.TILDE: "~",
+            TokenType.BANG_TILDE: "!~",
         }
         tok = self._peek()
         if tok.type not in comp_ops:

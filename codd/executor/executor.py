@@ -1099,6 +1099,8 @@ def _coerce_pair(a: Value, b: Value) -> tuple[Value, Value]:
 
 def _make_scalar_cmp(get_left, op: str, rval: Value):
     """Create a comparison predicate with a constant RHS."""
+    if op in ("~", "!~"):
+        return _make_regex_cmp(get_left, op, rval)
     cmp_ops = {
         "=": lambda a, b: a == b,
         "!=": lambda a, b: a != b,
@@ -1118,6 +1120,17 @@ def _make_scalar_cmp(get_left, op: str, rval: Value):
 
 def _make_dynamic_cmp(get_left, op: str, get_right):
     """Create a comparison predicate with a dynamic RHS."""
+    if op in ("~", "!~"):
+        negate = op == "!~"
+
+        def regex_pred(t: Tuple_) -> bool:
+            pattern = str(get_right(t))
+            try:
+                match = bool(re.search(pattern, str(get_left(t))))
+            except re.error as e:
+                raise ExecutionError(f"Invalid regex pattern: {pattern!r} ({e})")
+            return not match if negate else match
+        return regex_pred
     cmp_ops = {
         "=": lambda a, b: a == b,
         "!=": lambda a, b: a != b,
@@ -1131,4 +1144,18 @@ def _make_dynamic_cmp(get_left, op: str, get_right):
     def pred(t: Tuple_) -> bool:
         lval, rval = _coerce_pair(get_left(t), get_right(t))
         return fn(lval, rval)
+    return pred
+
+
+def _make_regex_cmp(get_left, op: str, pattern_val: Value):
+    """Create a regex match predicate with a pre-compiled pattern."""
+    negate = op == "!~"
+    try:
+        compiled = re.compile(str(pattern_val))
+    except re.error as e:
+        raise ExecutionError(f"Invalid regex pattern: {pattern_val!r} ({e})")
+
+    def pred(t: Tuple_) -> bool:
+        match = bool(compiled.search(str(get_left(t))))
+        return not match if negate else match
     return pred

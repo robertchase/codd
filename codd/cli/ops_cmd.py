@@ -5,6 +5,7 @@ from codd.repl.formatter import _build_table
 _RELATIONAL = [
     ("?", "Filter", "E ? salary > 50000"),
     ("?!", "Negated filter", 'E ?! role = "engineer"'),
+    ("~ !~", "Regex match", 'E ? name ~ "^A"  or  E ? name !~ "test"'),
     ("#", "Project", "E # [name salary]"),
     ("#!", "Remove", "E #! emp_id"),
     ("*.", "Natural join", "E *. D"),
@@ -109,7 +110,24 @@ _DETAIL: dict[str, str] = {
     date + int              Add N days
     date - int              Subtract N days
     date - date             Difference in days (int)""",
+    "~": """\
+~ !~ — Regex match / non-match
+
+  Used in filter conditions. The RHS is a regex pattern (string).
+  Uses substring matching (re.search), not full-string matching.
+  Anchor with ^ and $ if needed.
+
+  Syntax:
+    R ? attr ~ "pattern"    Tuples where attr matches pattern
+    R ? attr !~ "pattern"   Tuples where attr does not match
+
+  Examples:
+    E ? name ~ "^A"         Names starting with A
+    E ? name ~ "(?i)alice"  Case-insensitive match
+    E ? email !~ "@test"    Emails not containing @test
+    E ? code ~ "^[A-Z]{3}$" Exactly 3 uppercase letters""",
 }
+_DETAIL["!~"] = _DETAIL["~"]
 
 
 def ops_output() -> str:
