@@ -324,6 +324,22 @@ class TestOpsCommand:
         assert "Filter" in out
         assert "#." in out
 
+    def test_ops_detail(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """\\ops .s prints detailed help for the .s operator."""
+        env = Environment()
+        _handle_command("\\ops .s", env)
+        out = capsys.readouterr().out
+        assert "String operations" in out
+        assert "upper" in out
+        assert "trim" in out
+
+    def test_ops_detail_unknown(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """\\ops with unknown operator prints a not-found message."""
+        env = Environment()
+        _handle_command("\\ops xyz", env)
+        out = capsys.readouterr().out
+        assert "No detail available" in out
+
 
 class TestEnvCommand:
     """Test \\env command."""

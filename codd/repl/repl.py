@@ -108,7 +108,16 @@ def _handle_command(line: str, env: Environment) -> None:
     elif cmd == "\\export":
         _cmd_export(args, env)
     elif cmd == "\\ops":
-        print(ops_output())
+        if args:
+            from codd.cli.ops_cmd import ops_detail
+
+            detail = ops_detail(args[0])
+            if detail:
+                print(detail)
+            else:
+                print(f"No detail available for {args[0]!r}")
+        else:
+            print(ops_output())
     else:
         print(f"Unknown command: {cmd}")
 

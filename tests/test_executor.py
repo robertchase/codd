@@ -412,6 +412,65 @@ class TestSubstring:
                 assert t["sub"] == "A"
 
 
+class TestStringOp:
+    """Test .s string transforms."""
+
+    def test_upper(self) -> None:
+        """name .s "upper" uppercases."""
+        result = run('E +: u: name .s "upper" # [name u]')
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["u"] == "ALICE"
+
+    def test_lower(self) -> None:
+        """name .s "lower" lowercases."""
+        result = run('E +: l: name .s "lower" # [name l]')
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["l"] == "alice"
+
+    def test_trim(self) -> None:
+        """Trim strips both sides."""
+        result = run('{x; "  hi  "} +: t: x .s "trim" # t')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["t"] == "hi"
+
+    def test_rtrim(self) -> None:
+        """Rtrim strips the right side."""
+        result = run('{x; "  hi  "} +: t: x .s "rtrim" # t')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["t"] == "  hi"
+
+    def test_ltrim(self) -> None:
+        """Ltrim strips the left side."""
+        result = run('{x; "  hi  "} +: t: x .s "ltrim" # t')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["t"] == "hi  "
+
+    def test_len(self) -> None:
+        """Len returns an integer length."""
+        result = run('E +: n: name .s "len" # [name n]')
+        assert isinstance(result, Relation)
+        for t in result:
+            if t["name"] == "Alice":
+                assert t["n"] == 5
+            elif t["name"] == "Bob":
+                assert t["n"] == 3
+
+    def test_unknown_op_errors(self) -> None:
+        """Unknown string op raises an error."""
+        import pytest
+        from codd.executor.executor import ExecutionError
+
+        with pytest.raises(ExecutionError, match="Unknown string operation"):
+            run('E +: x: name .s "bogus"')
+
+
 class TestIota:
     """Test i. (iota)."""
 

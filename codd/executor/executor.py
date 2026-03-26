@@ -360,6 +360,9 @@ class Executor:
         if isinstance(expr, ast.Substring):
             value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
             return self._apply_substring(value, expr.start, expr.end)
+        if isinstance(expr, ast.StringOp):
+            value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
+            return self._apply_string_op(value, expr.op)
         if isinstance(expr, ast.DateOp):
             value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
             return self._apply_date_op(value, expr.fmt)
@@ -527,6 +530,9 @@ class Executor:
         if isinstance(expr, ast.Substring):
             value = self._eval_expr(expr.expr, t, source)
             return self._apply_substring(value, expr.start, expr.end)
+        if isinstance(expr, ast.StringOp):
+            value = self._eval_expr(expr.expr, t, source)
+            return self._apply_string_op(value, expr.op)
         if isinstance(expr, ast.DateOp):
             value = self._eval_expr(expr.expr, t, source)
             return self._apply_date_op(value, expr.fmt)
@@ -673,6 +679,35 @@ class Executor:
         idx_end = max(0, min(idx_end, length))
 
         return s[idx_start:idx_end]
+
+    _STRING_OPS: dict[str, str] = {
+        "upper": "upper",
+        "lower": "lower",
+        "trim": "trim",
+        "rtrim": "rtrim",
+        "ltrim": "ltrim",
+        "len": "len",
+    }
+
+    def _apply_string_op(self, value: Value, op: str) -> Value:
+        """Apply a string transform keyword."""
+        s = str(value)
+        if op == "upper":
+            return s.upper()
+        if op == "lower":
+            return s.lower()
+        if op == "trim":
+            return s.strip()
+        if op == "rtrim":
+            return s.rstrip()
+        if op == "ltrim":
+            return s.lstrip()
+        if op == "len":
+            return len(s)
+        raise ExecutionError(
+            f"Unknown string operation: {op!r} "
+            f"(expected {', '.join(sorted(self._STRING_OPS))})"
+        )
 
     # --- Format string ---
 

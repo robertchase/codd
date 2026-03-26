@@ -119,6 +119,17 @@ class Substring:
 
 
 @dataclass(frozen=True)
+class StringOp:
+    """String transform: expr .s "keyword".
+
+    Keywords: upper, lower, trim, rtrim, ltrim, len.
+    """
+
+    expr: Expr
+    op: str
+
+
+@dataclass(frozen=True)
 class DateOp:
     """Date operator: expr .d [fmt].
 

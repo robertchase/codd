@@ -39,7 +39,7 @@ _AGGREGATES = [
 _EXPRESSIONS = [
     ("+ - * / // %", "Arithmetic", "salary * 0.1  or  salary // 1000  or  i % 2"),
     ("~", "Precision", "%. salary ~ 2"),
-    (".s", "Substring", "name .s [1 3]  or  name .s [-2]"),
+    (".s", "String", 'name .s [1 3]  or  name .s "upper"'),
     (".d", "Date", "col .d  or  col .d 'year'  or  col .d '{dd}/{mm}/{yyyy}'"),
     (".f", "Format", '"{name} earns {salary}" .f'),
     ("?:", "Ternary", '?: dept_id = 10 "eng" "other"'),
@@ -57,6 +57,61 @@ _OTHER = [
 _HEADERS = ["Primitive", "Name", "Example"]
 
 
+_DETAIL: dict[str, str] = {
+    ".s": """\
+.s — String operations
+
+  Substring (bracket form):
+    expr .s [start]         From position to end
+    expr .s [start end]     From start to end (inclusive)
+
+    1-based indexing. Negative indices count from end.
+    Out-of-bounds indices are clamped silently.
+
+    name .s [1 3]           "Alice" → "Ali"
+    name .s [-2]            "Alice" → "ce"
+    name .s [2 4]           "Alice" → "lic"
+
+  Transforms (string form):
+    expr .s "upper"         Uppercase
+    expr .s "lower"         Lowercase
+    expr .s "trim"          Strip whitespace (both sides)
+    expr .s "rtrim"         Strip whitespace (right)
+    expr .s "ltrim"         Strip whitespace (left)
+    expr .s "len"           Length (returns int)
+
+    name .s "upper"         "Alice" → "ALICE"
+    name .s "lower"         "Alice" → "alice"
+    name .s "len"           "Alice" → 5""",
+    ".d": """\
+.d — Date operations
+
+  Promotion (bare):
+    expr .d                 String → date
+    "2026-03-17" .d         date(2026, 3, 17)
+    "today" .d              current date
+
+  Extraction (keyword):
+    expr .d "year"          → int (e.g. 2026)
+    expr .d "month"         → int (1-12)
+    expr .d "day"           → int (1-31)
+    expr .d "week"          → int (ISO week number)
+    expr .d "dow"           → int (1=Mon, 7=Sun)
+
+  Formatting (pattern with {}):
+    expr .d "{dd}/{mm}/{yyyy}"    → "17/03/2026"
+    expr .d "{d} {mmm} {yyyy}"    → "17 MAR 2026"
+    expr .d "{ddd}"               → "TUE"
+
+    Tokens: {d} {dd} {m} {mm} {mmm} {yy} {yyyy} {week} {dow} {ddd}
+
+  Arithmetic:
+    date + int              Add N days
+    date - int              Subtract N days
+    date - date             Difference in days (int)""",
+}
+
+
 def ops_output() -> str:
     """Return formatted primitives reference as a string."""
     sections = [
@@ -71,3 +126,8 @@ def ops_output() -> str:
         parts.append(title)
         parts.append(_build_table(_HEADERS, [list(r) for r in rows]))
     return "\n".join(parts)
+
+
+def ops_detail(op: str) -> str | None:
+    """Return detailed help for a specific operator, or None if not found."""
+    return _DETAIL.get(op)

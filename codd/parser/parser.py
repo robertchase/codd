@@ -774,8 +774,8 @@ class Parser:
                 tok = self._expect(TokenType.INTEGER)
                 left = ast.Round(expr=left, places=int(tok.value))
             elif self._peek().type == TokenType.S_DOT:
-                self._advance()  # consume s.
-                left = self._parse_substring(left)
+                self._advance()  # consume .s
+                left = self._parse_string_op(left)
             elif self._peek().type == TokenType.D_DOT:
                 self._advance()  # consume .d
                 left = self._parse_date_op(left)
@@ -792,11 +792,11 @@ class Parser:
                 break
         return left
 
-    def _parse_substring(self, expr: ast.Expr) -> ast.Substring:
-        """Parse: .s [start] or .s [start end].
-
-        Indices are integers, optionally negative (MINUS INTEGER).
-        """
+    def _parse_string_op(self, expr: ast.Expr) -> ast.Substring | ast.StringOp:
+        """Parse: .s [start end] (substring) or .s "keyword" (transform)."""
+        if self._peek().type == TokenType.STRING:
+            op = self._advance().value
+            return ast.StringOp(expr=expr, op=op)
         self._expect(TokenType.LBRACKET)
         start = self._parse_signed_int()
         end: int | None = None
