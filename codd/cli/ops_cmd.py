@@ -18,6 +18,7 @@ _RELATIONAL = [
     ("-.", "Difference", "E -. (D)"),
     ("&.", "Intersect", "E &. (D)"),
     ("/.", "Summarize", "E /. dept_id [n: #. avg: %. salary]  or  E /. [n: #.]"),
+    ("/*", "Broadcast agg", "E /* dept_id [avg: %. salary]  or  E /* [total: +. salary]"),
     ("/:", "Nest by", "E /: dept_id -> team  or  E /: [dept_id role] -> team"),
     ("$", "Sort", "E $ salary-"),
     ("$.", "Order columns", "E $. [salary name]"),
@@ -126,6 +127,27 @@ _DETAIL: dict[str, str] = {
     E ? name ~ "(?i)alice"  Case-insensitive match
     E ? email !~ "@test"    Emails not containing @test
     E ? code ~ "^[A-Z]{3}$" Exactly 3 uppercase letters""",
+    "/*": """\
+/* — Broadcast aggregate
+
+  Like /. (summarize) but broadcasts aggregate values back to every
+  original tuple instead of collapsing groups. Equivalent to SQL's
+  window functions with PARTITION BY.
+
+  Syntax:
+    R /* key [name: agg_expr ...]       Partitioned by key
+    R /* [key1 key2] [name: agg_expr]   Composite key
+    R /* [name: agg_expr ...]           Over entire relation (no partition)
+    R /* key agg_expr                   Auto-named single aggregate
+
+  Examples:
+    E /* dept_id [avg: %. salary]       Each employee gets dept average
+    E /* dept_id [n: #.  total: +. salary]
+    E /* [total: +. salary]             Same total on every tuple
+    E /* dept_id #.                     Auto-names to "count"
+
+  The result has all original attributes plus the new aggregate columns.
+  Compare with /. which collapses groups to one row each.""",
 }
 _DETAIL["!~"] = _DETAIL["~"]
 

@@ -42,6 +42,7 @@ class TokenType(Enum):
     STAR_COLON = auto()     # *:  nest join
     LT_COLON = auto()       # <:  unnest
     SLASH_DOT = auto()      # /.  summarize
+    SLASH_STAR = auto()     # /*  broadcast aggregate
     SLASH_COLON = auto()    # /:  nest by
     PLUS_COLON = auto()     # +:  extend
     EQUALS_COLON = auto()   # =:  modify

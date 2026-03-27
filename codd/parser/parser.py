@@ -249,6 +249,8 @@ class Parser:
                 left = self._parse_intersect(left)
             elif tok.type == TokenType.SLASH_DOT:
                 left = self._parse_summarize(left)
+            elif tok.type == TokenType.SLASH_STAR:
+                left = self._parse_broadcast_agg(left)
             elif tok.type == TokenType.SLASH_COLON:
                 left = self._parse_nest_by(left)
             elif tok.type == TokenType.DOLLAR:
@@ -394,6 +396,28 @@ class Parser:
                 return True
             return False
         return False
+
+    def _parse_broadcast_agg(
+        self, source: ast.RelExpr
+    ) -> ast.BroadcastAggregate | ast.BroadcastAggregateAll:
+        """Parse: /* key [aggs] or /* [aggs] (broadcast aggregate).
+
+        Same syntax as /. (summarize) but broadcasts aggregate values
+        back to every original tuple instead of collapsing groups.
+        """
+        self._advance()  # consume /*
+        if self._is_summarize_all():
+            computations = self._parse_named_expr_list(allow_auto_name=True)
+            return ast.BroadcastAggregateAll(
+                source=source, computations=tuple(computations)
+            )
+        group_attrs = self._parse_attr_list()
+        computations = self._parse_named_expr_list(allow_auto_name=True)
+        return ast.BroadcastAggregate(
+            source=source,
+            group_attrs=group_attrs,
+            computations=tuple(computations),
+        )
 
     def _parse_nest_by(self, source: ast.RelExpr) -> ast.NestBy:
         """Parse: /: key -> name or /: [key1 key2] -> name."""

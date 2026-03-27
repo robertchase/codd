@@ -1439,6 +1439,61 @@ class TestFilterAggregateLHS:
         assert names == {"Alice", "Carol"}
 
 
+class TestBroadcastAggregate:
+    """Test /* (broadcast aggregate)."""
+
+    def test_partitioned(self) -> None:
+        """Broadcast aggregate partitioned by key adds group values to each tuple."""
+        result = run("E /* dept_id [avg: %. salary]")
+        assert isinstance(result, Relation)
+        # Every original tuple is preserved.
+        assert len(result) == 5
+        # Original attributes plus the new aggregate column.
+        assert "avg" in result.attributes
+        assert "name" in result.attributes
+        # Tuples in the same dept share the same avg.
+        dept10 = {t["avg"] for t in result if t["dept_id"] == 10}
+        assert len(dept10) == 1  # all dept 10 employees have same avg
+
+    def test_unpartitioned(self) -> None:
+        """Broadcast aggregate without partitioning adds whole-relation aggs."""
+        result = run("E /* [total: +. salary]")
+        assert isinstance(result, Relation)
+        assert len(result) == 5
+        # All tuples get the same total.
+        totals = {t["total"] for t in result}
+        assert len(totals) == 1
+
+    def test_multiple_aggregates(self) -> None:
+        """Multiple aggregates in one broadcast."""
+        result = run("E /* dept_id [n: #.  total: +. salary]")
+        assert isinstance(result, Relation)
+        assert len(result) == 5
+        assert "n" in result.attributes
+        assert "total" in result.attributes
+
+    def test_auto_naming(self) -> None:
+        """Auto-naming works like summarize."""
+        result = run("E /* dept_id #.")
+        assert isinstance(result, Relation)
+        assert "count" in result.attributes
+        assert len(result) == 5
+
+    def test_preserves_all_attrs(self) -> None:
+        """All original attributes are preserved."""
+        result = run("E /* dept_id [avg: %. salary]")
+        assert result.attributes >= {"name", "salary", "dept_id", "role", "avg"}
+
+    def test_chainable(self) -> None:
+        """Broadcast aggregate results can be filtered."""
+        # Get employees whose salary is above their dept average.
+        result = run("E /* dept_id [avg: %. salary] ? salary > avg")
+        assert isinstance(result, Relation)
+        # Every result tuple has salary > avg for their dept.
+        for t in result:
+            assert t["salary"] > t["avg"]
+
+
 class TestSummarizeExpressions:
     """Test full expressions in summarize slots."""
 

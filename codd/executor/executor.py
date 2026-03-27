@@ -94,6 +94,10 @@ class Executor:
             return self._eval_summarize(node)
         if isinstance(node, ast.SummarizeAll):
             return self._eval_summarize_all(node)
+        if isinstance(node, ast.BroadcastAggregate):
+            return self._eval_broadcast_agg(node)
+        if isinstance(node, ast.BroadcastAggregateAll):
+            return self._eval_broadcast_agg_all(node)
         if isinstance(node, ast.NestBy):
             return self._eval_nest_by(node)
         if isinstance(node, ast.Sort):
@@ -315,6 +319,76 @@ class Executor:
                 if src_attr in src_schema:
                     schema[comp.name] = src_schema[src_attr]
         return schema if schema else None
+
+    def _eval_broadcast_agg(self, node: ast.BroadcastAggregate) -> Relation:
+        """Evaluate: source /* group_attrs [computations].
+
+        Computes aggregates per group and broadcasts the values back to
+        every tuple in the source, preserving all original attributes.
+        """
+        source = self._as_relation(node.source)
+        group_attrs = frozenset(node.group_attrs)
+
+        # Build aggregate functions (same pattern as summarize).
+        agg_fns: dict[str, callable] = {}
+        for comp in node.computations:
+            expr = comp.expr
+
+            def make_fn(e: ast.Expr):
+                def f(rel: Relation) -> Value:
+                    return self._eval_summarize_expr(e, rel, source)
+                return f
+
+            agg_fns[comp.name] = make_fn(expr)
+
+        # Group tuples and compute aggregates per group.
+        groups: dict[Tuple_, list[Tuple_]] = {}
+        for t in source:
+            key = t.project(group_attrs)
+            groups.setdefault(key, []).append(t)
+
+        lookup: dict[Tuple_, dict[str, Value]] = {}
+        for key_tuple, members in groups.items():
+            group_rel = Relation(frozenset(members), attributes=source.attributes)
+            lookup[key_tuple] = {
+                name: fn(group_rel) for name, fn in agg_fns.items()
+            }
+
+        # Extend every tuple with its group's aggregates.
+        new_attrs = source.attributes | frozenset(agg_fns.keys())
+        result: set[Tuple_] = set()
+        for t in source:
+            key = t.project(group_attrs)
+            result.add(t.extend(lookup[key]))
+
+        agg_schema = self._build_agg_schema(node.computations, source)
+        schema = _combine_schemas(source._schema, agg_schema)
+        return Relation(frozenset(result), attributes=new_attrs, schema=schema)
+
+    def _eval_broadcast_agg_all(self, node: ast.BroadcastAggregateAll) -> Relation:
+        """Evaluate: source /* [computations].
+
+        Computes aggregates over the entire source and broadcasts the
+        values back to every tuple.
+        """
+        source = self._as_relation(node.source)
+
+        # Compute aggregates once over the whole relation.
+        agg_values: dict[str, Value] = {}
+        for comp in node.computations:
+            agg_values[comp.name] = self._eval_summarize_expr(
+                comp.expr, source, source
+            )
+
+        # Extend every tuple with the constant aggregate values.
+        new_attrs = source.attributes | frozenset(agg_values.keys())
+        result: set[Tuple_] = set()
+        for t in source:
+            result.add(t.extend(agg_values))
+
+        agg_schema = self._build_agg_schema(node.computations, source)
+        schema = _combine_schemas(source._schema, agg_schema)
+        return Relation(frozenset(result), attributes=new_attrs, schema=schema)
 
     def _eval_summarize_expr(
         self, expr: ast.Expr, group_rel: Relation, whole_rel: Relation
@@ -1095,6 +1169,20 @@ def _coerce_pair(a: Value, b: Value) -> tuple[Value, Value]:
     if isinstance(a, str) and isinstance(b, str):
         return _promote_numeric(a), _promote_numeric(b)
     return a, b
+
+
+def _combine_schemas(
+    base: dict[str, str] | None, extra: dict[str, str] | None
+) -> dict[str, str] | None:
+    """Merge two optional schema dicts."""
+    if base is None and extra is None:
+        return None
+    merged: dict[str, str] = {}
+    if base:
+        merged.update(base)
+    if extra:
+        merged.update(extra)
+    return merged if merged else None
 
 
 def _make_scalar_cmp(get_left, op: str, rval: Value):
