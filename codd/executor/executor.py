@@ -522,13 +522,12 @@ class Executor:
         except CoercionError as e:
             raise ExecutionError(str(e)) from e
 
-    def _eval_extract_schema(self, node: ast.ExtractSchema) -> list[Tuple_]:
-        """Evaluate: R :: — extract schema as a sorted list of tuples."""
+    def _eval_extract_schema(self, node: ast.ExtractSchema) -> Relation:
+        """Evaluate: R :: — extract schema as a relation {attr, type}."""
         from codd.model.coerce import extract_schema
 
         source = self._as_relation(node.source)
-        schema_rel = extract_schema(source)
-        return sorted(schema_rel, key=lambda t: t["attr"])
+        return extract_schema(source)
 
     def _eval_order_columns(self, node: ast.OrderColumns) -> OrderedArray:
         """Evaluate: source $. [col1 col2 ...].
