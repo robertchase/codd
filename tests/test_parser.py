@@ -961,8 +961,8 @@ class TestMembershipOp:
     """Test in. (membership) operator parsing."""
 
     def test_attr_in_relation(self) -> None:
-        """attr in. R # col parses as Filter with MembershipTest."""
-        result = parse("R ? status in. S # name")
+        """attr in. (R # col) parses as Filter with MembershipTest."""
+        result = parse("R ? status in. (S # name)")
         assert isinstance(result, ast.Filter)
         cond = result.condition
         assert isinstance(cond, ast.MembershipTest)
@@ -970,9 +970,17 @@ class TestMembershipOp:
         assert cond.left.name == "status"
         assert isinstance(cond.rel_expr, ast.Project)
 
+    def test_attr_in_bare_relation(self) -> None:
+        """attr in. R (no postfix) parses — RHS is a bare relation name."""
+        result = parse("R ? status in. S")
+        assert isinstance(result, ast.Filter)
+        cond = result.condition
+        assert isinstance(cond, ast.MembershipTest)
+        assert isinstance(cond.rel_expr, ast.RelName)
+
     def test_literal_in_relation(self) -> None:
-        """Literal in. R parses as MembershipTest with literal LHS."""
-        result = parse('R ? "abc" in. S # foo')
+        """Literal in. (R # col) parses as MembershipTest with literal LHS."""
+        result = parse('R ? "abc" in. (S # foo)')
         assert isinstance(result, ast.Filter)
         cond = result.condition
         assert isinstance(cond, ast.MembershipTest)
@@ -980,8 +988,8 @@ class TestMembershipOp:
         assert cond.left.value == "abc"
 
     def test_int_literal_in_relation(self) -> None:
-        """Integer literal in. R parses correctly."""
-        result = parse("R ? 42 in. S # id")
+        """Integer literal in. (R # col) parses correctly."""
+        result = parse("R ? 42 in. (S # id)")
         assert isinstance(result, ast.Filter)
         cond = result.condition
         assert isinstance(cond, ast.MembershipTest)
@@ -990,7 +998,7 @@ class TestMembershipOp:
 
     def test_in_with_bool_combination(self) -> None:
         """in. works inside boolean combinations."""
-        result = parse("R ? (status in. S # name & active = true)")
+        result = parse("R ? (status in. (S # name) & active = true)")
         assert isinstance(result, ast.Filter)
         cond = result.condition
         assert isinstance(cond, ast.BoolCombination)

@@ -659,7 +659,7 @@ class Parser:
             else:
                 left_expr = ast.BoolLiteral(value=left_tok.value == "true")
             self._advance()  # consume in.
-            rel_expr = self._parse_expr()
+            rel_expr = self._parse_atom()
             return ast.MembershipTest(left=left_expr, rel_expr=rel_expr)
         if self._peek().type in self._AGG_TOKENS:
             left: ast.AttrRef | ast.AggregateCall = self._parse_aggregate_call()
@@ -668,7 +668,7 @@ class Parser:
         # Check for in. membership test.
         if self._peek().type == TokenType.IN_DOT:
             self._advance()  # consume in.
-            rel_expr = self._parse_expr()
+            rel_expr = self._parse_atom()
             return ast.MembershipTest(left=left, rel_expr=rel_expr)
         comp_ops = {
             TokenType.EQ: "=",

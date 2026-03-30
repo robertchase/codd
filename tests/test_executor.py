@@ -1891,7 +1891,7 @@ class TestMembershipOp:
                 frozenset({Tuple_(dept="eng"), Tuple_(dept="sales")})
             ),
         )
-        result = run("R ? dept in. Valid # dept", env)
+        result = run("R ? dept in. (Valid # dept)", env)
         assert isinstance(result, Relation)
         assert len(result) == 3
         names = {t["name"] for t in result}
@@ -1908,7 +1908,7 @@ class TestMembershipOp:
             "S",
             Relation(frozenset({Tuple_(v=1), Tuple_(v=3)})),
         )
-        result = run("R ? x in. S # v", env)
+        result = run("R ? x in. (S # v)", env)
         assert len(result) == 2
         assert {t["x"] for t in result} == {1, 3}
 
@@ -1924,7 +1924,7 @@ class TestMembershipOp:
             Relation(frozenset({Tuple_(v="abc"), Tuple_(v="def")})),
         )
         # "abc" is in S#v, so all rows pass
-        result = run('R ? "abc" in. S # v', env)
+        result = run('R ? "abc" in. (S # v)', env)
         assert len(result) == 2
 
     def test_literal_not_in_relation(self) -> None:
@@ -1938,7 +1938,7 @@ class TestMembershipOp:
             "S",
             Relation(frozenset({Tuple_(v="abc")})),
         )
-        result = run('R ? "xyz" in. S # v', env)
+        result = run('R ? "xyz" in. (S # v)', env)
         assert len(result) == 0
 
     def test_in_with_ternary(self) -> None:
@@ -1958,7 +1958,7 @@ class TestMembershipOp:
             Relation(frozenset({Tuple_(d="eng"), Tuple_(d="sales")})),
         )
         result = run(
-            'R +: core: ?: dept in. CoreDepts # d "yes" "no"', env
+            'R +: core: ?: dept in. (CoreDepts # d) "yes" "no"', env
         )
         assert isinstance(result, Relation)
         for t in result:
@@ -1996,7 +1996,7 @@ class TestMembershipOp:
             Relation(frozenset({Tuple_(d="eng")})),
         )
         result = run(
-            "R ? (dept in. CoreDepts # d & active = true)", env
+            "R ? (dept in. (CoreDepts # d) & active = true)", env
         )
         assert len(result) == 1
         assert next(iter(result))["name"] == "Alice"

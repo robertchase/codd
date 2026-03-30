@@ -25,7 +25,7 @@ _RELATIONAL = [
     ("^", "Take", "E $ salary- ^ 3"),
     ("r.", "Rotate", "E ? name = \"Alice\" r."),
     ("::", "Apply schema", "R :: S  or  R ::"),
-    ("in.", "Membership test", "R ? status in. Statuses # name"),
+    ("in.", "Membership test", "R ? status in. (Statuses # name)"),
 ]
 
 _AGGREGATES = [
