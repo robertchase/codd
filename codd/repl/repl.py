@@ -62,6 +62,19 @@ def run_repl(env: Environment | None = None) -> None:
             _handle_command(line, env)
             continue
 
+        # Line continuation: accumulate lines ending with backslash.
+        while line.rstrip().endswith("\\"):
+            line = line.rstrip()[:-1]
+            try:
+                line += input("....> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                line = ""
+                break
+
+        if not line:
+            continue
+
         try:
             tokens = Lexer(line).tokenize()
             tree = Parser(tokens).parse()

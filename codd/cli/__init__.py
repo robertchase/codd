@@ -318,9 +318,11 @@ def _run_file(
 
     text = _substitute_args(text, args)
 
+    from codd.repl.continuation import join_continuation
+
     lines = [
         line.strip()
-        for line in text.splitlines()
+        for line in join_continuation(text.splitlines())
         if line.strip() and not line.strip().startswith("#")
     ]
 
