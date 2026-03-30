@@ -164,6 +164,29 @@ class TestJoin:
         assert isinstance(result.right, ast.RelName)
         assert result.nest_name == "phones"
 
+    def test_left_join_no_defaults(self) -> None:
+        """Left join with no defaults bracket."""
+        result = parse("E *< D")
+        assert isinstance(result, ast.LeftJoin)
+        assert isinstance(result.right, ast.RelName)
+        assert result.right.name == "D"
+        assert result.defaults == ()
+
+    def test_left_join_with_defaults(self) -> None:
+        """Left join with a defaults bracket."""
+        result = parse("E *< D [total: 0]")
+        assert isinstance(result, ast.LeftJoin)
+        assert len(result.defaults) == 1
+        assert result.defaults[0].name == "total"
+        assert isinstance(result.defaults[0].expr, ast.IntLiteral)
+        assert result.defaults[0].expr.value == 0
+
+    def test_left_join_chains(self) -> None:
+        """Left join result can be projected."""
+        result = parse("E *< D # name")
+        assert isinstance(result, ast.Project)
+        assert isinstance(result.source, ast.LeftJoin)
+
 
 class TestUnnest:
     """Test unnest parsing."""

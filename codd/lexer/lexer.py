@@ -99,11 +99,15 @@ class Lexer:
             self._advance()
             return self._make_token(TokenType.QUESTION_EQ, "?=", line, col)
 
-        # *. *:
+        # *. *< *:
         if ch == "*" and ch2 == ".":
             self._advance()
             self._advance()
             return self._make_token(TokenType.STAR_DOT, "*.", line, col)
+        if ch == "*" and ch2 == "<":
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.STAR_LT, "*<", line, col)
         if ch == "*" and ch2 == ":":
             self._advance()
             self._advance()

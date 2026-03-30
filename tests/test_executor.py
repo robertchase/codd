@@ -284,6 +284,74 @@ class TestJoin:
                 assert len(t["phones"]) == 0
 
 
+class TestLeftJoin:
+    """Test *< (left join)."""
+
+    def test_all_match(self) -> None:
+        """Left join where every left tuple has a match behaves like natural join."""
+        result = run("E *< D")
+        assert isinstance(result, Relation)
+        assert len(result) == 5
+        assert "dept_name" in result.attributes
+
+    def test_unmatched_filled_with_default(self) -> None:
+        """Left tuple with no right match gets right-only attrs filled from defaults."""
+        env = _make_env()
+        # Phone has 1 row for emp_id=1, 2 rows for emp_id=3, none for 2/4/5.
+        # Left join produces: 1+2+1+1+1 = 6 rows (Carol appears twice).
+        result = run("E *< Phone [phone: \"none\"]", env)
+        assert isinstance(result, Relation)
+        assert len(result) == 6
+        filled = [t["phone"] for t in result if t["phone"] == "none"]
+        assert len(filled) == 3  # Bob, Dave, Eve get the default
+
+    def test_unmatched_no_default_raises(self) -> None:
+        """Left join with unmatched tuple and no default raises ExecutionError."""
+        with pytest.raises(ExecutionError, match="no default"):
+            run("E *< Phone")
+
+    def test_missing_weeks_pattern(self) -> None:
+        """Average-per-week with missing weeks filled as zero."""
+        env = Environment()
+        env.bind(
+            "Sales",
+            Relation(
+                frozenset({
+                    Tuple_(cat="A", week=1, amount=10),
+                    Tuple_(cat="A", week=2, amount=20),
+                    Tuple_(cat="B", week=2, amount=30),
+                })
+            ),
+        )
+        # Grid: all cat × week combinations
+        env.bind(
+            "Grid",
+            Relation(
+                frozenset({
+                    Tuple_(cat="A", week=1),
+                    Tuple_(cat="A", week=2),
+                    Tuple_(cat="B", week=1),
+                    Tuple_(cat="B", week=2),
+                })
+            ),
+        )
+        weekly = run("Sales /. [cat week] [total: +. amount]", env)
+        env.bind("Weekly", weekly)
+        result = run("Grid *< Weekly [total: 0] /. cat [avg: %. total]", env)
+        assert isinstance(result, Relation)
+        assert len(result) == 2
+        by_cat = {t["cat"]: t["avg"] for t in result}
+        assert by_cat["A"] == 15.0   # (10 + 20) / 2
+        assert by_cat["B"] == 15.0   # (0 + 30) / 2
+
+    def test_left_join_chains(self) -> None:
+        """Left join result can be further chained."""
+        result = run('E *< D # [name dept_name]')
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"name", "dept_name"})
+        assert len(result) == 5
+
+
 class TestUnnest:
     """Test <: (unnest)."""
 

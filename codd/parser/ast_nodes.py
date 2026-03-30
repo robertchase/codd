@@ -263,6 +263,22 @@ class NaturalJoin:
 
 
 @dataclass(frozen=True)
+class LeftJoin:
+    """Left join: *< right [col: default_val, ...].
+
+    Keeps every tuple from the left relation.  Where a matching right tuple
+    exists (on shared attributes), the right-only attributes are added.
+    Where there is no match, the right-only attributes are filled from the
+    *defaults* list.  Defaults are required at execution time if any
+    unmatched left tuple exists; an error is raised otherwise.
+    """
+
+    source: RelExpr
+    right: RelExpr
+    defaults: tuple[NamedExpr, ...]
+
+
+@dataclass(frozen=True)
 class NestJoin:
     """Nest join: *: RelName > nest_name."""
 
@@ -463,6 +479,7 @@ RelExpr = (
     | Project
     | Remove
     | NaturalJoin
+    | LeftJoin
     | NestJoin
     | Unnest
     | Extend

@@ -39,6 +39,7 @@ class TokenType(Enum):
     QUESTION_BANG = auto()  # ?!  negated filter
     QUESTION_COLON = auto() # ?:  ternary
     STAR_DOT = auto()       # *.  natural join
+    STAR_LT = auto()        # *<  left join
     STAR_COLON = auto()     # *:  nest join
     LT_COLON = auto()       # <:  unnest
     SLASH_DOT = auto()      # /.  summarize

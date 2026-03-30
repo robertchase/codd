@@ -231,6 +231,8 @@ class Parser:
                 left = self._parse_remove(left)
             elif tok.type == TokenType.STAR_DOT:
                 left = self._parse_natural_join(left)
+            elif tok.type == TokenType.STAR_LT:
+                left = self._parse_left_join(left)
             elif tok.type == TokenType.STAR_COLON:
                 left = self._parse_nest_join(left)
             elif tok.type == TokenType.LT_COLON:
@@ -299,6 +301,15 @@ class Parser:
         self._advance()  # consume *.
         right = self._parse_atom()
         return ast.NaturalJoin(source=source, right=right)
+
+    def _parse_left_join(self, source: ast.RelExpr) -> ast.LeftJoin:
+        """Parse: *< right [col: default_val, ...]."""
+        self._advance()  # consume *<
+        right = self._parse_atom()
+        defaults: list[ast.NamedExpr] = []
+        if self._peek().type == TokenType.LBRACKET:
+            defaults = self._parse_named_expr_list()
+        return ast.LeftJoin(source=source, right=right, defaults=tuple(defaults))
 
     def _parse_nest_join(self, source: ast.RelExpr) -> ast.NestJoin:
         """Parse: *: RelName -> nest_name."""

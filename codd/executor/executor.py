@@ -74,6 +74,8 @@ class Executor:
             return self._eval_remove(node)
         if isinstance(node, ast.NaturalJoin):
             return self._eval_natural_join(node)
+        if isinstance(node, ast.LeftJoin):
+            return self._eval_left_join(node)
         if isinstance(node, ast.NestJoin):
             return self._eval_nest_join(node)
         if isinstance(node, ast.Unnest):
@@ -194,6 +196,45 @@ class Executor:
         left = self._as_relation(node.source)
         right = self._as_relation(node.right)
         return left.natural_join(right)
+
+    def _eval_left_join(self, node: ast.LeftJoin) -> Relation:
+        """Evaluate: source *< right [col: default, ...].
+
+        Keeps every left tuple.  For matched tuples the right-only attrs are
+        added as in a natural join.  For unmatched tuples the right-only attrs
+        are filled from *defaults*; an error is raised if any right-only attr
+        lacks a default and there are unmatched tuples.
+        """
+        left = self._as_relation(node.source)
+        right = self._as_relation(node.right)
+        shared = left.attributes & right.attributes
+        right_only = right.attributes - shared
+        result_attrs = left.attributes | right.attributes
+
+        # Evaluate default expressions once (they should be constants).
+        defaults: dict[str, Value] = {}
+        for comp in node.defaults:
+            defaults[comp.name] = self._eval_expr(comp.expr, Tuple_({}), left)
+
+        result: set[Tuple_] = set()
+        for t_left in left:
+            key = t_left.project(shared)
+            matched = False
+            for t_right in right:
+                if t_right.project(shared) == key:
+                    result.add(t_left.merge(t_right))
+                    matched = True
+            if not matched:
+                missing = right_only - frozenset(defaults.keys())
+                if missing:
+                    raise ExecutionError(
+                        f"left join: unmatched tuple has no default for: {sorted(missing)}"
+                    )
+                fill = {attr: defaults[attr] for attr in right_only}
+                result.add(t_left.extend(fill))
+
+        schema = left._merge_schema(right)
+        return Relation(frozenset(result), attributes=result_attrs, schema=schema)
 
     def _eval_nest_join(self, node: ast.NestJoin) -> Relation:
         """Evaluate: source *: right > name."""

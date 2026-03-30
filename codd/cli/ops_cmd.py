@@ -9,6 +9,7 @@ _RELATIONAL = [
     ("#", "Project", "E # [name salary]"),
     ("#!", "Remove", "E #! emp_id"),
     ("*.", "Natural join", "E *. D"),
+    ("*<", "Left join", "E *< D [col: 0]"),
     ("*:", "Nest join", "E *: Phone -> phones"),
     ("<:", "Unnest", "E <: phones"),
     ("+:", "Extend", "E +: bonus: salary * 0.1"),
@@ -127,6 +128,24 @@ _DETAIL: dict[str, str] = {
     E ? name ~ "(?i)alice"  Case-insensitive match
     E ? email !~ "@test"    Emails not containing @test
     E ? code ~ "^[A-Z]{3}$" Exactly 3 uppercase letters""",
+    "*<": """\
+*< — Left join
+
+  Like *. (natural join) but keeps every tuple from the left relation.
+  Where no matching right tuple exists, right-only attributes are filled
+  from the defaults bracket.  An error is raised if an unmatched tuple
+  exists and a required default is missing.
+
+  Syntax:
+    R *< S                     Left join, no defaults (error if unmatched)
+    R *< S [col: expr ...]     Left join with fill values for right-only attrs
+
+  Examples:
+    grid *< sales [total: 0]   Fill missing weeks with 0
+    E *< Dept [name: "?"]      Each employee keeps their dept name; unmatched get "?"
+
+  The right-side expression must be a bare name or parenthesized expression.
+  Defaults are evaluated as constants — attribute references are not in scope.""",
     "/*": """\
 /* — Broadcast aggregate
 
