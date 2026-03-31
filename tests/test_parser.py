@@ -371,17 +371,19 @@ class TestIota:
     """Test i. (iota) parsing."""
 
     def test_basic(self) -> None:
-        """i. 5 parses as Iota(count=5, name='i')."""
+        """i. 5 parses as Iota with IntLiteral count."""
         result = parse("i. 5")
         assert isinstance(result, ast.Iota)
-        assert result.count == 5
+        assert isinstance(result.count, ast.IntLiteral)
+        assert result.count.value == 5
         assert result.name == "i"
 
     def test_named(self) -> None:
         """i. month: 12 parses with custom name."""
         result = parse("i. month: 12")
         assert isinstance(result, ast.Iota)
-        assert result.count == 12
+        assert isinstance(result.count, ast.IntLiteral)
+        assert result.count.value == 12
         assert result.name == "month"
 
     def test_chain(self) -> None:
@@ -389,7 +391,8 @@ class TestIota:
         result = parse("i. 10 =: i: i + 9")
         assert isinstance(result, ast.Modify)
         assert isinstance(result.source, ast.Iota)
-        assert result.source.count == 10
+        assert isinstance(result.source.count, ast.IntLiteral)
+        assert result.source.count.value == 10
 
     def test_named_chain(self) -> None:
         """i. day: 365 +: ... chains correctly."""
@@ -397,7 +400,8 @@ class TestIota:
         assert isinstance(result, ast.Extend)
         assert isinstance(result.source, ast.Iota)
         assert result.source.name == "day"
-        assert result.source.count == 365
+        assert isinstance(result.source.count, ast.IntLiteral)
+        assert result.source.count.value == 365
 
     def test_in_subquery(self) -> None:
         """i. works inside parenthesized subqueries."""
@@ -405,10 +409,24 @@ class TestIota:
         assert isinstance(result, ast.NaturalJoin)
         assert isinstance(result.right, ast.Rename)
 
+    def test_subquery_count(self) -> None:
+        """i. week: (R /. >. week) parses as Iota with SubqueryExpr count."""
+        result = parse("i. week: (R /. >. week)")
+        assert isinstance(result, ast.Iota)
+        assert result.name == "week"
+        assert isinstance(result.count, ast.SubqueryExpr)
+
     def test_zero_count_error(self) -> None:
-        """i. 0 is a parse error."""
-        with pytest.raises(ParseError, match="positive integer"):
-            parse("i. 0")
+        """i. 0 is a runtime error (detected at execution time)."""
+        from codd.executor.executor import ExecutionError
+        from codd.executor.environment import Environment
+        from codd.executor.executor import Executor
+        from codd.lexer.lexer import Lexer
+        from codd.parser.parser import Parser
+        tokens = Lexer("i. 0").tokenize()
+        tree = Parser(tokens).parse()
+        with pytest.raises(ExecutionError, match="positive integer"):
+            Executor(Environment()).execute(tree)
 
 
 class TestRotate:

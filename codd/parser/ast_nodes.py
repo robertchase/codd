@@ -431,9 +431,11 @@ class Iota:
     """Iota source: i. [name:] count.
 
     Generates a single-attribute relation with consecutive integers 1..count.
+    count may be an integer literal or a parenthesized scalar/subquery expression
+    that evaluates to a positive integer at runtime.
     """
 
-    count: int
+    count: "Expr"
     name: str = "i"
 
 

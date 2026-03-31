@@ -13,7 +13,7 @@ from decimal import Decimal
 from codd.executor.aggregates import _promote_numeric, agg_percent, get_aggregate
 from codd.executor.environment import Environment
 from codd.model.relation import Relation
-from codd.model.types import OrderedArray, RotatedArray, Tuple_, Value, str_to_date
+from codd.model.types import OrderedArray, RotatedArray, Tuple_, Value, _values_equal, str_to_date
 from codd.parser import ast_nodes as ast
 
 
@@ -148,9 +148,19 @@ class Executor:
         """Evaluate: i. [name:] count.
 
         Generate a single-attribute relation with integers 1..count.
+        count may be a literal integer or a subquery expression.
         """
+        count_val = self._eval_expr(node.count, Tuple_({}), Relation(frozenset()))
+        if not isinstance(count_val, int):
+            raise ExecutionError(
+                f"i. count must be an integer, got {type(count_val).__name__}"
+            )
+        if count_val <= 0:
+            raise ExecutionError(
+                f"i. count must be a positive integer, got {count_val}"
+            )
         tuples = frozenset(
-            Tuple_({node.name: i}) for i in range(1, node.count + 1)
+            Tuple_({node.name: i}) for i in range(1, count_val + 1)
         )
         return Relation(tuples, attributes=frozenset({node.name}))
 
@@ -1130,8 +1140,20 @@ class Executor:
                 f"got {len(rel.attributes)} columns: {sorted(rel.attributes)}"
             )
         attr = next(iter(rel.attributes))
-        member_set = frozenset(t[attr] for t in rel)
+        member_values = [t[attr] for t in rel]
+        member_set = frozenset(member_values)  # fast path (exact match)
         negated = node.negated
+
+        def _is_member(val: Value) -> bool:
+            """Check membership with coercion fallback.
+
+            Try the O(1) frozenset lookup first.  If that misses, fall back
+            to a coercion-aware linear scan so that, e.g., the string "42"
+            and the integer 42 are treated as equal (matching natural join).
+            """
+            if val in member_set:
+                return True
+            return any(_values_equal(val, m) for m in member_values)
 
         left = node.left
         if isinstance(left, ast.AttrRef):
@@ -1141,13 +1163,12 @@ class Executor:
                 val = t[parts[0]]
                 for p in parts[1:]:
                     val = val[p]
-                result = val in member_set
+                result = _is_member(val)
                 return not result if negated else result
         elif isinstance(left, (ast.StringLiteral, ast.IntLiteral,
                                ast.FloatLiteral, ast.BoolLiteral)):
             # Constant LHS — evaluate once.
-            const_val = left.value
-            const_result = const_val in member_set
+            const_result = _is_member(left.value)
             if negated:
                 const_result = not const_result
 
@@ -1159,7 +1180,7 @@ class Executor:
 
             def predicate(t: Tuple_) -> bool:
                 val = self._eval_expr(expr, t, None)
-                result = val in member_set
+                result = _is_member(val)
                 return not result if negated else result
 
         return predicate

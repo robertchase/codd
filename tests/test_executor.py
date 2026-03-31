@@ -637,6 +637,31 @@ class TestIota:
         t = next(iter(result))
         assert t["i"] == 1
 
+    def test_dynamic_count_from_subquery(self) -> None:
+        """i. week: (R /. >. week) derives count from a relation's max value."""
+        from codd.executor.environment import Environment
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(week=1),
+                    Tuple_(week=3),
+                    Tuple_(week=5),
+                })
+            ),
+        )
+        result = run("i. week: (R /. >. week)", env)
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"week"})
+        assert len(result) == 5
+        assert {t["week"] for t in result} == {1, 2, 3, 4, 5}
+
+    def test_dynamic_count_non_integer_raises(self) -> None:
+        """i. count expression that evaluates to non-integer raises ExecutionError."""
+        with pytest.raises(ExecutionError, match="integer"):
+            run('i. ({x; "hello"} /. >. x)')
+
 
 class TestRotate:
     """Test r. (rotate)."""
@@ -2066,6 +2091,31 @@ class TestMembershipOp:
         result = run(
             "R ? (dept in. (CoreDepts # d) & active = true)", env
         )
+        assert len(result) == 1
+        assert next(iter(result))["name"] == "Alice"
+
+    def test_in_coercion_str_vs_int(self) -> None:
+        """in. matches string LHS against integer RHS via coercion (and vice versa).
+
+        This mirrors the natural join coercion behaviour: if the CSV loader
+        stored an id as int in one relation and str in another, in. should
+        still find the match.
+        """
+        env = Environment()
+        # LHS relation: id stored as string (as CSV loader often does)
+        env.bind(
+            "L",
+            Relation(frozenset({
+                Tuple_(id="42", name="Alice"),
+                Tuple_(id="99", name="Bob"),
+            })),
+        )
+        # RHS relation: id stored as integer
+        env.bind(
+            "Keys",
+            Relation(frozenset({Tuple_(id=42)})),
+        )
+        result = run("L ? id in. (Keys # id)", env)
         assert len(result) == 1
         assert next(iter(result))["name"] == "Alice"
 

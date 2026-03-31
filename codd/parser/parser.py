@@ -119,8 +119,9 @@ class Parser:
     def _parse_iota(self) -> ast.Iota:
         """Parse: i. [name:] COUNT.
 
-        COUNT must be a literal positive integer.
-        Optional name: prefix sets the attribute name (default 'i').
+        COUNT may be a literal positive integer or a parenthesized expression
+        (including a relational subquery) that evaluates to a positive integer
+        at runtime.  Optional name: prefix sets the attribute name (default 'i').
         """
         self._advance()  # consume i.
         name = "i"
@@ -131,11 +132,8 @@ class Parser:
         ):
             name = self._advance().value  # consume IDENT
             self._advance()  # consume :
-        tok = self._expect(TokenType.INTEGER)
-        count = int(tok.value)
-        if count <= 0:
-            raise ParseError("i. count must be a positive integer", tok)
-        return ast.Iota(count=count, name=name)
+        count_expr = self._parse_value_expr()
+        return ast.Iota(count=count_expr, name=name)
 
     # Value tokens that can appear in relation literal rows.
     _LITERAL_VALUE_TYPES = frozenset({
