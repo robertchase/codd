@@ -859,6 +859,7 @@ class Executor:
         "month": "month",
         "day": "day",
         "week": "week",
+        "ww": "ww",
         "dow": "dow",
     }
 
@@ -913,6 +914,8 @@ class Executor:
             return d.day
         if component == "week":
             return d.isocalendar().week
+        if component == "ww":
+            return f"{d.isocalendar().week:02d}"
         if component == "dow":
             return d.isoweekday()
         raise ExecutionError(f"Unknown date component: {component!r}")
@@ -940,6 +943,8 @@ class Executor:
                 return str(d.year)
             if token == "week":
                 return str(d.isocalendar().week)
+            if token == "ww":
+                return f"{d.isocalendar().week:02d}"
             if token == "dow":
                 return str(d.isoweekday())
             if token == "ddd":

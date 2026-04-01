@@ -796,6 +796,29 @@ class TestDateOp:
         for t in result:
             assert t["w"] == 2
 
+    def test_extract_ww(self) -> None:
+        """.d "ww" returns zero-padded two-digit week string."""
+        # 2026-01-05 is ISO week 2
+        result = run('E +: w: "2026-01-05" .d "ww" # [name w]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["w"] == "02"
+
+    def test_extract_ww_double_digit(self) -> None:
+        """.d "ww" pads single-digit weeks to two characters."""
+        # 2026-02-23 is ISO week 9
+        result = run('E +: w: "2026-02-23" .d "ww" # [name w]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["w"] == "09"
+
+    def test_format_week_ww(self) -> None:
+        """.d "{yyyy}-W{ww}" produces sortable ISO week string."""
+        result = run('E +: f: "2026-01-05" .d "{yyyy}-W{ww}" # [name f]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert t["f"] == "2026-W02"
+
     def test_extract_dow(self) -> None:
         """.d "dow" extracts day of week (1=Mon)."""
         # 2026-03-17 is a Tuesday

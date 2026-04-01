@@ -99,14 +99,16 @@ _DETAIL: dict[str, str] = {
     expr .d "month"         → int (1-12)
     expr .d "day"           → int (1-31)
     expr .d "week"          → int (ISO week number)
+    expr .d "ww"            → str, zero-padded week (e.g. "05")
     expr .d "dow"           → int (1=Mon, 7=Sun)
 
   Formatting (pattern with {}):
     expr .d "{dd}/{mm}/{yyyy}"    → "17/03/2026"
     expr .d "{d} {mmm} {yyyy}"    → "17 MAR 2026"
     expr .d "{ddd}"               → "TUE"
+    expr .d "{yyyy}-W{ww}"        → "2026-W05"
 
-    Tokens: {d} {dd} {m} {mm} {mmm} {yy} {yyyy} {week} {dow} {ddd}
+    Tokens: {d} {dd} {m} {mm} {mmm} {yy} {yyyy} {week} {ww} {dow} {ddd}
 
   Arithmetic:
     date + int              Add N days
