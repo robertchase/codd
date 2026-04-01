@@ -378,6 +378,20 @@ class TestExtend:
             if t["name"] == "Alice":
                 assert t["bonus"] == 8000.0
 
+    def test_extend_empty_relation_preserves_heading(self) -> None:
+        """Extend on an empty relation still produces the correct heading.
+
+        Previously the new column names were silently dropped when the
+        source had no tuples, causing a subsequent project to fail with
+        'unknown attributes'.
+        """
+        env = Environment()
+        env.bind("Empty", Relation(frozenset(), attributes=frozenset({"x"})))
+        result = run("Empty +: y: x # y", env)
+        assert isinstance(result, Relation)
+        assert "y" in result.attributes
+        assert len(result) == 0
+
 
 class TestModify:
     """Test =: (modify)."""
@@ -1253,6 +1267,24 @@ class TestOrderColumns:
         """$. with an unknown column raises an error."""
         with pytest.raises(ExecutionError, match="unknown attribute.*bogus"):
             run("E $. bogus")
+
+    def test_order_columns_empty_relation(self) -> None:
+        """$. on an empty relation preserves the heading and returns empty OrderedArray."""
+        env = Environment()
+        env.bind("Empty", Relation(frozenset(), attributes=frozenset({"name", "salary"})))
+        result = run("Empty $. [salary name]", env)
+        assert isinstance(result, OrderedArray)
+        assert result.column_order == ("salary", "name")
+        assert len(result) == 0
+
+    def test_order_columns_empty_sorted_list(self) -> None:
+        """$. on an empty sorted list returns an empty OrderedArray without error."""
+        env = Environment()
+        env.bind("Empty", Relation(frozenset(), attributes=frozenset({"name", "salary"})))
+        result = run("Empty $ salary- $. [salary name]", env)
+        assert isinstance(result, OrderedArray)
+        assert result.column_order == ("salary", "name")
+        assert len(result) == 0
 
 
 class TestAssignment:

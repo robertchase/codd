@@ -155,10 +155,22 @@ class Relation:
             result.add(t1.extend({nest_name: nested}))
         return Relation(frozenset(result), attributes=result_attrs)
 
-    def extend(self, compute: Callable[[Tuple_], dict[str, Value]]) -> Relation:
-        """Extend: add computed attributes to each tuple (+)."""
+    def extend(
+        self,
+        compute: Callable[[Tuple_], dict[str, Value]],
+        added_attrs: frozenset[str] | None = None,
+    ) -> Relation:
+        """Extend: add computed attributes to each tuple (+).
+
+        *added_attrs* names the columns the compute function will produce.
+        When provided it is used to build the result heading even if the
+        relation is empty (avoiding the silent attribute-drop that would
+        otherwise occur on an empty relation).
+        """
         result: set[Tuple_] = set()
-        new_attrs: frozenset[str] | None = None
+        new_attrs: frozenset[str] | None = (
+            self._attributes | added_attrs if added_attrs is not None else None
+        )
         for t in self._tuples:
             new_values = compute(t)
             if new_attrs is None:

@@ -70,6 +70,8 @@ def _array_attrs(arr: list[Tuple_]) -> list[str]:
 def format_array(arr: list[Tuple_]) -> str:
     """Format a sorted array (list of tuples) as an ASCII table."""
     if not arr:
+        if isinstance(arr, OrderedArray):
+            return _build_table(list(arr.column_order), [])
         return "(empty array)"
 
     attrs = _array_attrs(arr)

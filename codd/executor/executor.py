@@ -268,7 +268,7 @@ class Executor:
                 result[comp.name] = self._eval_expr(comp.expr, t, source)
             return result
 
-        result = source.extend(compute)
+        result = source.extend(compute, added_attrs=new_names)
         self._enforce_schema(result, changed_attrs=new_names)
         return result
 
@@ -592,19 +592,21 @@ class Executor:
         # Get tuples from relation or list.
         if isinstance(source, Relation):
             tuples = list(source)
-            available = source.attributes
+            available: frozenset[str] | None = source.attributes
         elif isinstance(source, list):
             tuples = source
-            available = tuples[0].attributes() if tuples else frozenset()
+            # Attribute info is lost in a sorted empty list; skip validation.
+            available = tuples[0].attributes() if tuples else None
         else:
             raise ExecutionError("$. (order columns) requires a relation or list")
 
-        # Validate all columns exist.
-        for col in columns:
-            if col not in available:
-                raise ExecutionError(
-                    f"$. unknown attribute: {col!r}"
-                )
+        # Validate all columns exist (skip when attribute info is unavailable).
+        if available is not None:
+            for col in columns:
+                if col not in available:
+                    raise ExecutionError(
+                        f"$. unknown attribute: {col!r}"
+                    )
 
         # Project tuples to only the listed columns.
         keep = frozenset(columns)
