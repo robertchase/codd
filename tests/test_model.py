@@ -263,14 +263,18 @@ class TestRelation:
         assert len(result) == 2
 
     def test_difference(self) -> None:
-        """Difference removes matching tuples."""
+        """Difference removes matching tuples.
+
+        emp_id is int internally; default schema is str, so set operations
+        normalize to str before comparison.
+        """
         e = self._employees()
         p = self._phones()
         e_ids = e.project(frozenset({"emp_id"}))
         p_ids = p.project(frozenset({"emp_id"}))
         result = e_ids.difference(p_ids)
         ids = {t["emp_id"] for t in result}
-        assert ids == {2, 4, 5}
+        assert ids == {"2", "4", "5"}
 
     def test_intersect(self) -> None:
         """Intersect keeps only shared tuples."""
@@ -280,7 +284,7 @@ class TestRelation:
         p_ids = p.project(frozenset({"emp_id"}))
         result = e_ids.intersect(p_ids)
         ids = {t["emp_id"] for t in result}
-        assert ids == {1, 3}
+        assert ids == {"1", "3"}
 
     def test_union_heading_mismatch(self) -> None:
         """Union rejects mismatched attributes."""

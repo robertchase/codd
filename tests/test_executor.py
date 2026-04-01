@@ -985,18 +985,70 @@ class TestSetOps:
         assert len(result) == 6
 
     def test_difference(self) -> None:
-        """Difference removes tuples present in the right relation."""
+        """Difference removes tuples present in the right relation.
+
+        emp_id is stored as Python int but the default schema is str,
+        so set operations normalize values to str before comparison.
+        """
         result = run("E # emp_id -. (Phone # emp_id)")
         assert isinstance(result, Relation)
         ids = {t["emp_id"] for t in result}
-        assert ids == {2, 4, 5}
+        assert ids == {"2", "4", "5"}
 
     def test_intersect(self) -> None:
         """Intersect keeps only tuples present in both relations."""
         result = run("(E # emp_id) &. (Phone # emp_id)")
         assert isinstance(result, Relation)
         ids = {t["emp_id"] for t in result}
-        assert ids == {1, 3}
+        assert ids == {"1", "3"}
+
+    def test_difference_schema_coercion(self) -> None:
+        """difference normalizes to schema types before set arithmetic.
+
+        Both relations declare id: str but one stores Python ints internally.
+        Without normalization, difference would return all rows of A instead
+        of the expected 0.
+        """
+        env = Environment()
+        # A stores id as Python int internally, schema says str.
+        env.bind(
+            "A",
+            Relation(
+                frozenset({Tuple_(id=1), Tuple_(id=2), Tuple_(id=3)}),
+                schema={"id": "str"},
+            ),
+        )
+        # B stores id as Python str, schema says str.
+        env.bind(
+            "B",
+            Relation(
+                frozenset({Tuple_(id="1"), Tuple_(id="2"), Tuple_(id="3")}),
+                schema={"id": "str"},
+            ),
+        )
+        result = run("A -. B", env)
+        assert len(result) == 0
+
+    def test_intersect_schema_coercion(self) -> None:
+        """intersect normalizes to schema types before set arithmetic."""
+        env = Environment()
+        env.bind(
+            "A",
+            Relation(
+                frozenset({Tuple_(id=1), Tuple_(id=2)}),
+                schema={"id": "str"},
+            ),
+        )
+        env.bind(
+            "B",
+            Relation(
+                frozenset({Tuple_(id="2"), Tuple_(id="3")}),
+                schema={"id": "str"},
+            ),
+        )
+        result = run("A &. B", env)
+        assert len(result) == 1
+        assert next(iter(result))["id"] == "2"
 
 
 class TestSummarize:

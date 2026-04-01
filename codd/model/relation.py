@@ -207,27 +207,69 @@ class Relation:
                 f"{sorted(self._attributes)} vs {sorted(other._attributes)}"
             )
 
+    def _normalize(self) -> Relation:
+        """Return a copy of this relation with all tuple values coerced to their
+        effective schema types.
+
+        The effective schema is ``self.schema`` — explicit when ``_schema`` is
+        set, defaulting to all-``str`` otherwise.  This ensures that set
+        arithmetic (union/difference/intersect) compares values by their logical
+        type rather than their incidental Python type.  For example, if the
+        effective schema says ``id: str`` but the internal representation holds
+        the Python int ``42``, normalization converts it to ``"42"`` so that set
+        equality works correctly against a relation that holds ``"42"`` as str.
+
+        Columns with ``in(...)`` constraints are left unchanged — ``in()`` is a
+        membership constraint, not a storage-type change.
+        """
+        # Local import avoids circular dependency (coerce.py imports Relation).
+        from codd.model.coerce import coerce_value, parse_type_string
+        effective_schema = self.schema  # always returns a dict; defaults to all-str
+        result: set[Tuple_] = set()
+        for t in self._tuples:
+            data = t.data
+            for attr, type_str in effective_schema.items():
+                if attr not in data:
+                    continue
+                base_type, constraint = parse_type_string(type_str)
+                if base_type == "in":
+                    continue  # in() is a constraint, not a type coercion
+                if base_type == "decimal" and constraint is not None:
+                    precision = int(constraint[1])
+                    data[attr] = coerce_value(data[attr], "decimal", precision=precision)
+                else:
+                    data[attr] = coerce_value(data[attr], base_type)
+            result.add(Tuple_(data))
+        return Relation(frozenset(result), attributes=self._attributes,
+                        schema=self._schema)
+
     def union(self, other: Relation) -> Relation:
         """Union: tuples in either relation (|)."""
         self._check_same_heading(other, "union")
+        left = self._normalize()
+        right = other._normalize()
         return Relation(
-            self._tuples | other._tuples, attributes=self._attributes,
+            left._tuples | right._tuples, attributes=self._attributes,
             schema=self._schema,
         )
 
     def difference(self, other: Relation) -> Relation:
         """Difference: tuples in self but not in other (-)."""
         self._check_same_heading(other, "difference")
+        left = self._normalize()
+        right = other._normalize()
         return Relation(
-            self._tuples - other._tuples, attributes=self._attributes,
+            left._tuples - right._tuples, attributes=self._attributes,
             schema=self._schema,
         )
 
     def intersect(self, other: Relation) -> Relation:
         """Intersect: tuples in both relations (&)."""
         self._check_same_heading(other, "intersect")
+        left = self._normalize()
+        right = other._normalize()
         return Relation(
-            self._tuples & other._tuples, attributes=self._attributes,
+            left._tuples & right._tuples, attributes=self._attributes,
             schema=self._schema,
         )
 

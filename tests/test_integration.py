@@ -189,18 +189,18 @@ class TestSetOpExamples:
     """Test set operation examples from algebra.md."""
 
     def test_difference(self) -> None:
-        """E # emp_id -. (Phone # emp_id) -> emp_ids {2, 4, 5}."""
+        """E # emp_id -. (Phone # emp_id) -> emp_ids {2, 4, 5} (as str)."""
         result = run("E # emp_id -. (Phone # emp_id)")
         assert len(result) == 3
         ids = {t["emp_id"] for t in result}
-        assert ids == {2, 4, 5}
+        assert ids == {"2", "4", "5"}
 
     def test_intersect(self) -> None:
-        """(E # emp_id) &. (Phone # emp_id) -> emp_ids {1, 3}."""
+        """(E # emp_id) &. (Phone # emp_id) -> emp_ids {1, 3} (as str)."""
         result = run("(E # emp_id) &. (Phone # emp_id)")
         assert len(result) == 2
         ids = {t["emp_id"] for t in result}
-        assert ids == {1, 3}
+        assert ids == {"1", "3"}
 
 
 class TestSummarizeExamples:
