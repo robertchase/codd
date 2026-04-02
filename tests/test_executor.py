@@ -677,6 +677,37 @@ class TestIota:
             run('i. ({x; "hello"} /. >. x)')
 
 
+class TestIotaZero:
+    """Test I. (zero-based iota)."""
+
+    def test_basic(self) -> None:
+        """I. 5 produces a 5-tuple relation with values 0..4."""
+        result = run("I. 5")
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"i"})
+        assert len(result) == 5
+        assert {t["i"] for t in result} == {0, 1, 2, 3, 4}
+
+    def test_named(self) -> None:
+        """I. idx: 3 produces a relation with attribute 'idx' and values 0..2."""
+        result = run("I. idx: 3")
+        assert isinstance(result, Relation)
+        assert result.attributes == frozenset({"idx"})
+        assert {t["idx"] for t in result} == {0, 1, 2}
+
+    def test_single(self) -> None:
+        """I. 1 produces a single tuple with value 0."""
+        result = run("I. 1")
+        assert isinstance(result, Relation)
+        assert len(result) == 1
+        assert next(iter(result))["i"] == 0
+
+    def test_zero_count_raises(self) -> None:
+        """I. 0 raises ExecutionError."""
+        with pytest.raises(ExecutionError, match="positive"):
+            run("I. 0")
+
+
 class TestRotate:
     """Test r. (rotate)."""
 

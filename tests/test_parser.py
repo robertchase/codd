@@ -429,6 +429,32 @@ class TestIota:
             Executor(Environment()).execute(tree)
 
 
+class TestIotaZero:
+    """Test I. (zero-based iota) parsing."""
+
+    def test_basic(self) -> None:
+        """I. 5 parses as Iota with zero_based=True."""
+        result = parse("I. 5")
+        assert isinstance(result, ast.Iota)
+        assert result.zero_based is True
+        assert isinstance(result.count, ast.IntLiteral)
+        assert result.count.value == 5
+        assert result.name == "i"
+
+    def test_named(self) -> None:
+        """I. idx: 10 parses with custom name and zero_based=True."""
+        result = parse("I. idx: 10")
+        assert isinstance(result, ast.Iota)
+        assert result.zero_based is True
+        assert result.name == "idx"
+
+    def test_one_based_not_zero(self) -> None:
+        """i. 5 has zero_based=False."""
+        result = parse("i. 5")
+        assert isinstance(result, ast.Iota)
+        assert result.zero_based is False
+
+
 class TestRotate:
     """Test r. (rotate) parsing."""
 

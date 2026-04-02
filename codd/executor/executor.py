@@ -145,22 +145,24 @@ class Executor:
     # --- Node evaluators ---
 
     def _eval_iota(self, node: ast.Iota) -> Relation:
-        """Evaluate: i. [name:] count.
+        """Evaluate: i. [name:] count  (1-based)  or  I. [name:] count  (0-based).
 
-        Generate a single-attribute relation with integers 1..count.
+        Generate a single-attribute relation with integers 1..count or 0..count-1.
         count may be a literal integer or a subquery expression.
         """
+        op = "I." if node.zero_based else "i."
         count_val = self._eval_expr(node.count, Tuple_({}), Relation(frozenset()))
         if not isinstance(count_val, int):
             raise ExecutionError(
-                f"i. count must be an integer, got {type(count_val).__name__}"
+                f"{op} count must be an integer, got {type(count_val).__name__}"
             )
         if count_val <= 0:
             raise ExecutionError(
-                f"i. count must be a positive integer, got {count_val}"
+                f"{op} count must be a positive integer, got {count_val}"
             )
+        start = 0 if node.zero_based else 1
         tuples = frozenset(
-            Tuple_({node.name: i}) for i in range(1, count_val + 1)
+            Tuple_({node.name: i}) for i in range(start, start + count_val)
         )
         return Relation(tuples, attributes=frozenset({node.name}))
 

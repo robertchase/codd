@@ -112,18 +112,20 @@ class Parser:
             return expr
         if tok.type == TokenType.I_DOT:
             return self._parse_iota()
+        if tok.type == TokenType.I_CAP_DOT:
+            return self._parse_iota(zero_based=True)
         if tok.type == TokenType.LBRACE:
             return self._parse_relation_literal()
         raise ParseError(f"Expected relation name or '(', got {tok.value!r}", tok)
 
-    def _parse_iota(self) -> ast.Iota:
-        """Parse: i. [name:] COUNT.
+    def _parse_iota(self, zero_based: bool = False) -> ast.Iota:
+        """Parse: i. [name:] COUNT  or  I. [name:] COUNT.
 
         COUNT may be a literal positive integer or a parenthesized expression
         (including a relational subquery) that evaluates to a positive integer
         at runtime.  Optional name: prefix sets the attribute name (default 'i').
         """
-        self._advance()  # consume i.
+        self._advance()  # consume i. or I.
         name = "i"
         # Check for optional name: prefix (IDENT followed by COLON)
         if (
@@ -133,7 +135,7 @@ class Parser:
             name = self._advance().value  # consume IDENT
             self._advance()  # consume :
         count_expr = self._parse_value_expr()
-        return ast.Iota(count=count_expr, name=name)
+        return ast.Iota(count=count_expr, name=name, zero_based=zero_based)
 
     # Value tokens that can appear in relation literal rows.
     _LITERAL_VALUE_TYPES = frozenset({

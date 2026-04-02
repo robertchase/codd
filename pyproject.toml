@@ -1,6 +1,6 @@
 [project]
 name = "codd"
-version = "1.5.8"
+version = "1.5.9"
 description = "Codd relational algebra: parser + executor"
 requires-python = ">=3.12"
 dependencies = [
@@ -25,3 +25,8 @@ select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.black]
 target-version = ["py312"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

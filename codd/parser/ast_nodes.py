@@ -428,15 +428,17 @@ class Take:
 
 @dataclass(frozen=True)
 class Iota:
-    """Iota source: i. [name:] count.
+    """Iota source: i. [name:] count  (1-based)  or  I. [name:] count  (0-based).
 
-    Generates a single-attribute relation with consecutive integers 1..count.
+    Generates a single-attribute relation with consecutive integers.
+    i. produces 1..count; I. produces 0..count-1.
     count may be an integer literal or a parenthesized scalar/subquery expression
     that evaluates to a positive integer at runtime.
     """
 
     count: "Expr"
     name: str = "i"
+    zero_based: bool = False
 
 
 @dataclass(frozen=True)

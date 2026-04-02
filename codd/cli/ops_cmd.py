@@ -41,6 +41,8 @@ _AGGREGATES = [
 
 _EXPRESSIONS = [
     ("+ - * / // %", "Arithmetic", "salary * 0.1  or  salary // 1000  or  i % 2"),
+    ("= != < > <= >=", "Comparison", "salary > 50000  or  status != \"inactive\""),
+    ("and or not", "Logical", "age > 18 and status = \"active\"  or  not flag"),
     ("~", "Precision", "%. salary ~ 2"),
     (".s", "String", 'name .s [1 3]  or  name .s "upper"'),
     (".d", "Date", "col .d  or  col .d 'year'  or  col .d '{dd}/{mm}/{yyyy}'"),
@@ -49,7 +51,8 @@ _EXPRESSIONS = [
 ]
 
 _SOURCES = [
-    ("i.", "Iota (generate)", "i. 5  or  i. month: 12"),
+    ("i.", "Iota (1-based)", "i. 5  or  i. month: 12"),
+    ("I.", "Iota (0-based)", "I. 5  or  I. idx: 10"),
     ("{}", "Relation literal", '{name age; "Alice" 30; "Bob" 25}'),
 ]
 
@@ -148,6 +151,45 @@ _DETAIL: dict[str, str] = {
 
   The right-side expression must be a bare name or parenthesized expression.
   Defaults are evaluated as constants — attribute references are not in scope.""",
+    "=": """\
+= != < > <= >= — Comparison operators
+
+  Used in filter predicates and expressions.  Both sides are expressions;
+  comparisons are type-aware (int vs float vs str vs date).
+
+  Operators:
+    =     Equal
+    !=    Not equal
+    <     Less than
+    >     Greater than
+    <=    Less than or equal
+    >=    Greater than or equal
+
+  Examples:
+    E ? salary > 50000
+    E ? status != "inactive"
+    E ? hired .d >= "2024-01-01" .d
+    E +: senior: ?: age >= 40 1 0
+
+  String comparisons use lexicographic order.
+  Date comparisons require both sides to be date values (use .d to promote).""",
+    "and": """\
+and or not — Logical operators
+
+  Combine boolean sub-expressions in filter predicates.
+  Operator precedence (low → high):  or  →  and  →  not  →  comparison.
+  Use parentheses to override.
+
+  Operators:
+    and    Both conditions must hold
+    or     Either condition holds
+    not    Negates a condition
+
+  Examples:
+    E ? age > 18 and status = "active"
+    E ? dept = "eng" or dept = "ops"
+    E ? not flag
+    E ? (a > 1 or b > 1) and c = 0   Parens change precedence""",
     "/*": """\
 /* — Broadcast aggregate
 
@@ -171,6 +213,10 @@ _DETAIL: dict[str, str] = {
   Compare with /. which collapses groups to one row each.""",
 }
 _DETAIL["!~"] = _DETAIL["~"]
+for _op in ("!=", "<", ">", "<=", ">="):
+    _DETAIL[_op] = _DETAIL["="]
+for _op in ("or", "not"):
+    _DETAIL[_op] = _DETAIL["and"]
 
 
 def ops_output() -> str:

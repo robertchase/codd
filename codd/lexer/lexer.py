@@ -367,6 +367,7 @@ class Lexer:
     # Alphabetic operators: letter(s) + '.' (extensible for p., d., etc.)
     _ALPHA_OPS: dict[str, TokenType] = {
         "i": TokenType.I_DOT,
+        "I": TokenType.I_CAP_DOT,
         "in": TokenType.IN_DOT,
         "n": TokenType.N_DOT,
         "p": TokenType.P_DOT,
