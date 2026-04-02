@@ -375,3 +375,40 @@ class TestPerFileGenkey:
         )
         assert result.exit_code == 0
         assert "b_id" not in result.output
+
+
+class TestExportWithEval:
+    """Test \\export command used via -e."""
+
+    def test_export_writes_file(self, tmp_path: Path) -> None:
+        """\\export via -e writes CSV to the specified path."""
+        out_file = tmp_path / "out.csv"
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--sample", "-e", f"\\export {out_file} E # name"]
+        )
+        assert result.exit_code == 0
+        assert out_file.exists()
+        content = out_file.read_text()
+        assert "Alice" in content
+
+    def test_export_reports_row_count(self, tmp_path: Path) -> None:
+        """\\export via -e prints an 'Exported N rows' message."""
+        out_file = tmp_path / "out.csv"
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--sample", "-e", f"\\export {out_file} E # name"]
+        )
+        assert result.exit_code == 0
+        assert "Exported" in result.output
+        assert str(out_file) in result.output
+
+    def test_export_bad_expression_reports_error(self, tmp_path: Path) -> None:
+        """\\export via -e with invalid expression prints an error."""
+        out_file = tmp_path / "out.csv"
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--sample", "-e", f"\\export {out_file} NoSuchRelation"]
+        )
+        assert result.exit_code == 0  # error is printed, not raised
+        assert not out_file.exists()

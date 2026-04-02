@@ -218,6 +218,13 @@ def _run_eval(
 
     # Bash history expansion escapes '!' to '\!'.
     expression = expression.replace("\\!", "!")
+
+    # Backslash commands (\export, \load, etc.) work in -e just like in -f,
+    # but with quiet=False so output (e.g. "Exported N rows") is shown.
+    if expression.lstrip().startswith("\\"):
+        _run_script_command(expression.lstrip(), env, quiet=False)
+        return
+
     header = not no_header
 
     try:
@@ -375,10 +382,12 @@ def _run_file(
         raise click.ClickException(str(e))
 
 
-def _run_script_command(line: str, env: Environment) -> None:
-    """Handle a backslash command inside a -f script.
+def _run_script_command(line: str, env: Environment, quiet: bool = True) -> None:
+    """Handle a backslash command inside a -f script or -e expression.
 
     Supports \\load and \\export.  Other commands are ignored with a warning.
+    *quiet* suppresses success messages; defaults to True for -f scripts,
+    pass False for interactive -e use.
     """
     parts = line.split()
     cmd = parts[0].lower()
@@ -387,11 +396,11 @@ def _run_script_command(line: str, env: Environment) -> None:
     if cmd == "\\load":
         from codd.repl.repl import _cmd_load
 
-        _cmd_load(args, env, quiet=True)
+        _cmd_load(args, env, quiet=quiet)
     elif cmd == "\\export":
         from codd.repl.repl import _cmd_export
 
-        _cmd_export(args, env, quiet=True)
+        _cmd_export(args, env, quiet=quiet)
     elif cmd in ("\\quit", "\\q"):
         raise SystemExit(0)
     else:
