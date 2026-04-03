@@ -874,9 +874,13 @@ class Parser:
         return ast.DateOp(expr=expr, fmt=fmt)
 
     def _parse_ternary_expr(self) -> ast.TernaryExpr:
-        """Parse: ?: condition true_expr false_expr."""
+        """Parse: ?: condition true_expr false_expr.
+
+        The condition may be a simple comparison or a parenthesized boolean
+        combination: ``?: (a = 1 & b = 2) "yes" "no"``.
+        """
         self._advance()  # consume ?:
-        condition = self._parse_comparison()
+        condition = self._parse_condition()
         true_expr = self._parse_ternary_branch()
         false_expr = self._parse_ternary_branch()
         return ast.TernaryExpr(
