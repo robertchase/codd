@@ -651,31 +651,42 @@ class Parser:
             left = ast.BoolCombination(left=left, op=op_tok.value, right=right)
         return left
 
-    def _parse_comparison(self) -> ast.Comparison | ast.MembershipTest:
-        """Parse: attr op value, aggregate op value, or value in. rel_expr."""
-        # Check for literal LHS followed by in. membership test.
-        if self._peek().type in (
-            TokenType.STRING,
-            TokenType.INTEGER,
-            TokenType.FLOAT,
-            TokenType.BOOLEAN,
-        ) and self._peek(1).type == TokenType.IN_DOT:
-            left_tok = self._advance()
-            if left_tok.type == TokenType.STRING:
-                left_expr: ast.Expr = ast.StringLiteral(value=left_tok.value)
-            elif left_tok.type == TokenType.INTEGER:
-                left_expr = ast.IntLiteral(value=int(left_tok.value))
-            elif left_tok.type == TokenType.FLOAT:
-                left_expr = ast.FloatLiteral(value=float(left_tok.value))
+    def _parse_lhs_expr(self) -> ast.Expr:
+        """Parse the LHS of a comparison or in. test.
+
+        Like _parse_left_to_right_expr but intentionally excludes ~ (precision)
+        so that ``name ~ "pattern"`` still parses ~ as the regex operator rather
+        than consuming it as a precision postfix.
+        """
+        left: ast.Expr = self._parse_computation_atom()
+        while True:
+            if self._peek().type == TokenType.S_DOT:
+                self._advance()
+                left = self._parse_string_op(left)
+            elif self._peek().type == TokenType.D_DOT:
+                self._advance()
+                left = self._parse_date_op(left)
+            elif self._peek().type == TokenType.F_DOT:
+                self._advance()
+                left = ast.FormatStr(expr=left)
+            elif self._peek().type in self._ARITH_OPS:
+                op_tok = self._advance()
+                right = self._parse_computation_atom()
+                left = ast.BinOp(
+                    left=left, op=self._ARITH_OPS[op_tok.type], right=right
+                )
             else:
-                left_expr = ast.BoolLiteral(value=left_tok.value == "true")
-            self._advance()  # consume in.
-            rel_expr = self._parse_atom()
-            return ast.MembershipTest(left=left_expr, rel_expr=rel_expr)
-        if self._peek().type in self._AGG_TOKENS:
-            left: ast.AttrRef | ast.AggregateCall = self._parse_aggregate_call()
-        else:
-            left = self._parse_attr_ref()
+                break
+        return left
+
+    def _parse_comparison(self) -> ast.Comparison | ast.MembershipTest:
+        """Parse: expr op value, aggregate op value, or expr in. rel_expr.
+
+        The LHS may be any computation expression (attr ref, literal,
+        arithmetic, .s / .d / .f postfix) except ~ which is reserved as
+        the regex comparison operator.
+        """
+        left = self._parse_lhs_expr()
         # Check for in. membership test.
         if self._peek().type == TokenType.IN_DOT:
             self._advance()  # consume in.

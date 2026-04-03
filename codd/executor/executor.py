@@ -1065,7 +1065,7 @@ class Executor:
 
             def get_left(t: Tuple_) -> Value:
                 return self._eval_aggregate_call(agg_node, t)
-        else:
+        elif isinstance(comp.left, ast.AttrRef):
             attr_parts = comp.left.parts
 
             def get_left(t: Tuple_) -> Value:
@@ -1073,6 +1073,12 @@ class Executor:
                 for part in attr_parts[1:]:
                     val = val[part]
                 return val
+        else:
+            # General expression LHS (e.g. name .s "lower").
+            lhs_expr = comp.left
+
+            def get_left(t: Tuple_) -> Value:
+                return self._eval_expr(lhs_expr, t, None)
 
         right_expr = comp.right
         op = comp.op

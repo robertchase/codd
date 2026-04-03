@@ -2257,6 +2257,44 @@ class TestMembershipOp:
         assert len(result) == 1
         assert next(iter(result))["name"] == "Alice"
 
+    def test_expr_lhs_in(self) -> None:
+        """in. accepts a transformed LHS expression like name .s 'lower'."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(name="Alice"),
+                    Tuple_(name="BOB"),
+                    Tuple_(name="carol"),
+                })
+            ),
+        )
+        env.bind(
+            "Valid",
+            Relation(frozenset({Tuple_(v="alice"), Tuple_(v="carol")})),
+        )
+        result = run('R ? name .s "lower" in. (Valid # v)', env)
+        assert len(result) == 2
+        assert {t["name"] for t in result} == {"Alice", "carol"}
+
+    def test_expr_lhs_comparison(self) -> None:
+        """Comparison LHS accepts .s 'lower' for case-insensitive equality."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(name="Alice"),
+                    Tuple_(name="ALICE"),
+                    Tuple_(name="Bob"),
+                })
+            ),
+        )
+        result = run('R ? name .s "lower" = "alice"', env)
+        assert len(result) == 2
+        assert {t["name"] for t in result} == {"Alice", "ALICE"}
+
     def test_modify_enforces_schema(self) -> None:
         """=: on a schema-carrying relation enforces type."""
         env = Environment()
