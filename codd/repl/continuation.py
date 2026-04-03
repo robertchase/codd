@@ -18,6 +18,9 @@ def join_continuation(lines: Iterable[str]) -> Iterator[str]:
     buf = ""
     for line in lines:
         stripped = line.rstrip()
+        # Skip full-line -- comments (even inside a continuation block).
+        if stripped.lstrip().startswith("--"):
+            continue
         if stripped.endswith("\\"):
             buf += stripped[:-1]
         else:

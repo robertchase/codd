@@ -45,6 +45,20 @@ class TestJoinContinuation:
         """A line that is just backslash joins with empty content."""
         assert list(join_continuation(["\\", "b"])) == ["b"]
 
+    def test_dash_comment_line_skipped(self) -> None:
+        """Standalone -- comment lines are dropped."""
+        assert list(join_continuation(["-- comment", "a", "b"])) == ["a", "b"]
+
+    def test_dash_comment_inside_continuation_skipped(self) -> None:
+        """A -- comment line inside a continuation block is skipped."""
+        lines = ["a \\", "-- comment", "b"]
+        assert list(join_continuation(lines)) == ["a b"]
+
+    def test_indented_dash_comment_inside_continuation_skipped(self) -> None:
+        """An indented -- comment line inside a continuation block is skipped."""
+        lines = ["a \\", "    -- comment", "b"]
+        assert list(join_continuation(lines)) == ["a b"]
+
 
 class TestScriptContinuation:
     """Integration tests for continuation in -f script mode."""
