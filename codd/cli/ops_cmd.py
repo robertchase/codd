@@ -46,7 +46,7 @@ _EXPRESSIONS = [
     ("~", "Precision", "%. salary ~ 2"),
     (".s", "String", 'name .s [1 3]  or  name .s "upper"'),
     (".d", "Date", "col .d  or  col .d 'year'  or  col .d '{dd}/{mm}/{yyyy}'"),
-    (".f", "Format", '"{name} earns {salary}" .f'),
+    (".f", "Format", '"{name} earns {salary}" .f  or  "{n:05d}" .f'),
     ("?:", "Ternary", '?: dept_id = 10 "eng" "other"'),
 ]
 
@@ -190,6 +190,29 @@ and or not — Logical operators
     E ? dept = "eng" or dept = "ops"
     E ? not flag
     E ? (a > 1 or b > 1) and c = 0   Parens change precedence""",
+    ".f": """\
+.f — Format string
+
+  Interpolates attribute values into a string template.
+  Braces enclose an attribute name, optionally followed by a Python
+  format spec after a colon.
+
+  Syntax:
+    "text {attr} text" .f
+    "text {attr:spec} text" .f
+
+  Basic examples:
+    "{name} earns {salary}" .f       → "Alice earns 95000"
+    "id={emp_id}" .f                 → "id=1"
+
+  Format specs (Python mini-language):
+    "{n:05d}" .f                     Zero-pad integer to width 5 → "00042"
+    "{n:>10}" .f                     Right-align in field of 10  → "        42"
+    "{n:<10}" .f                     Left-align in field of 10   → "42        "
+    "{salary:.2f}" .f                Two decimal places          → "95000.00"
+    "{ratio:.1%}" .f                 Percentage                  → "42.0%"
+
+  Full Python format spec reference applies after the colon.""",
     "/*": """\
 /* — Broadcast aggregate
 

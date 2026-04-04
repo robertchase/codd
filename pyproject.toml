@@ -1,6 +1,6 @@
 [project]
 name = "codd"
-version = "1.5.13"
+version = "1.5.14"
 description = "Codd relational algebra: parser + executor"
 requires-python = ">=3.12"
 dependencies = [

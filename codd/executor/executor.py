@@ -230,11 +230,12 @@ class Executor:
 
         result: set[Tuple_] = set()
         for t_left in left:
-            key = t_left.project(shared)
             matched = False
             for t_right in right:
-                if t_right.project(shared) == key:
-                    result.add(t_left.merge(t_right))
+                if t_left.matches(t_right):
+                    # t_right.merge(t_left): left wins for shared attrs,
+                    # preserving the left side's types (e.g. str vs int).
+                    result.add(t_right.merge(t_left))
                     matched = True
             if not matched:
                 missing = right_only - frozenset(defaults.keys())
@@ -842,17 +843,37 @@ class Executor:
     _FORMAT_REF_RE = re.compile(r"\{([^}]+)\}")
 
     def _apply_format_str(self, template: str, t: Tuple_) -> str:
-        """Resolve {attr} references in a template string against a tuple."""
+        """Resolve {attr} and {attr:fmt} references in a template string.
+
+        Supports Python format mini-language after the colon:
+            {n}          plain value
+            {n:05d}      zero-padded integer, width 5
+            {n:>10}      right-aligned, width 10
+            {n:.2f}      float with 2 decimal places
+        """
         from codd.repl.formatter import format_value
 
         def _replace(match: re.Match[str]) -> str:
-            attr = match.group(1)
+            spec = match.group(1)
+            if ":" in spec:
+                attr, fmt = spec.split(":", 1)
+            else:
+                attr, fmt = spec, ""
+            attr = attr.strip()
             try:
-                return format_value(t[attr])
+                val = t[attr]
             except KeyError:
                 raise ExecutionError(
                     f"Unknown attribute {attr!r} in format string"
                 )
+            if fmt:
+                try:
+                    return format(val, fmt)
+                except (ValueError, TypeError) as e:
+                    raise ExecutionError(
+                        f"Invalid format spec {fmt!r} for value {val!r}: {e}"
+                    )
+            return format_value(val)
 
         return self._FORMAT_REF_RE.sub(_replace, template)
 

@@ -351,6 +351,38 @@ class TestLeftJoin:
         assert result.attributes == frozenset({"name", "dept_name"})
         assert len(result) == 5
 
+    def test_coercion_str_int_join_key(self) -> None:
+        """*< matches str and int join key values via coercion (like natural join)."""
+        env = Environment()
+        # Left has id as str (as CSV loader would produce with default schema).
+        env.bind(
+            "L",
+            Relation(frozenset({
+                Tuple_(id="1", name="Alice"),
+                Tuple_(id="2", name="Bob"),
+                Tuple_(id="3", name="Carol"),
+            })),
+        )
+        # Right has id as int (numeric CSV column).
+        env.bind(
+            "R",
+            Relation(frozenset({
+                Tuple_(id=1, score=100),
+                Tuple_(id=3, score=300),
+            })),
+        )
+        result = run("L *< R [score: 0]", env)
+        assert isinstance(result, Relation)
+        assert len(result) == 3
+        by_name = {t["name"]: t["score"] for t in result}
+        assert by_name["Alice"] == 100
+        assert by_name["Bob"] == 0    # unmatched, filled with default
+        assert by_name["Carol"] == 300
+        # Left side's type for the join key must be preserved (str, not int).
+        ids = {t["id"] for t in result}
+        assert all(isinstance(v, str) for v in ids), \
+            "left join must preserve left side types for shared attrs"
+
 
 class TestUnnest:
     """Test <: (unnest)."""
@@ -1030,6 +1062,32 @@ class TestFormatStr:
         assert isinstance(result, Relation)
         for t in result:
             assert t["lbl"] == "date=2026-03-17"
+
+    def test_format_spec_zero_pad(self) -> None:
+        """{attr:05d} zero-pads an integer to width 5."""
+        result = run('i. n: 3 +: lbl: "{n:03d}" .f')
+        assert isinstance(result, Relation)
+        values = {t["lbl"] for t in result}
+        assert values == {"001", "002", "003"}
+
+    def test_format_spec_float(self) -> None:
+        """{attr:.2f} formats a float to 2 decimal places."""
+        result = run('E +: lbl: "{salary:.2f}" .f # [name lbl]')
+        assert isinstance(result, Relation)
+        for t in result:
+            assert "." in t["lbl"]
+            assert len(t["lbl"].split(".")[1]) == 2
+
+    def test_format_spec_width(self) -> None:
+        """{attr:>10} right-aligns a value in a field of width 10."""
+        result = run('i. n: 1 +: lbl: "{n:>5}" .f')
+        val = next(iter(result))["lbl"]
+        assert val == "    1"
+
+    def test_format_spec_invalid_raises(self) -> None:
+        """Invalid format spec raises ExecutionError."""
+        with pytest.raises(ExecutionError, match="Invalid format spec"):
+            run('i. n: 1 +: lbl: "{n:zzz}" .f')
 
 
 class TestRename:
