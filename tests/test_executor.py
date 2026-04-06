@@ -196,33 +196,33 @@ class TestFilter:
 
 
 class TestRegexFilter:
-    """Test ~ and !~ (regex match) in filters."""
+    """Test =~ and !=~ (regex match) in filters."""
 
     def test_match(self) -> None:
-        """~ matches rows where attribute matches regex."""
-        result = run('E ? name ~ "^A"')
+        """=~ matches rows where attribute matches regex."""
+        result = run('E ? name =~ "^A"')
         assert isinstance(result, Relation)
         assert len(result) == 1
         assert next(iter(result))["name"] == "Alice"
 
     def test_non_match(self) -> None:
-        """!~ excludes rows where attribute matches regex."""
-        result = run('E ? name !~ "^A"')
+        """!=~ excludes rows where attribute matches regex."""
+        result = run('E ? name !=~ "^A"')
         assert isinstance(result, Relation)
         assert len(result) == 4
         names = {t["name"] for t in result}
         assert "Alice" not in names
 
     def test_substring_match(self) -> None:
-        """~ uses re.search (substring match, not full-string)."""
-        result = run('E ? name ~ "li"')
+        """=~ uses re.search (substring match, not full-string)."""
+        result = run('E ? name =~ "li"')
         assert isinstance(result, Relation)
         assert len(result) == 1
         assert next(iter(result))["name"] == "Alice"
 
     def test_case_insensitive(self) -> None:
         """(?i) flag enables case-insensitive matching."""
-        result = run('E ? name ~ "(?i)alice"')
+        result = run('E ? name =~ "(?i)alice"')
         assert isinstance(result, Relation)
         assert len(result) == 1
 
@@ -232,13 +232,13 @@ class TestRegexFilter:
         from codd.executor.executor import ExecutionError
 
         with pytest.raises(ExecutionError, match="Invalid regex"):
-            run('E ? name ~ "["')
+            run('E ? name =~ "["')
 
     def test_anchored_full_match(self) -> None:
         """^ and $ anchors enforce full-string matching."""
-        result = run('E ? name ~ "^Alice$"')
+        result = run('E ? name =~ "^Alice$"')
         assert len(result) == 1
-        result = run('E ? name ~ "^Ali$"')
+        result = run('E ? name =~ "^Ali$"')
         assert len(result) == 0
 
 

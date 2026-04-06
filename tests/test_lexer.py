@@ -119,9 +119,13 @@ class TestDigraphOperators:
         """Tokenize <= as LT_EQ."""
         assert types("<=") == [TokenType.LT_EQ]
 
-    def test_bang_tilde(self) -> None:
-        """Tokenize !~ as BANG_TILDE."""
-        assert types("!~") == [TokenType.BANG_TILDE]
+    def test_eq_tilde(self) -> None:
+        """Tokenize =~ as EQ_TILDE."""
+        assert types("=~") == [TokenType.EQ_TILDE]
+
+    def test_bang_eq_tilde(self) -> None:
+        """Tokenize !=~ as BANG_EQ_TILDE."""
+        assert types("!=~") == [TokenType.BANG_EQ_TILDE]
 
     def test_lt_colon(self) -> None:
         """Tokenize <: as LT_COLON."""

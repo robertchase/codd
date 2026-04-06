@@ -1284,7 +1284,7 @@ def _combine_schemas(
 
 def _make_scalar_cmp(get_left, op: str, rval: Value):
     """Create a comparison predicate with a constant RHS."""
-    if op in ("~", "!~"):
+    if op in ("=~", "!=~"):
         return _make_regex_cmp(get_left, op, rval)
     cmp_ops = {
         "=": lambda a, b: a == b,
@@ -1305,8 +1305,8 @@ def _make_scalar_cmp(get_left, op: str, rval: Value):
 
 def _make_dynamic_cmp(get_left, op: str, get_right):
     """Create a comparison predicate with a dynamic RHS."""
-    if op in ("~", "!~"):
-        negate = op == "!~"
+    if op in ("=~", "!=~"):
+        negate = op == "!=~"
 
         def regex_pred(t: Tuple_) -> bool:
             pattern = str(get_right(t))
@@ -1334,7 +1334,7 @@ def _make_dynamic_cmp(get_left, op: str, get_right):
 
 def _make_regex_cmp(get_left, op: str, pattern_val: Value):
     """Create a regex match predicate with a pre-compiled pattern."""
-    negate = op == "!~"
+    negate = op == "!=~"
     try:
         compiled = re.compile(str(pattern_val))
     except re.error as e:

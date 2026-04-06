@@ -228,15 +228,22 @@ class Lexer:
             self._advance()
             return self._make_token(TokenType.AMPERSAND_DOT, "&.", line, col)
 
-        # != !~
+        # !=~ !=  (check trigraph first)
+        if ch == "!" and ch2 == "=" and self._peek(2) == "~":
+            self._advance()
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.BANG_EQ_TILDE, "!=~", line, col)
         if ch == "!" and ch2 == "=":
             self._advance()
             self._advance()
             return self._make_token(TokenType.BANG_EQ, "!=", line, col)
-        if ch == "!" and ch2 == "~":
+
+        # =~  (check before bare =)
+        if ch == "=" and ch2 == "~":
             self._advance()
             self._advance()
-            return self._make_token(TokenType.BANG_TILDE, "!~", line, col)
+            return self._make_token(TokenType.EQ_TILDE, "=~", line, col)
 
         # $.
         if ch == "$" and ch2 == ".":

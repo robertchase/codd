@@ -5,7 +5,6 @@ from codd.repl.formatter import _build_table
 _RELATIONAL = [
     ("?", "Filter", "E ? salary > 50000"),
     ("?!", "Negated filter", 'E ?! role = "engineer"'),
-    ("~ !~", "Regex match", 'E ? name ~ "^A"  or  E ? name !~ "test"'),
     ("#", "Project", "E # [name salary]"),
     ("#!", "Remove", "E #! emp_id"),
     ("*.", "Natural join", "E *. D"),
@@ -42,6 +41,7 @@ _AGGREGATES = [
 _EXPRESSIONS = [
     ("+ - * / // %", "Arithmetic", "salary * 0.1  or  salary // 1000  or  i % 2"),
     ("= != < > <= >=", "Comparison", "salary > 50000  or  status != \"inactive\""),
+    ("=~ !=~", "Regex match", 'name =~ "^A"  or  name !=~ "test"'),
     ("and or not", "Logical", "age > 18 and status = \"active\"  or  not flag"),
     ("~", "Precision", "%. salary ~ 2"),
     (".s", "String", 'name .s [1 3]  or  name .s "upper"'),
@@ -117,22 +117,22 @@ _DETAIL: dict[str, str] = {
     date + int              Add N days
     date - int              Subtract N days
     date - date             Difference in days (int)""",
-    "~": """\
-~ !~ — Regex match / non-match
+    "=~": """\
+=~ !=~ — Regex match / non-match
 
   Used in filter conditions. The RHS is a regex pattern (string).
   Uses substring matching (re.search), not full-string matching.
   Anchor with ^ and $ if needed.
 
   Syntax:
-    R ? attr ~ "pattern"    Tuples where attr matches pattern
-    R ? attr !~ "pattern"   Tuples where attr does not match
+    R ? attr =~ "pattern"    Tuples where attr matches pattern
+    R ? attr !=~ "pattern"   Tuples where attr does not match
 
   Examples:
-    E ? name ~ "^A"         Names starting with A
-    E ? name ~ "(?i)alice"  Case-insensitive match
-    E ? email !~ "@test"    Emails not containing @test
-    E ? code ~ "^[A-Z]{3}$" Exactly 3 uppercase letters""",
+    E ? name =~ "^A"         Names starting with A
+    E ? name =~ "(?i)alice"  Case-insensitive match
+    E ? email !=~ "@test"    Emails not containing @test
+    E ? code =~ "^[A-Z]{3}$" Exactly 3 uppercase letters""",
     "*<": """\
 *< — Left join
 
@@ -235,7 +235,7 @@ and or not — Logical operators
   The result has all original attributes plus the new aggregate columns.
   Compare with /. which collapses groups to one row each.""",
 }
-_DETAIL["!~"] = _DETAIL["~"]
+_DETAIL["!=~"] = _DETAIL["=~"]
 for _op in ("!=", "<", ">", "<=", ">="):
     _DETAIL[_op] = _DETAIL["="]
 for _op in ("or", "not"):

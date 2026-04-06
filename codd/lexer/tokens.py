@@ -75,9 +75,10 @@ class TokenType(Enum):
     BANG_EQ = auto()        # !=  not equal
     GT_EQ = auto()          # >=  greater or equal
     LT_EQ = auto()          # <=  less or equal
-    BANG_TILDE = auto()     # !~  regex non-match
+    EQ_TILDE = auto()       # =~  regex match
+    BANG_EQ_TILDE = auto()  # !=~ regex non-match
     COLON_COLON = auto()    # ::  type check
-    TILDE = auto()          # ~   regex match
+    TILDE = auto()          # ~   precision postfix
 
     # Delimiters
     LPAREN = auto()         # (
