@@ -70,7 +70,11 @@ def load_csv(
             coerced[key_col] = i
         tuples.add(Tuple_(coerced))
 
-    return Relation(frozenset(tuples), attributes=all_attrs)
+    schema: dict[str, str] | None = None
+    if key_col is not None:
+        schema = {a: "str" for a in sorted(all_attrs)}
+        schema[key_col] = "int"
+    return Relation(frozenset(tuples), attributes=all_attrs, schema=schema)
 
 
 def infer_types(rows: list[dict[str, str]]) -> dict[str, type]:
