@@ -260,6 +260,34 @@ class Executor:
         source = self._as_relation(node.source)
         return source.unnest(node.nest_attr)
 
+    @staticmethod
+    def _extract_cast_types(
+        computations: tuple[ast.NamedExpr, ...],
+    ) -> dict[str, str]:
+        """Extract schema type overrides from .as casts in computations.
+
+        If a computation's outermost expression is a TypeCast, the declared
+        target type is recorded so it can be merged into the relation schema.
+        """
+        overrides: dict[str, str] = {}
+        for comp in computations:
+            expr = comp.expr
+            if isinstance(expr, ast.TypeCast):
+                overrides[comp.name] = expr.target_type
+        return overrides
+
+    def _merge_cast_schema(
+        self, rel: Relation, overrides: dict[str, str]
+    ) -> Relation:
+        """Return a copy of *rel* with schema entries updated from .as casts."""
+        if not overrides:
+            return rel
+        schema = dict(rel.schema)  # always returns a dict
+        schema.update(overrides)
+        return Relation(
+            rel._tuples, attributes=rel._attributes, schema=schema
+        )
+
     def _eval_extend(self, node: ast.Extend) -> Relation:
         """Evaluate: source + computations."""
         source = self._as_relation(node.source)
@@ -272,6 +300,7 @@ class Executor:
             return result
 
         result = source.extend(compute, added_attrs=new_names)
+        result = self._merge_cast_schema(result, self._extract_cast_types(node.computations))
         self._enforce_schema(result, changed_attrs=new_names)
         return result
 
@@ -287,6 +316,7 @@ class Executor:
             return result
 
         result = source.modify(compute)
+        result = self._merge_cast_schema(result, self._extract_cast_types(node.computations))
         self._enforce_schema(result, changed_attrs=changed_names)
         return result
 
@@ -494,6 +524,9 @@ class Executor:
         if isinstance(expr, ast.DateOp):
             value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
             return self._apply_date_op(value, expr.fmt)
+        if isinstance(expr, ast.TypeCast):
+            value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
+            return self._apply_type_cast(value, expr.target_type)
         if isinstance(expr, ast.FormatStr):
             raise ExecutionError(
                 "Cannot use .f in summarize context (no tuple for attribute references)"
@@ -529,20 +562,43 @@ class Executor:
         return source.nest_by(frozenset(node.group_attrs), node.nest_name)
 
     def _eval_sort(self, node: ast.Sort) -> list[Tuple_]:
-        """Evaluate: source $ keys."""
+        """Evaluate: source $ keys.
+
+        Sort respects the relation's schema: if a key attribute has a
+        declared type (e.g. int), values are coerced before comparison so
+        that string "10" sorts numerically after "2".
+        """
+        from codd.model.coerce import coerce_value, parse_type_string
+
         source = self._as_relation(node.source)
         keys = node.keys
+        schema = source.schema
+
+        # Pre-compute coercion info per sort key.
+        key_types: list[str | None] = []
+        for k in keys:
+            raw_type = schema.get(k.attr, "str")
+            base_type, constraint = parse_type_string(raw_type)
+            # in() constraints are not useful for coercion.
+            if base_type == "in":
+                key_types.append(None)
+            else:
+                key_types.append(base_type)
 
         def sort_key(t: Tuple_) -> tuple:
             parts = []
-            for k in keys:
+            for k, ktype in zip(keys, key_types):
                 val = t[k.attr]
+                # Coerce to schema type for comparison.
+                if ktype is not None:
+                    try:
+                        val = coerce_value(val, ktype)
+                    except Exception:
+                        pass  # fall back to raw value
                 if k.descending:
-                    # Negate for numeric types, reverse for strings
                     if isinstance(val, (int, float, Decimal)):
                         parts.append(-val)
                     else:
-                        # For strings, we use a wrapper that reverses comparison
                         parts.append(_ReverseKey(val))
                 else:
                     parts.append(val)
@@ -668,6 +724,9 @@ class Executor:
         if isinstance(expr, ast.FormatStr):
             value = self._eval_expr(expr.expr, t, source)
             return self._apply_format_str(str(value), t)
+        if isinstance(expr, ast.TypeCast):
+            value = self._eval_expr(expr.expr, t, source)
+            return self._apply_type_cast(value, expr.target_type)
         raise ExecutionError(f"Unknown expression type: {type(expr).__name__}")
 
     def _eval_attr_ref(self, ref: ast.AttrRef, t: Tuple_) -> Value:
@@ -876,6 +935,22 @@ class Executor:
             return format_value(val)
 
         return self._FORMAT_REF_RE.sub(_replace, template)
+
+    # --- Type cast ---
+
+    def _apply_type_cast(self, value: Value, target_type: str) -> Value:
+        """Coerce a value to the specified type."""
+        from codd.model.coerce import coerce_value, CoercionError, BUILTIN_TYPES
+
+        if target_type not in BUILTIN_TYPES:
+            raise ExecutionError(
+                f".as: unknown type {target_type!r}"
+                f" (expected one of {', '.join(sorted(BUILTIN_TYPES))})"
+            )
+        try:
+            return coerce_value(value, target_type)
+        except CoercionError as e:
+            raise ExecutionError(f".as: {e}") from e
 
     # --- Date operations ---
 

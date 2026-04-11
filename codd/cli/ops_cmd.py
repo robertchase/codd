@@ -47,6 +47,7 @@ _EXPRESSIONS = [
     (".s", "String", 'name .s [1 3]  or  name .s "upper"'),
     (".d", "Date", "col .d  or  col .d 'year'  or  col .d '{dd}/{mm}/{yyyy}'"),
     (".f", "Format", '"{name} earns {salary}" .f  or  "{n:05d}" .f'),
+    (".as", "Type cast", 'amount .as int  or  val .as float'),
     ("?:", "Ternary", '?: dept_id = 10 "eng" "other"'),
 ]
 

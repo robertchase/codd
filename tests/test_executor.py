@@ -1090,6 +1090,129 @@ class TestFormatStr:
             run('i. n: 1 +: lbl: "{n:zzz}" .f')
 
 
+class TestTypeCast:
+    """Test .as (type cast)."""
+
+    def test_str_to_int(self) -> None:
+        """String value coerced to int."""
+        result = run('i. n: 3 +: x: "{n}" .f +: y: x .as int')
+        for t in result:
+            assert isinstance(t["y"], int)
+
+    def test_int_to_str(self) -> None:
+        """Integer value coerced to string."""
+        result = run("i. n: 3 +: s: n .as str")
+        for t in result:
+            assert isinstance(t["s"], str)
+
+    def test_str_to_float(self) -> None:
+        """String value coerced to float."""
+        result = run('{v; "3.14"} +: f: v .as float')
+        val = next(iter(result))["f"]
+        assert isinstance(val, float)
+        assert val == 3.14
+
+    def test_invalid_type_raises(self) -> None:
+        """Unknown type name raises error."""
+        with pytest.raises(ExecutionError, match="unknown type"):
+            run("i. 1 +: x: i .as bogus")
+
+    def test_cast_in_filter(self) -> None:
+        """.as on comparison LHS works in a filter."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(frozenset({
+                Tuple_(val="10"), Tuple_(val="2"), Tuple_(val="100"),
+            })),
+        )
+        result = run("R ? val .as int > 5", env)
+        assert len(result) == 2
+        assert {t["val"] for t in result} == {"10", "100"}
+
+
+    def test_extend_propagates_schema(self) -> None:
+        """+: with .as sets the schema type for the new column."""
+        result = run("i. n: 3 +: x: n .as str")
+        assert isinstance(result, Relation)
+        assert result.schema["x"] == "str"
+        result2 = run("i. n: 3 +: x: n .as float")
+        assert result2.schema["x"] == "float"
+
+    def test_modify_propagates_schema(self) -> None:
+        """=: with .as updates the schema type for the modified column."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({Tuple_(val="42")}),
+                schema={"val": "str"},
+            ),
+        )
+        result = run("R =: val: val .as int", env)
+        assert result.schema["val"] == "int"
+
+    def test_cast_schema_enables_numeric_sort(self) -> None:
+        """.as int in +: sets schema so $ sorts numerically."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(frozenset({
+                Tuple_(name="a", val="10"),
+                Tuple_(name="b", val="2"),
+                Tuple_(name="c", val="1"),
+            })),
+        )
+        result = run("R +: n: val .as int $ n", env)
+        assert [t["n"] for t in result] == [1, 2, 10]
+
+
+class TestSortSchema:
+    """Test $ (sort) respects schema types."""
+
+    def test_numeric_sort_with_schema(self) -> None:
+        """String values sort numerically when schema declares int."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(val="10"), Tuple_(val="2"), Tuple_(val="1"),
+                }),
+                schema={"val": "int"},
+            ),
+        )
+        result = run("R $ val", env)
+        assert [t["val"] for t in result] == ["1", "2", "10"]
+
+    def test_numeric_sort_descending_with_schema(self) -> None:
+        """Descending numeric sort with schema."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(val="10"), Tuple_(val="2"), Tuple_(val="1"),
+                }),
+                schema={"val": "int"},
+            ),
+        )
+        result = run("R $ val-", env)
+        assert [t["val"] for t in result] == ["10", "2", "1"]
+
+    def test_sort_without_schema_unchanged(self) -> None:
+        """Sort without schema still sorts lexicographically (no regression)."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(frozenset({
+                Tuple_(val="10"), Tuple_(val="2"), Tuple_(val="1"),
+            })),
+        )
+        result = run("R $ val", env)
+        assert [t["val"] for t in result] == ["1", "10", "2"]
+
+
 class TestRename:
     """Test @ (rename)."""
 

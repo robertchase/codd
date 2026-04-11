@@ -255,31 +255,61 @@ class Relation:
         return Relation(frozenset(result), attributes=self._attributes,
                         schema=self._schema)
 
+    def _normalize_to(self, schema: dict[str, str]) -> Relation:
+        """Normalize this relation's tuples to a given schema.
+
+        Like _normalize() but uses the provided schema instead of self.schema.
+        This ensures both sides of a set operation use the same types — the
+        LHS schema prevails.
+        """
+        from codd.model.coerce import coerce_value, parse_type_string
+
+        result: set[Tuple_] = set()
+        for t in self._tuples:
+            data = t.data
+            for attr, type_str in schema.items():
+                if attr not in data:
+                    continue
+                base_type, constraint = parse_type_string(type_str)
+                if base_type == "in":
+                    continue
+                if base_type == "decimal" and constraint is not None:
+                    precision = int(constraint[1])
+                    data[attr] = coerce_value(data[attr], "decimal", precision=precision)
+                else:
+                    data[attr] = coerce_value(data[attr], base_type)
+            result.add(Tuple_(data))
+        return Relation(frozenset(result), attributes=self._attributes,
+                        schema=self._schema)
+
     def union(self, other: Relation) -> Relation:
-        """Union: tuples in either relation (|)."""
+        """Union: tuples in either relation (|).  LHS schema prevails."""
         self._check_same_heading(other, "union")
-        left = self._normalize()
-        right = other._normalize()
+        target_schema = self.schema
+        left = self._normalize_to(target_schema)
+        right = other._normalize_to(target_schema)
         return Relation(
             left._tuples | right._tuples, attributes=self._attributes,
             schema=self._schema,
         )
 
     def difference(self, other: Relation) -> Relation:
-        """Difference: tuples in self but not in other (-)."""
+        """Difference: tuples in self but not in other (-).  LHS schema prevails."""
         self._check_same_heading(other, "difference")
-        left = self._normalize()
-        right = other._normalize()
+        target_schema = self.schema
+        left = self._normalize_to(target_schema)
+        right = other._normalize_to(target_schema)
         return Relation(
             left._tuples - right._tuples, attributes=self._attributes,
             schema=self._schema,
         )
 
     def intersect(self, other: Relation) -> Relation:
-        """Intersect: tuples in both relations (&)."""
+        """Intersect: tuples in both relations (&).  LHS schema prevails."""
         self._check_same_heading(other, "intersect")
-        left = self._normalize()
-        right = other._normalize()
+        target_schema = self.schema
+        left = self._normalize_to(target_schema)
+        right = other._normalize_to(target_schema)
         return Relation(
             left._tuples & right._tuples, attributes=self._attributes,
             schema=self._schema,

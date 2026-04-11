@@ -455,6 +455,33 @@ class TestIotaZero:
         assert result.zero_based is False
 
 
+class TestTypeCast:
+    """Test .as (type cast) parsing."""
+
+    def test_basic(self) -> None:
+        """amount .as int parses as TypeCast."""
+        result = parse("E +: n: amount .as int")
+        assert isinstance(result, ast.Extend)
+        comp = result.computations[0]
+        assert isinstance(comp.expr, ast.TypeCast)
+        assert comp.expr.target_type == "int"
+        assert isinstance(comp.expr.expr, ast.AttrRef)
+
+    def test_chained_with_arithmetic(self) -> None:
+        """salary + 1 .as int parses as TypeCast(BinOp, 'int')."""
+        result = parse("E +: n: salary + 1 .as int")
+        comp = result.computations[0]
+        assert isinstance(comp.expr, ast.TypeCast)
+        assert isinstance(comp.expr.expr, ast.BinOp)
+
+    def test_in_filter_lhs(self) -> None:
+        """amount .as int works on the LHS of a comparison."""
+        result = parse('E ? amount .as int > 100')
+        assert isinstance(result, ast.Filter)
+        assert isinstance(result.condition.left, ast.TypeCast)
+        assert result.condition.left.target_type == "int"
+
+
 class TestRotate:
     """Test r. (rotate) parsing."""
 

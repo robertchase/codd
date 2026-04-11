@@ -261,6 +261,19 @@ class TestIdentifiers:
         assert toks[0].value == "in"
 
 
+    def test_as_dot_token(self) -> None:
+        """.as lexes as AS_DOT token."""
+        toks = Lexer("x .as int").tokenize()
+        assert toks[1].type == TokenType.AS_DOT
+        assert toks[1].value == ".as"
+
+    def test_as_dot_not_prefix_of_longer_ident(self) -> None:
+        """.asset does not lex as .as + et."""
+        toks = Lexer("x.asset").tokenize()
+        # Should be IDENT DOT IDENT, not IDENT AS_DOT IDENT
+        assert all(t.type != TokenType.AS_DOT for t in toks)
+
+
 class TestComplexExpressions:
     """Test tokenizing full expressions."""
 

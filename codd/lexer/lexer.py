@@ -264,6 +264,11 @@ class Lexer:
             self._advance()
             self._advance()
             return self._make_token(TokenType.F_DOT, ".f", line, col)
+        if ch == "." and ch2 == "a" and self._peek(2) == "s" and not (self._peek(3).isalnum() or self._peek(3) == "_"):
+            self._advance()
+            self._advance()
+            self._advance()  # consume .as (3 chars)
+            return self._make_token(TokenType.AS_DOT, ".as", line, col)
 
         # --- Single-char operators ---
 

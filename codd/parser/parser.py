@@ -669,6 +669,10 @@ class Parser:
             elif self._peek().type == TokenType.F_DOT:
                 self._advance()
                 left = ast.FormatStr(expr=left)
+            elif self._peek().type == TokenType.AS_DOT:
+                self._advance()
+                type_tok = self._expect(TokenType.IDENT)
+                left = ast.TypeCast(expr=left, target_type=type_tok.value)
             elif self._peek().type in self._ARITH_OPS:
                 op_tok = self._advance()
                 right = self._parse_computation_atom()
@@ -830,6 +834,10 @@ class Parser:
             elif self._peek().type == TokenType.F_DOT:
                 self._advance()  # consume .f
                 left = ast.FormatStr(expr=left)
+            elif self._peek().type == TokenType.AS_DOT:
+                self._advance()  # consume .as
+                type_tok = self._expect(TokenType.IDENT)
+                left = ast.TypeCast(expr=left, target_type=type_tok.value)
             elif self._peek().type in self._ARITH_OPS:
                 op_tok = self._advance()
                 right = self._parse_computation_atom()

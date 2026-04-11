@@ -152,6 +152,18 @@ class FormatStr:
     expr: Expr
 
 
+@dataclass(frozen=True)
+class TypeCast:
+    """Type cast: expr .as type_name.
+
+    Coerces the value to the specified type using coerce_value.
+    Supported types: str, int, float, decimal, date, bool.
+    """
+
+    expr: "Expr"
+    target_type: str
+
+
 # Expr is the union of all expression types
 Expr = (
     IntLiteral
@@ -166,8 +178,10 @@ Expr = (
     | TernaryExpr
     | Round
     | Substring
+    | StringOp
     | DateOp
     | FormatStr
+    | TypeCast
 )
 
 
