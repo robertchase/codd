@@ -961,6 +961,8 @@ class Executor:
         "week": "week",
         "ww": "ww",
         "dow": "dow",
+        "q": "q",
+        "qq": "qq",
     }
 
     _MONTH_ABBR = [
@@ -1018,6 +1020,10 @@ class Executor:
             return f"{d.isocalendar().week:02d}"
         if component == "dow":
             return d.isoweekday()
+        if component == "q":
+            return (d.month - 1) // 3 + 1
+        if component == "qq":
+            return f"Q{(d.month - 1) // 3 + 1}"
         raise ExecutionError(f"Unknown date component: {component!r}")
 
     _FORMAT_TOKEN_RE = re.compile(r"\{(\w+)\}")
@@ -1049,6 +1055,10 @@ class Executor:
                 return str(d.isoweekday())
             if token == "ddd":
                 return self._DAY_ABBR[d.isoweekday() - 1]
+            if token == "q":
+                return str((d.month - 1) // 3 + 1)
+            if token == "qq":
+                return f"Q{(d.month - 1) // 3 + 1}"
             raise ExecutionError(f"Unknown date format token: {{{token}}}")
 
         return self._FORMAT_TOKEN_RE.sub(_replace, pattern)

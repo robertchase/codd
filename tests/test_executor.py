@@ -904,6 +904,33 @@ class TestDateOp:
         for t in result:
             assert t["d"] == 2
 
+    def test_extract_q(self) -> None:
+        """.d "q" extracts quarter as int (1-4)."""
+        result = run('E +: q: "2026-03-17" .d "q" # [name q]')
+        for t in result:
+            assert t["q"] == 1
+        result2 = run('E +: q: "2026-06-15" .d "q" # [name q]')
+        for t in result2:
+            assert t["q"] == 2
+
+    def test_extract_qq(self) -> None:
+        """.d "qq" extracts quarter as string like "Q1"."""
+        result = run('E +: q: "2026-10-01" .d "qq" # [name q]')
+        for t in result:
+            assert t["q"] == "Q4"
+
+    def test_format_quarter(self) -> None:
+        """.d "{yyyy}-{qq}" formats year-quarter string."""
+        result = run('E +: f: "2026-03-17" .d "{yyyy}-{qq}" # [name f]')
+        for t in result:
+            assert t["f"] == "2026-Q1"
+
+    def test_format_q_numeric(self) -> None:
+        """.d "{q}" formats quarter as bare digit."""
+        result = run('E +: f: "2026-07-01" .d "{q}" # [name f]')
+        for t in result:
+            assert t["f"] == "3"
+
     def test_format_iso(self) -> None:
         """.d "{yyyy}-{mm}-{dd}" formats as ISO string."""
         result = run('E +: f: "2026-03-17" .d "{yyyy}-{mm}-{dd}" # [name f]')
