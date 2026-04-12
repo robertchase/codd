@@ -130,6 +130,15 @@ class StringOp:
 
 
 @dataclass(frozen=True)
+class RegexReplace:
+    """Regex replace: expr .r "pattern" "replacement"."""
+
+    expr: "Expr"
+    pattern: str
+    replacement: str
+
+
+@dataclass(frozen=True)
 class DateOp:
     """Date operator: expr .d [fmt].
 
@@ -179,6 +188,7 @@ Expr = (
     | Round
     | Substring
     | StringOp
+    | RegexReplace
     | DateOp
     | FormatStr
     | TypeCast

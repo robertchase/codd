@@ -1044,6 +1044,45 @@ class TestDateOp:
         assert len(result) == 1
 
 
+class TestRegexReplace:
+    """Test .r (regex replace)."""
+
+    def test_strip_chars(self) -> None:
+        """Remove dollar signs and commas from a money string."""
+        result = run('{v; " $ 11,440.00 "} +: c: v .s "trim" .r "[$ ,]" ""')
+        val = next(iter(result))["c"]
+        assert val == "11440.00"
+
+    def test_replace_pattern(self) -> None:
+        """Regex replace with character class."""
+        result = run('{v; "abc123def"} +: c: v .r "[0-9]+" "X"')
+        val = next(iter(result))["c"]
+        assert val == "abcXdef"
+
+    def test_no_match_unchanged(self) -> None:
+        """When pattern doesn't match, value is unchanged."""
+        result = run('{v; "abc"} +: c: v .r "\\d+" "X"')
+        val = next(iter(result))["c"]
+        assert val == "abc"
+
+    def test_replace_all_occurrences(self) -> None:
+        """.r replaces all matches (like re.sub), not just the first."""
+        result = run('{v; "a-b-c"} +: c: v .r "-" "."')
+        val = next(iter(result))["c"]
+        assert val == "a.b.c"
+
+    def test_capture_group_backreference(self) -> None:
+        """Capture group backreference with \\1."""
+        result = run(r'{v; "(123.45)"} +: c: v .r "^\((.+)\)$" "-\1"')
+        val = next(iter(result))["c"]
+        assert val == "-123.45"
+
+    def test_invalid_regex_raises(self) -> None:
+        """Invalid regex pattern raises error."""
+        with pytest.raises(ExecutionError, match="invalid regex"):
+            run('{v; "x"} +: c: v .r "[" ""')
+
+
 class TestFormatStr:
     """Test .f (format string)."""
 

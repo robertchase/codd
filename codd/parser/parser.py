@@ -669,6 +669,9 @@ class Parser:
             elif self._peek().type == TokenType.F_DOT:
                 self._advance()
                 left = ast.FormatStr(expr=left)
+            elif self._peek().type == TokenType.R_SCALAR_DOT:
+                self._advance()
+                left = self._parse_regex_replace(left)
             elif self._peek().type == TokenType.AS_DOT:
                 self._advance()
                 type_tok = self._expect(TokenType.IDENT)
@@ -834,6 +837,9 @@ class Parser:
             elif self._peek().type == TokenType.F_DOT:
                 self._advance()  # consume .f
                 left = ast.FormatStr(expr=left)
+            elif self._peek().type == TokenType.R_SCALAR_DOT:
+                self._advance()  # consume .r
+                left = self._parse_regex_replace(left)
             elif self._peek().type == TokenType.AS_DOT:
                 self._advance()  # consume .as
                 type_tok = self._expect(TokenType.IDENT)
@@ -860,6 +866,14 @@ class Parser:
             end = self._parse_signed_int()
         self._expect(TokenType.RBRACKET)
         return ast.Substring(expr=expr, start=start, end=end)
+
+    def _parse_regex_replace(self, expr: ast.Expr) -> ast.RegexReplace:
+        """Parse: .r "pattern" "replacement"."""
+        pattern_tok = self._expect(TokenType.STRING)
+        replacement_tok = self._expect(TokenType.STRING)
+        return ast.RegexReplace(
+            expr=expr, pattern=pattern_tok.value, replacement=replacement_tok.value
+        )
 
     def _parse_signed_int(self) -> int:
         """Parse an optionally negative integer: INTEGER or MINUS INTEGER."""

@@ -260,6 +260,10 @@ class Lexer:
             self._advance()
             self._advance()
             return self._make_token(TokenType.D_DOT, ".d", line, col)
+        if ch == "." and ch2 == "r" and not (self._peek(2).isalnum() or self._peek(2) == "_"):
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.R_SCALAR_DOT, ".r", line, col)
         if ch == "." and ch2 == "f" and not (self._peek(2).isalnum() or self._peek(2) == "_"):
             self._advance()
             self._advance()
@@ -340,7 +344,11 @@ class Lexer:
                 self._advance()
                 esc = self._advance()
                 escape_map = {"n": "\n", "t": "\t", "\\": "\\", '"': '"'}
-                chars.append(escape_map.get(esc, esc))
+                if esc in escape_map:
+                    chars.append(escape_map[esc])
+                else:
+                    # Preserve backslash for unknown escapes (e.g. \1, \w).
+                    chars.append("\\" + esc)
             else:
                 chars.append(self._advance())
         raise LexError("Unterminated string literal", line, col)

@@ -62,6 +62,7 @@ class TokenType(Enum):
     S_DOT = auto()          # s.  substring
     D_DOT = auto()          # .d  date
     F_DOT = auto()          # .f  format string
+    R_SCALAR_DOT = auto()   # .r  regex replace
     AS_DOT = auto()         # .as type cast
     DOUBLE_SLASH = auto()   # //  integer divide
     PERCENT = auto()        # %   remainder

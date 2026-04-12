@@ -521,6 +521,9 @@ class Executor:
         if isinstance(expr, ast.StringOp):
             value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
             return self._apply_string_op(value, expr.op)
+        if isinstance(expr, ast.RegexReplace):
+            value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
+            return self._apply_regex_replace(str(value), expr.pattern, expr.replacement)
         if isinstance(expr, ast.DateOp):
             value = self._eval_summarize_expr(expr.expr, group_rel, whole_rel)
             return self._apply_date_op(value, expr.fmt)
@@ -718,6 +721,9 @@ class Executor:
         if isinstance(expr, ast.StringOp):
             value = self._eval_expr(expr.expr, t, source)
             return self._apply_string_op(value, expr.op)
+        if isinstance(expr, ast.RegexReplace):
+            value = self._eval_expr(expr.expr, t, source)
+            return self._apply_regex_replace(str(value), expr.pattern, expr.replacement)
         if isinstance(expr, ast.DateOp):
             value = self._eval_expr(expr.expr, t, source)
             return self._apply_date_op(value, expr.fmt)
@@ -935,6 +941,17 @@ class Executor:
             return format_value(val)
 
         return self._FORMAT_REF_RE.sub(_replace, template)
+
+    # --- Regex replace ---
+
+    def _apply_regex_replace(
+        self, value: str, pattern: str, replacement: str
+    ) -> str:
+        """Apply regex substitution: re.sub(pattern, replacement, value)."""
+        try:
+            return re.sub(pattern, replacement, value)
+        except re.error as e:
+            raise ExecutionError(f".r: invalid regex {pattern!r}: {e}") from e
 
     # --- Type cast ---
 

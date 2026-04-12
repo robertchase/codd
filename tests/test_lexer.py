@@ -261,6 +261,17 @@ class TestIdentifiers:
         assert toks[0].value == "in"
 
 
+    def test_r_scalar_dot_token(self) -> None:
+        """.r lexes as R_SCALAR_DOT token."""
+        toks = Lexer('x .r "[a]" ""').tokenize()
+        assert toks[1].type == TokenType.R_SCALAR_DOT
+        assert toks[1].value == ".r"
+
+    def test_r_scalar_dot_not_prefix(self) -> None:
+        """.range does not lex as .r + ange."""
+        toks = Lexer("x.range").tokenize()
+        assert all(t.type != TokenType.R_SCALAR_DOT for t in toks)
+
     def test_as_dot_token(self) -> None:
         """.as lexes as AS_DOT token."""
         toks = Lexer("x .as int").tokenize()
