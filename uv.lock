@@ -16,7 +16,7 @@ wheels = [
 
 [[package]]
 name = "codd"
-version = "1.5.19"
+version = "1.5.20"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

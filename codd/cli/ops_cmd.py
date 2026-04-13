@@ -83,6 +83,8 @@ _DETAIL: dict[str, str] = {
   Transforms (string form):
     expr .s "upper"         Uppercase
     expr .s "lower"         Lowercase
+    expr .s "title"         Title case (each word capitalized)
+    expr .s "cap"           Capitalize (first letter upper, rest lower)
     expr .s "trim"          Strip whitespace (both sides)
     expr .s "rtrim"         Strip whitespace (right)
     expr .s "ltrim"         Strip whitespace (left)
@@ -90,6 +92,8 @@ _DETAIL: dict[str, str] = {
 
     name .s "upper"         "Alice" → "ALICE"
     name .s "lower"         "Alice" → "alice"
+    name .s "title"         "alice smith" → "Alice Smith"
+    name .s "cap"           "alice smith" → "Alice smith"
     name .s "len"           "Alice" → 5""",
     ".d": """\
 .d — Date operations

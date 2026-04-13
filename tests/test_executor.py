@@ -613,6 +613,21 @@ class TestStringOp:
         for t in result:
             assert t["t"] == "hi  "
 
+    def test_title(self) -> None:
+        """name .s "title" title-cases each word."""
+        result = run('{x; "alice smith"} +: t: x .s "title" # t')
+        assert next(iter(result))["t"] == "Alice Smith"
+
+    def test_cap(self) -> None:
+        """name .s "cap" capitalizes first letter, lowercases rest."""
+        result = run('{x; "aLICE SMITH"} +: t: x .s "cap" # t')
+        assert next(iter(result))["t"] == "Alice smith"
+
+    def test_cap_empty(self) -> None:
+        """name .s "cap" on empty string returns empty."""
+        result = run('{x; ""} +: t: x .s "cap" # t')
+        assert next(iter(result))["t"] == ""
+
     def test_len(self) -> None:
         """Len returns an integer length."""
         result = run('E +: n: name .s "len" # [name n]')

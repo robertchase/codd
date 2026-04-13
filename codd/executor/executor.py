@@ -877,6 +877,8 @@ class Executor:
     _STRING_OPS: dict[str, str] = {
         "upper": "upper",
         "lower": "lower",
+        "title": "title",
+        "cap": "cap",
         "trim": "trim",
         "rtrim": "rtrim",
         "ltrim": "ltrim",
@@ -890,6 +892,10 @@ class Executor:
             return s.upper()
         if op == "lower":
             return s.lower()
+        if op == "title":
+            return s.title()
+        if op == "cap":
+            return s[:1].upper() + s[1:].lower() if s else s
         if op == "trim":
             return s.strip()
         if op == "rtrim":
