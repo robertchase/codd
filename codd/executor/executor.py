@@ -387,16 +387,18 @@ class Executor:
     ) -> dict[str, str] | None:
         """Build schema for aggregate output columns.
 
-        If the source has a schema and an aggregate references a single
-        column (e.g. ``+. amount``), the output column inherits that
-        column's type.
+        .as casts declare their target type.  Otherwise a simple aggregate
+        on a single column (e.g. +. amount) inherits that column's type
+        from the source schema.
         """
-        if source._schema is None:
-            return None
         schema: dict[str, str] = {}
         src_schema = source.schema
         for comp in computations:
             expr = comp.expr
+            # .as cast wins: use the declared target type.
+            if isinstance(expr, ast.TypeCast):
+                schema[comp.name] = expr.target_type
+                continue
             # Simple aggregate on a single column: inherit its type.
             if isinstance(expr, ast.AggregateCall) and expr.arg is not None:
                 src_attr = expr.arg.parts[0]

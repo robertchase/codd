@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import uuid
 from decimal import Decimal, InvalidOperation
 from typing import TextIO
 
@@ -20,6 +22,8 @@ def load_csv(
     *,
     genkey: str | None = None,
     genkey_col: str | None = None,
+    genuuid_col: str | None = None,
+    genhash_col: str | None = None,
 ) -> Relation:
     """Read CSV data from a text stream and return a Relation.
 
@@ -31,6 +35,11 @@ def load_csv(
     is prepended with sequential integers starting at 1.
     If *genkey_col* is provided, it is used as the exact column name
     (overrides *genkey*).
+    If *genuuid_col* is provided, a column with that name is added with
+    a unique UUID (v4) string per row.
+    If *genhash_col* is provided, a column with that name is added with
+    a deterministic hash (SHA-256, first 16 hex chars) derived from the
+    row's content.  Identical rows always get the same hash.
     """
     reader = csv.reader(source)
     try:
@@ -57,7 +66,25 @@ def load_csv(
             continue  # skip malformed rows
         rows.append(dict(zip(headers, row)))
 
-    all_attrs = frozenset(headers) | (frozenset({key_col}) if key_col else frozenset())
+    extra_cols: set[str] = set()
+    if key_col is not None:
+        extra_cols.add(key_col)
+    if genuuid_col is not None:
+        if genuuid_col in headers:
+            raise LoadError(
+                f"Cannot generate UUID column {genuuid_col!r}: "
+                "column already exists in the data"
+            )
+        extra_cols.add(genuuid_col)
+    if genhash_col is not None:
+        if genhash_col in headers:
+            raise LoadError(
+                f"Cannot generate hash column {genhash_col!r}: "
+                "column already exists in the data"
+            )
+        extra_cols.add(genhash_col)
+
+    all_attrs = frozenset(headers) | frozenset(extra_cols)
 
     if not rows:
         return Relation(frozenset(), attributes=all_attrs)
@@ -68,12 +95,23 @@ def load_csv(
         coerced = coerce_row(row, types)
         if key_col is not None:
             coerced[key_col] = i
+        if genuuid_col is not None:
+            coerced[genuuid_col] = str(uuid.uuid4())
+        if genhash_col is not None:
+            # Deterministic hash from row content (excluding generated cols).
+            content = "\0".join(
+                f"{k}\0{coerced[k]}" for k in sorted(headers) if k in coerced
+            )
+            coerced[genhash_col] = hashlib.sha256(
+                content.encode()
+            ).hexdigest()[:16]
         tuples.add(Tuple_(coerced))
 
     schema: dict[str, str] | None = None
-    if key_col is not None:
+    if key_col is not None or genuuid_col is not None:
         schema = {a: "str" for a in sorted(all_attrs)}
-        schema[key_col] = "int"
+        if key_col is not None:
+            schema[key_col] = "int"
     return Relation(frozenset(tuples), attributes=all_attrs, schema=schema)
 
 

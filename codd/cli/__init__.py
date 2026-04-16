@@ -108,25 +108,32 @@ def main(
         if expression is None and script_file is None:
             click.echo("Sample data loaded: E, D, Phone, ContractorPay")
 
-    def _parse_file_arg(arg: str) -> tuple[str | None, str, str | None]:
-        """Parse a file argument into (name, path, genkey).
+    def _parse_file_arg(
+        arg: str,
+    ) -> tuple[str | None, str, str | None, str | None, str | None]:
+        """Parse a file argument into (name, path, genkey, genuuid_col, genhash_col).
 
-        Supports:
-          file.csv              → (None, "file.csv", None)
-          file.csv+key          → (None, "file.csv", <default>)
-          file.csv+key=oid      → (None, "file.csv", "oid")
-          n=file.csv            → ("n", "file.csv", None)
-          n=file.csv+key        → ("n", "file.csv", <default>)
-          n=file.csv+key=oid    → ("n", "file.csv", "oid")
-
-        <default> is signalled by returning "" for genkey; the caller
-        resolves the actual name from the relation name.
+        Supports +key, +key=Col, +uuid=Col, +hash=Col suffixes and n=path prefix.
         """
         name: str | None = None
         rest = arg
         file_genkey: str | None = None
+        genuuid_col: str | None = None
+        genhash_col: str | None = None
 
-        # Strip +key or +key=Name suffix first (before name= split).
+        # Strip +hash=Col suffix first.
+        if "+hash=" in rest:
+            idx = rest.index("+hash=")
+            genhash_col = rest[idx + 6:]
+            rest = rest[:idx]
+
+        # Strip +uuid=Col suffix.
+        if "+uuid=" in rest:
+            idx = rest.index("+uuid=")
+            genuuid_col = rest[idx + 6:]
+            rest = rest[:idx]
+
+        # Strip +key or +key=Name suffix (before name= split).
         if "+key" in rest:
             idx = rest.index("+key")
             suffix = rest[idx + 4:]  # after "+key"
@@ -140,7 +147,7 @@ def main(
         if "=" in rest:
             name, rest = rest.split("=", 1)
 
-        return name, rest, file_genkey
+        return name, rest, file_genkey, genuuid_col, genhash_col
 
     def _resolve_genkey(
         name: str, file_genkey: str | None
@@ -166,16 +173,18 @@ def main(
     # Load positional files (stem becomes name, - means stdin).
     # Supports name=path and +key syntax.
     for filepath in files:
-        alias, path, file_gk = _parse_file_arg(filepath)
+        alias, path, file_gk, file_uuid, file_hash = _parse_file_arg(filepath)
         if path == "-":
             stdin_consumed = True
             rel_name = alias or "stdin"
             gk, gk_col = _resolve_genkey(rel_name, file_gk)
-            _load_stdin(env, rel_name, genkey=gk, genkey_col=gk_col)
+            _load_stdin(env, rel_name, genkey=gk, genkey_col=gk_col,
+                        genuuid_col=file_uuid, genhash_col=file_hash)
         else:
             rel_name = alias or pathlib.Path(path).stem
             gk, gk_col = _resolve_genkey(rel_name, file_gk)
-            _load_file(env, path, rel_name, genkey=gk, genkey_col=gk_col)
+            _load_file(env, path, rel_name, genkey=gk, genkey_col=gk_col,
+                       genuuid_col=file_uuid, genhash_col=file_hash)
 
     # Auto-load stdin if piped and not already consumed
     if not stdin_consumed and not sys.stdin.isatty():
@@ -441,11 +450,14 @@ def _load_file(
     *,
     genkey: str | None = None,
     genkey_col: str | None = None,
+    genuuid_col: str | None = None,
+    genhash_col: str | None = None,
 ) -> None:
     """Load a CSV file into the environment."""
     try:
         with open(filepath) as f:
-            rel = load_csv(f, name, genkey=genkey, genkey_col=genkey_col)
+            rel = load_csv(f, name, genkey=genkey, genkey_col=genkey_col,
+                           genuuid_col=genuuid_col, genhash_col=genhash_col)
         env.bind(name, rel)
     except OSError as e:
         raise click.ClickException(f"Cannot read {filepath}: {e}")
@@ -457,9 +469,12 @@ def _load_stdin(
     *,
     genkey: str | None = None,
     genkey_col: str | None = None,
+    genuuid_col: str | None = None,
+    genhash_col: str | None = None,
 ) -> None:
     """Load CSV data from stdin into the environment."""
     if sys.stdin.isatty():
         raise click.ClickException("stdin requested but no data piped")
-    rel = load_csv(sys.stdin, name, genkey=genkey, genkey_col=genkey_col)
+    rel = load_csv(sys.stdin, name, genkey=genkey, genkey_col=genkey_col,
+                   genuuid_col=genuuid_col, genhash_col=genhash_col)
     env.bind(name, rel)
