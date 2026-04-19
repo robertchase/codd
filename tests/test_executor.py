@@ -1195,7 +1195,7 @@ class TestTypeCast:
 
     def test_invalid_type_raises(self) -> None:
         """Unknown type name raises error."""
-        with pytest.raises(ExecutionError, match="unknown type"):
+        with pytest.raises(ExecutionError, match="(?i)unknown type"):
             run("i. 1 +: x: i .as bogus")
 
     def test_cast_in_filter(self) -> None:
@@ -1246,6 +1246,76 @@ class TestTypeCast:
         )
         result = run("R +: n: val .as int $ n", env)
         assert [t["n"] for t in result] == [1, 2, 10]
+
+
+class TestTypeAlias:
+    """Test user-defined type aliases (name := type <target>)."""
+
+    def test_define_alias(self) -> None:
+        """name := type decimal(2) binds a UDT in the environment."""
+        env = Environment()
+        run("Money := type decimal(2)", env)
+        assert env.has_type("Money")
+        assert env.lookup_type("Money") == "decimal(2)"
+
+    def test_alias_in_cast(self) -> None:
+        """.as <UDT> coerces values via the resolved target type."""
+        env = Environment()
+        run("Money := type decimal(2)", env)
+        result = run('{v; "3.14"} +: m: v .as Money', env)
+        from decimal import Decimal
+        val = next(iter(result))["m"]
+        assert isinstance(val, Decimal)
+        assert result.schema["m"] == "decimal(2)"  # resolved to built-in form
+
+    def test_alias_chain(self) -> None:
+        """An alias that targets another alias resolves transitively."""
+        env = Environment()
+        run("Money := type decimal(2)", env)
+        run("Price := type Money", env)
+        result = run('{v; "5.55"} +: p: v .as Price', env)
+        from decimal import Decimal
+        assert isinstance(next(iter(result))["p"], Decimal)
+        assert result.schema["p"] == "decimal(2)"
+
+    def test_alias_in_schema_relation(self) -> None:
+        """A schema relation can use a UDT as a type value."""
+        env = Environment()
+        run("Money := type decimal(2)", env)
+        result = run(
+            '{n price; "widget" "9.995"} :: {attr type; "price" "Money"}',
+            env,
+        )
+        from decimal import Decimal
+        for t in result:
+            assert isinstance(t["price"], Decimal)
+        assert result.schema["price"] == "decimal(2)"
+
+    def test_alias_cycle_detected(self) -> None:
+        """A cycle in alias definitions raises when resolved."""
+        env = Environment()
+        run("A := type B", env)
+        run("B := type A", env)
+        with pytest.raises(ExecutionError, match="(?i)cycle"):
+            run('{v; "1"} +: x: v .as A', env)
+
+    def test_alias_to_builtin(self) -> None:
+        """An alias may target a plain built-in."""
+        env = Environment()
+        run("Age := type int", env)
+        result = run('{v; "42"} +: a: v .as Age', env)
+        val = next(iter(result))["a"]
+        assert isinstance(val, int)
+        assert result.schema["a"] == "int"
+
+    def test_type_namespace_separate_from_relations(self) -> None:
+        """A type name can coexist with a relation of the same name."""
+        env = Environment()
+        run("Status := type int", env)
+        run('Status := {n; "active"; "inactive"}', env)
+        # Both exist; they don't collide.
+        assert env.has_type("Status")
+        assert "Status" in env
 
 
 class TestSortSchema:
@@ -1379,6 +1449,55 @@ class TestSetOps:
         result = run("A &. B", env)
         assert len(result) == 1
         assert next(iter(result))["id"] == "2"
+
+
+class TestSummarizeAggSchema:
+    """Test that /. aggregate output columns get correct schema types."""
+
+    def test_count_is_int(self) -> None:
+        """#. count always produces an int-typed output column."""
+        result = run("E /. dept_id #.")
+        assert result.schema["count"] == "int"
+
+    def test_count_sorts_numerically(self) -> None:
+        """Auto-named count from /. sorts numerically via schema."""
+        # Build a relation where lexicographic and numeric orders differ.
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(frozenset({
+                Tuple_(g="a", i=1), Tuple_(g="a", i=2), Tuple_(g="a", i=3),
+                Tuple_(g="a", i=4), Tuple_(g="a", i=5), Tuple_(g="a", i=6),
+                Tuple_(g="a", i=7), Tuple_(g="a", i=8), Tuple_(g="a", i=9),
+                Tuple_(g="a", i=10), Tuple_(g="a", i=11),  # 11 a's
+                Tuple_(g="b", i=12), Tuple_(g="b", i=13),  # 2 b's
+                Tuple_(g="c", i=14), Tuple_(g="c", i=15), Tuple_(g="c", i=16),  # 3 c's
+            })),
+        )
+        result = run("R /. g #. $ count", env)
+        counts = [t["count"] for t in result]
+        # Numeric: 2, 3, 11 (not lexicographic 11, 2, 3).
+        assert counts == [2, 3, 11]
+
+    def test_mean_is_float(self) -> None:
+        """%. always produces float-typed output."""
+        result = run("E /. dept_id [avg: %. salary]")
+        assert result.schema["avg"] == "float"
+
+    def test_sum_inherits_column_type(self) -> None:
+        """+. on an int column produces an int-typed output."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(g="a", n=1), Tuple_(g="a", n=2),
+                }),
+                schema={"g": "str", "n": "int"},
+            ),
+        )
+        result = run("R /. g [total: +. n]", env)
+        assert result.schema["total"] == "int"
 
 
 class TestSummarize:

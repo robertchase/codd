@@ -43,6 +43,8 @@ class Executor:
         try:
             if isinstance(node, ast.Assignment):
                 return self._eval_assignment(node)
+            if isinstance(node, ast.TypeAlias):
+                return self._eval_type_alias(node)
             return self._eval_rel(node)
         except ExecutionError:
             raise
@@ -59,6 +61,11 @@ class Executor:
                 "Cannot assign a sorted array to a name (sort produces a list, not a relation)"
             )
         return result
+
+    def _eval_type_alias(self, node: ast.TypeAlias) -> None:
+        """Evaluate a type alias: name := type target."""
+        self._env.bind_type(node.name, node.target_type)
+        return None
 
     def _eval_rel(self, node: ast.RelExpr) -> Relation | list[Tuple_]:
         """Evaluate a relational expression node."""
@@ -279,11 +286,20 @@ class Executor:
     def _merge_cast_schema(
         self, rel: Relation, overrides: dict[str, str]
     ) -> Relation:
-        """Return a copy of *rel* with schema entries updated from .as casts."""
+        """Return a copy of *rel* with schema entries updated from .as casts.
+
+        UDT aliases in override types are resolved to their canonical form
+        so downstream consumers see only built-in/pattern type strings.
+        """
         if not overrides:
             return rel
+        from codd.model.coerce import resolve_type_alias
+        resolved_overrides = {
+            attr: resolve_type_alias(t, self._env)
+            for attr, t in overrides.items()
+        }
         schema = dict(rel.schema)  # always returns a dict
-        schema.update(overrides)
+        schema.update(resolved_overrides)
         return Relation(
             rel._tuples, attributes=rel._attributes, schema=schema
         )
@@ -381,29 +397,45 @@ class Executor:
         agg_schema = self._build_agg_schema(node.computations, source)
         return source.summarize_all(agg_fns, agg_schema=agg_schema)
 
-    @staticmethod
+    # Aggregate functions that always return a specific type regardless of
+    # the input column.  Count is int; mean and percent are always float.
+    _AGG_FIXED_TYPES: dict[str, str] = {
+        "#.": "int",
+        "%.": "float",
+        "p.": "float",
+    }
+
     def _build_agg_schema(
-        computations: list, source: Relation
+        self, computations: list, source: Relation
     ) -> dict[str, str] | None:
         """Build schema for aggregate output columns.
 
-        .as casts declare their target type.  Otherwise a simple aggregate
-        on a single column (e.g. +. amount) inherits that column's type
-        from the source schema.
+        .as casts declare their target type (UDT aliases resolved).
+        Aggregates with a fixed return type (#., %., p.) use that type.
+        Otherwise a simple aggregate on a single column (e.g. +. amount)
+        inherits that column's type from the source schema.
         """
+        from codd.model.coerce import resolve_type_alias
         schema: dict[str, str] = {}
         src_schema = source.schema
         for comp in computations:
             expr = comp.expr
-            # .as cast wins: use the declared target type.
+            # .as cast wins: use the declared target type, resolving UDTs.
             if isinstance(expr, ast.TypeCast):
-                schema[comp.name] = expr.target_type
+                schema[comp.name] = resolve_type_alias(
+                    expr.target_type, self._env
+                )
                 continue
-            # Simple aggregate on a single column: inherit its type.
-            if isinstance(expr, ast.AggregateCall) and expr.arg is not None:
-                src_attr = expr.arg.parts[0]
-                if src_attr in src_schema:
-                    schema[comp.name] = src_schema[src_attr]
+            if isinstance(expr, ast.AggregateCall):
+                # Fixed-type aggregates (#., %., p.) don't depend on input.
+                if expr.func in self._AGG_FIXED_TYPES:
+                    schema[comp.name] = self._AGG_FIXED_TYPES[expr.func]
+                    continue
+                # Simple aggregate on a single column: inherit its type.
+                if expr.arg is not None:
+                    src_attr = expr.arg.parts[0]
+                    if src_attr in src_schema:
+                        schema[comp.name] = src_schema[src_attr]
         return schema if schema else None
 
     def _eval_broadcast_agg(self, node: ast.BroadcastAggregate) -> Relation:
@@ -632,7 +664,7 @@ class Executor:
         source = self._as_relation(node.source)
         schema_rel = self._as_relation(node.schema_rel)
         try:
-            schema_dict = schema_from_relation(schema_rel)
+            schema_dict = schema_from_relation(schema_rel, env=self._env)
             return apply_schema(source, schema_dict, env=self._env)
         except CoercionError as e:
             raise ExecutionError(str(e)) from e
@@ -964,16 +996,39 @@ class Executor:
     # --- Type cast ---
 
     def _apply_type_cast(self, value: Value, target_type: str) -> Value:
-        """Coerce a value to the specified type."""
-        from codd.model.coerce import coerce_value, CoercionError, BUILTIN_TYPES
+        """Coerce a value to the specified type.
 
-        if target_type not in BUILTIN_TYPES:
+        Resolves user-defined type aliases via the environment before
+        coercing.  Supports decimal(N) for parameterised precision.
+        """
+        from codd.model.coerce import (
+            coerce_value,
+            CoercionError,
+            BUILTIN_TYPES,
+            resolve_type_alias,
+            parse_type_string,
+        )
+
+        try:
+            resolved = resolve_type_alias(target_type, self._env)
+            base_type, constraint = parse_type_string(resolved)
+        except CoercionError as e:
+            raise ExecutionError(f".as: {e}") from e
+        if base_type == "in":
+            raise ExecutionError(
+                f".as: cannot cast to an in() constraint ({resolved!r})"
+            )
+        precision: int | None = None
+        if base_type == "decimal" and constraint is not None:
+            precision = int(constraint[1])
+        if base_type not in BUILTIN_TYPES:
             raise ExecutionError(
                 f".as: unknown type {target_type!r}"
-                f" (expected one of {', '.join(sorted(BUILTIN_TYPES))})"
+                f" (expected one of {', '.join(sorted(BUILTIN_TYPES))}"
+                " or a user-defined type)"
             )
         try:
-            return coerce_value(value, target_type)
+            return coerce_value(value, base_type, precision=precision)
         except CoercionError as e:
             raise ExecutionError(f".as: {e}") from e
 

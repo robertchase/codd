@@ -412,3 +412,148 @@ class TestExportWithEval:
         )
         assert result.exit_code == 0  # error is printed, not raised
         assert not out_file.exists()
+
+
+class TestInitFlag:
+    """Test --init flag."""
+
+    def test_init_runs_before_eval(self, tmp_path: Path) -> None:
+        """--init file runs and binds in the environment before -e expression."""
+        init = tmp_path / "setup.codd"
+        init.write_text('X := {n; "alice"; "bob"}\n')
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--init", str(init), "-e", "X # n"])
+        assert result.exit_code == 0, result.output
+        assert "alice" in result.output
+        assert "bob" in result.output
+
+    def test_init_runs_before_positional_load(self, tmp_path: Path) -> None:
+        """--init defines a relation before positional loads happen."""
+        init = tmp_path / "setup.codd"
+        init.write_text('Greeting := {g; "hello"}\n')
+
+        csv = tmp_path / "data.csv"
+        csv.write_text("n\nworld\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--init", str(init), str(csv), "-e", "Greeting # g"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "hello" in result.output
+
+    def test_init_multiple_runs_in_order(self, tmp_path: Path) -> None:
+        """Multiple --init flags are run in the order given."""
+        a = tmp_path / "a.codd"
+        a.write_text('X := {n; "first"}\n')
+        b = tmp_path / "b.codd"
+        b.write_text("Y := X\n")  # references X defined in a
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--init", str(a), "--init", str(b), "-e", "Y # n"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "first" in result.output
+
+    def test_init_error_halts(self, tmp_path: Path) -> None:
+        """An error in --init halts before -e runs."""
+        init = tmp_path / "bad.codd"
+        init.write_text("NoSuch\n")  # unknown relation
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--init", str(init), "-e", '"ok"']
+        )
+        assert result.exit_code != 0
+        assert "ok" not in result.output
+
+    def test_init_no_other_args_enters_repl(self, tmp_path: Path) -> None:
+        """--init alone (with nothing else) would drop to REPL.
+
+        Smoke test only: CliRunner doesn't drive interactive REPLs well, so
+        just verify that --init is accepted without erroring in combination
+        with -e.
+        """
+        init = tmp_path / "setup.codd"
+        init.write_text('X := {n; "a"}\n')
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--init", str(init), "-e", "X # n"]
+        )
+        assert result.exit_code == 0
+
+
+class TestIncludeCommand:
+    """Test \\include command."""
+
+    def test_include_in_script(self, tmp_path: Path) -> None:
+        """\\include pulls bindings from another file."""
+        helpers = tmp_path / "helpers.codd"
+        helpers.write_text('Greet := {g; "hi"}\n')
+
+        main_script = tmp_path / "main.codd"
+        main_script.write_text(
+            f"\\include {helpers}\n"
+            "Greet # g\n"
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["-f", str(main_script)])
+        assert result.exit_code == 0, result.output
+        assert "hi" in result.output
+
+    def test_include_relative_to_including_file(self, tmp_path: Path) -> None:
+        """\\include uses a bare filename resolved against the including file."""
+        helpers = tmp_path / "helpers.codd"
+        helpers.write_text('Greet := {g; "hi"}\n')
+
+        main_script = tmp_path / "main.codd"
+        main_script.write_text(
+            "\\include helpers.codd\n"
+            "Greet # g\n"
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["-f", str(main_script)])
+        assert result.exit_code == 0, result.output
+        assert "hi" in result.output
+
+    def test_include_via_init(self, tmp_path: Path) -> None:
+        """--init loads a file that \\includes another file."""
+        helpers = tmp_path / "helpers.codd"
+        helpers.write_text('Money := {v; 100}\n')
+
+        setup = tmp_path / "setup.codd"
+        setup.write_text("\\include helpers.codd\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--init", str(setup), "-e", "Money # v"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "100" in result.output
+
+    def test_include_cycle_detected(self, tmp_path: Path) -> None:
+        """\\include of a file that would re-include the caller errors."""
+        a = tmp_path / "a.codd"
+        b = tmp_path / "b.codd"
+        a.write_text("\\include b.codd\n")
+        b.write_text("\\include a.codd\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["-f", str(a)])
+        assert result.exit_code != 0
+        assert "cycle" in result.output.lower()
+
+    def test_include_missing_file_errors(self, tmp_path: Path) -> None:
+        """\\include of a nonexistent file produces an error."""
+        main_script = tmp_path / "main.codd"
+        main_script.write_text("\\include does_not_exist.codd\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["-f", str(main_script)])
+        assert result.exit_code != 0
+        assert "cannot read" in result.output.lower() or \
+               "include" in result.output.lower()

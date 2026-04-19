@@ -49,6 +49,35 @@ def parse_type_string(type_str: str) -> tuple[str, tuple[str, str] | None]:
     raise CoercionError(f"Unknown type: {type_str!r}")
 
 
+def resolve_type_alias(type_str: str, env: object | None = None) -> str:
+    """Walk user-defined type aliases to a canonical type string.
+
+    If *type_str* is already a built-in or a known pattern (decimal(N),
+    in(R, a)), returns it unchanged.  If it's a UDT name defined in *env*,
+    follows the alias chain (with cycle detection) until reaching a
+    non-alias.  If not a known type and not in *env*, returns it unchanged
+    so that downstream ``parse_type_string`` raises a clear error.
+    """
+    if env is None or not hasattr(env, "has_type"):
+        return type_str
+
+    seen: set[str] = set()
+    current = type_str
+    while True:
+        # Patterns and built-ins terminate the walk.
+        if _IN_PATTERN.match(current) or _DECIMAL_PATTERN.match(current):
+            return current
+        if current in BUILTIN_TYPES:
+            return current
+        # Try UDT lookup.
+        if not env.has_type(current):
+            return current  # unknown; let parse_type_string handle it
+        if current in seen:
+            raise CoercionError(f"type alias cycle: {current}")
+        seen.add(current)
+        current = env.lookup_type(current)
+
+
 def coerce_value(value: Value, target_type: str, precision: int | None = None) -> Value:
     """Coerce a single value to a built-in target type.
 
@@ -94,6 +123,9 @@ def apply_schema(
         raise CoercionError(
             f"Schema references unknown attributes: {sorted(unknown)}"
         )
+
+    # Resolve UDT aliases to canonical type strings.
+    schema = {attr: resolve_type_alias(t, env) for attr, t in schema.items()}
 
     # Resolve types: find base type, precision, and in() constraint values.
     resolved: dict[str, tuple[str, int | None]] = {}  # attr → (base_type, precision)
@@ -260,10 +292,15 @@ def infer_type(value: Value) -> str:
     return "str"
 
 
-def schema_from_relation(rel: Relation) -> dict[str, str]:
+def schema_from_relation(
+    rel: Relation, env: object | None = None
+) -> dict[str, str]:
     """Build a schema dict (attr→type) from a relation's {attr, type} tuples.
 
-    Accepts both built-in type names and ``in(Relation, attr)`` constraints.
+    Accepts built-in type names, ``in(Relation, attr)`` constraints, and
+    user-defined type aliases defined in *env*.  UDT names are kept as-is
+    here and resolved later (in apply_schema) so the original intent is
+    preserved until coercion.
     """
     if not ({"attr", "type"} <= rel.attributes):
         raise CoercionError(
@@ -274,11 +311,17 @@ def schema_from_relation(rel: Relation) -> dict[str, str]:
     for t in rel:
         attr = str(t["attr"])
         type_name = str(t["type"])
-        # Validate: must be a built-in type or in() constraint.
+        # Validate: must be a built-in, known pattern, or defined UDT.
         try:
             parse_type_string(type_name)
         except CoercionError:
-            raise CoercionError(f"Unknown type {type_name!r} for attribute {attr!r}")
+            if env is not None and hasattr(env, "has_type") \
+                    and env.has_type(type_name):
+                pass  # it's a UDT; accept and resolve at apply time
+            else:
+                raise CoercionError(
+                    f"Unknown type {type_name!r} for attribute {attr!r}"
+                )
         schema[attr] = type_name
     return schema
 

@@ -33,10 +33,11 @@ class Parser:
         self._tokens = tokens
         self._pos = 0
 
-    def parse(self) -> ast.RelExpr | ast.Assignment:
+    def parse(self) -> ast.RelExpr | ast.Assignment | ast.TypeAlias:
         """Parse the token stream into an AST.
 
         Checks for assignment (IDENT := expr) before parsing as expression.
+        A type alias (IDENT := type ...) is a special form of assignment.
         """
         if (
             self._peek().type == TokenType.IDENT
@@ -51,16 +52,64 @@ class Parser:
             )
         return result
 
-    def _parse_assignment(self) -> ast.Assignment:
-        """Parse: name := expr."""
+    def _parse_assignment(self) -> ast.Assignment | ast.TypeAlias:
+        """Parse: name := expr  or  name := type <target>."""
         name_tok = self._advance()  # consume IDENT
         self._advance()  # consume :=
+
+        # Detect `name := type <target>` — type alias.  The `type` keyword
+        # is contextual: treated specially only when followed by an IDENT
+        # (the target type name).  Anywhere else `type` is a regular ident.
+        if (
+            self._peek().type == TokenType.IDENT
+            and self._peek().value == "type"
+            and self._peek(1).type == TokenType.IDENT
+        ):
+            self._advance()  # consume 'type'
+            target = self._parse_type_target()
+            if self._peek().type != TokenType.EOF:
+                raise ParseError(
+                    f"Unexpected token {self._peek().value!r} after type "
+                    "definition", self._peek()
+                )
+            return ast.TypeAlias(name=name_tok.value, target_type=target)
+
         expr = self._parse_expr()
         if self._peek().type != TokenType.EOF:
             raise ParseError(
                 f"Unexpected token {self._peek().value!r}", self._peek()
             )
         return ast.Assignment(name=name_tok.value, expr=expr)
+
+    def _parse_type_target(self) -> str:
+        """Parse the target of a type alias: a type expression.
+
+        Grammar:
+            IDENT                                   -- e.g. int, str, Money
+            IDENT LPAREN INTEGER RPAREN             -- e.g. decimal(2)
+            IDENT LPAREN IDENT COMMA IDENT RPAREN   -- e.g. in(R, a)
+
+        Returns the canonical string form.
+        """
+        name_tok = self._expect(TokenType.IDENT)
+        name = name_tok.value
+        if self._peek().type != TokenType.LPAREN:
+            return name
+        self._advance()  # consume (
+        # decimal(N) or in(R, a)
+        if self._peek().type == TokenType.INTEGER:
+            num = self._advance().value
+            self._expect(TokenType.RPAREN)
+            return f"{name}({num})"
+        if self._peek().type == TokenType.IDENT:
+            rel = self._advance().value
+            self._expect(TokenType.COMMA)
+            attr = self._expect(TokenType.IDENT).value
+            self._expect(TokenType.RPAREN)
+            return f"{name}({rel}, {attr})"
+        raise ParseError(
+            f"Expected type argument, got {self._peek().value!r}", self._peek()
+        )
 
     # --- Token navigation ---
 

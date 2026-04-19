@@ -60,6 +60,7 @@ _SOURCES = [
 
 _OTHER = [
     (":=", "Assignment", "high := E ? salary > 70000"),
+    (":= type", "Type alias", 'Money := type decimal(2)  or  Status := type in(S, n)'),
 ]
 
 _HEADERS = ["Primitive", "Name", "Example"]
@@ -199,6 +200,35 @@ and or not — Logical operators
     E ? dept = "eng" or dept = "ops"
     E ? not flag
     E ? (a > 1 or b > 1) and c = 0   Parens change precedence""",
+    ":= type": """\
+:= type — User-defined type alias
+
+  Binds a name in the type namespace (separate from relations) to a
+  canonical type string.  Use the name anywhere a built-in type is
+  accepted: in .as casts, in schema relations, or as the target of
+  another alias.
+
+  Syntax:
+    Name := type <target>
+
+  Where <target> is:
+    int, str, float, decimal, date, bool    Built-in
+    decimal(N)                               Parameterised built-in
+    in(Relation, attr)                       Membership constraint
+    OtherUDT                                 Another defined UDT
+
+  Examples:
+    Money  := type decimal(2)
+    Status := type in(Statuses, name)
+    Age    := type int
+    Price  := type Money                    Alias of an alias
+
+  Usage:
+    \\load rows.csv :: {attr type; "salary" "Money"; "age" "Age"}
+    E +: net: amount .as Money
+    E ? age .as Age > 18
+
+  Cycles (A -> B -> A) raise an error when the alias is resolved.""",
     ".f": """\
 .f — Format string
 

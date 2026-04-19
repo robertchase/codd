@@ -539,3 +539,17 @@ class Assignment:
 
     name: str
     expr: RelExpr
+
+
+@dataclass(frozen=True)
+class TypeAlias:
+    """Type alias: name := type target_type.
+
+    Defines a user-defined type as an alias for another type string.
+    Binds in the environment's type namespace (separate from relations).
+    The target_type is a canonical type string like "decimal(2)", "int",
+    "in(R, a)", or the name of another UDT.
+    """
+
+    name: str
+    target_type: str

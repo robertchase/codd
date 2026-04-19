@@ -915,6 +915,48 @@ class TestAssignment:
         assert isinstance(result.expr, ast.Take)
 
 
+class TestTypeAliasParsing:
+    """Test type-alias parsing (name := type <target>)."""
+
+    def test_simple_alias(self) -> None:
+        """Alias to a built-in type."""
+        result = parse("Age := type int")
+        assert isinstance(result, ast.TypeAlias)
+        assert result.name == "Age"
+        assert result.target_type == "int"
+
+    def test_parameterised_alias(self) -> None:
+        """Alias to decimal(N)."""
+        result = parse("Money := type decimal(2)")
+        assert isinstance(result, ast.TypeAlias)
+        assert result.name == "Money"
+        assert result.target_type == "decimal(2)"
+
+    def test_in_constraint_alias(self) -> None:
+        """Alias to an in() constraint."""
+        result = parse("Status := type in(Statuses, name)")
+        assert isinstance(result, ast.TypeAlias)
+        assert result.target_type == "in(Statuses, name)"
+
+    def test_alias_to_another_udt(self) -> None:
+        """Alias to another UDT is a bare IDENT target."""
+        result = parse("Price := type Money")
+        assert isinstance(result, ast.TypeAlias)
+        assert result.target_type == "Money"
+
+    def test_type_not_a_keyword(self) -> None:
+        """`type` followed by a non-IDENT is still a regular assignment.
+
+        Assigning `X := type` (relation named `type`) is currently a parse
+        error downstream, but `X := type # col` must NOT be mistaken for
+        a type alias.
+        """
+        # Parses as project on the relation named `type`.
+        result = parse("X := type # col")
+        assert isinstance(result, ast.Assignment)
+        assert isinstance(result.expr, ast.Project)
+
+
 class TestTernaryParsing:
     """Test ternary expression parsing."""
 

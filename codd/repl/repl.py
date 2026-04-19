@@ -120,6 +120,13 @@ def _handle_command(line: str, env: Environment) -> None:
         _cmd_env(env)
     elif cmd == "\\export":
         _cmd_export(args, env)
+    elif cmd == "\\include":
+        from codd.cli import _cmd_include
+
+        try:
+            _cmd_include(args, env)
+        except Exception as e:
+            print(f"Error: {e}")
     elif cmd == "\\ops":
         if args:
             from codd.cli.ops_cmd import ops_detail
@@ -256,7 +263,7 @@ def _load_csv_file(
                 print(f"Error: unknown schema relation: {schema_name!r}")
                 return
             try:
-                schema_dict = schema_from_relation(schema_rel)
+                schema_dict = schema_from_relation(schema_rel, env=env)
                 rel = apply_schema(rel, schema_dict, env=env)
             except CoercionError as e:
                 print(f"Error applying schema: {e}")
@@ -362,11 +369,17 @@ def _cmd_drop(args: list[str], env: Environment) -> None:
 
 
 def _cmd_env(env: Environment) -> None:
-    """Handle \\env: show all relation bindings."""
+    """Handle \\env: show all relation bindings and type aliases."""
     names = env.names()
     if not names:
         print("(no relations loaded)")
     else:
+        print("Relations:")
         for name in names:
             rel = env.lookup(name)
             print(f"  {name}: {len(rel)} tuples, attrs: {sorted(rel.attributes)}")
+    type_names = env.type_names()
+    if type_names:
+        print("Types:")
+        for name in type_names:
+            print(f"  {name} := type {env.lookup_type(name)}")
