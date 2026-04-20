@@ -291,6 +291,26 @@ class TestScriptCommands:
         assert result.exit_code == 0
         assert result.output.strip() == ""
 
+    def test_assignment_then_export_silent(self, tmp_path: Path) -> None:
+        """Assignment followed by \\export as final line produces no display.
+
+        Regression: previously the assignment's relation was displayed
+        because only last_was_assignment was cleared; the result variable
+        still held the relation.
+        """
+        out_file = tmp_path / "out.csv"
+        script = tmp_path / "query.codd"
+        script.write_text(
+            "X := E ? dept_id = 10\n"
+            f"\\export {out_file} X\n"
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--sample", "-f", str(script)])
+        assert result.exit_code == 0
+        assert result.output.strip() == ""
+        assert out_file.exists()
+
     def test_assignment_silent_in_eval(self) -> None:
         """Assignments produce no output in -e mode."""
         runner = CliRunner()
@@ -504,8 +524,11 @@ class TestIncludeCommand:
         assert result.exit_code == 0, result.output
         assert "hi" in result.output
 
-    def test_include_relative_to_including_file(self, tmp_path: Path) -> None:
-        """\\include uses a bare filename resolved against the including file."""
+    def test_include_resolves_relative_to_cwd(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """\\include resolves a bare filename against the current working dir
+        (like \\load), not the including file's directory."""
         helpers = tmp_path / "helpers.codd"
         helpers.write_text('Greet := {g; "hi"}\n')
 
@@ -515,12 +538,16 @@ class TestIncludeCommand:
             "Greet # g\n"
         )
 
+        monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(main, ["-f", str(main_script)])
+        # Pass main.codd as just "main.codd" since cwd is tmp_path.
+        result = runner.invoke(main, ["-f", "main.codd"])
         assert result.exit_code == 0, result.output
         assert "hi" in result.output
 
-    def test_include_via_init(self, tmp_path: Path) -> None:
+    def test_include_via_init(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
         """--init loads a file that \\includes another file."""
         helpers = tmp_path / "helpers.codd"
         helpers.write_text('Money := {v; 100}\n')
@@ -528,22 +555,26 @@ class TestIncludeCommand:
         setup = tmp_path / "setup.codd"
         setup.write_text("\\include helpers.codd\n")
 
+        monkeypatch.chdir(tmp_path)
         runner = CliRunner()
         result = runner.invoke(
-            main, ["--init", str(setup), "-e", "Money # v"]
+            main, ["--init", "setup.codd", "-e", "Money # v"]
         )
         assert result.exit_code == 0, result.output
         assert "100" in result.output
 
-    def test_include_cycle_detected(self, tmp_path: Path) -> None:
+    def test_include_cycle_detected(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
         """\\include of a file that would re-include the caller errors."""
         a = tmp_path / "a.codd"
         b = tmp_path / "b.codd"
         a.write_text("\\include b.codd\n")
         b.write_text("\\include a.codd\n")
 
+        monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(main, ["-f", str(a)])
+        result = runner.invoke(main, ["-f", "a.codd"])
         assert result.exit_code != 0
         assert "cycle" in result.output.lower()
 

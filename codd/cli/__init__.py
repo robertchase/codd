@@ -366,6 +366,9 @@ def _execute_codd_source(
                     base_dir=(source_path.parent if source_path else None),
                     including=including,
                 )
+                # Backslash commands are side-effects (load/export/include);
+                # they don't carry a value forward for final display.
+                result = None
                 last_was_assignment = False
                 continue
             tokens = Lexer(line).tokenize()
@@ -486,18 +489,14 @@ def _cmd_include(
 ) -> None:
     """Handle \\include: execute another codd file in the current environment.
 
-    Relative paths resolve against *base_dir* (the directory of the calling
-    script) if provided; otherwise against the current working directory.
+    Relative paths resolve against the current working directory (like
+    ``\\load``).  Absolute paths are used as-is.  *base_dir* is accepted
+    for signature symmetry but not consulted.
     """
     if len(args) != 1:
         raise click.ClickException("Usage: \\include <file>")
 
-    raw = args[0]
-    p = pathlib.Path(raw)
-    if not p.is_absolute():
-        root = base_dir if base_dir is not None else pathlib.Path.cwd()
-        p = root / p
-    p = p.resolve()
+    p = pathlib.Path(args[0]).resolve()
 
     if including and p in including:
         raise click.ClickException(f"\\include: cycle detected at {p}")
