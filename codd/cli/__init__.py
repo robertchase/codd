@@ -290,10 +290,17 @@ def _run_eval(
 
 
 def _substitute_args(text: str, args: tuple[str, ...]) -> str:
-    """Replace {{name}} placeholders with --arg values.
+    """Replace {{name}} and {{name:default}} placeholders with --arg values.
+
+    {{name}}          Requires a matching --arg name=...; error otherwise.
+    {{name:default}}  Uses "default" if no --arg was supplied for name.
+
+    The default string runs up to the closing ``}}`` and may contain any
+    character except ``}``.  Leading/trailing whitespace on the default
+    is preserved verbatim.
 
     Raises click.ClickException for malformed --arg values or
-    unresolved placeholders.
+    unresolved placeholders (missing --arg and no default).
     """
     arg_map: dict[str, str] = {}
     for arg in args:
@@ -304,16 +311,22 @@ def _substitute_args(text: str, args: tuple[str, ...]) -> str:
         name, value = arg.split("=", 1)
         arg_map[name.strip()] = value.strip()
 
+    # Match {{name}} or {{name:default}}.  The default cannot contain '}'.
+    placeholder_re = re.compile(r"\{\{(\w+)(?::([^}]*))?\}\}")
+    missing: list[str] = []
+
     def _replace(m: re.Match) -> str:
         name = m.group(1)
-        if name not in arg_map:
-            return m.group(0)  # leave unresolved for error check below
-        return arg_map[name]
+        default = m.group(2)
+        if name in arg_map:
+            return arg_map[name]
+        if default is not None:
+            return default
+        missing.append(name)
+        return m.group(0)
 
-    result = re.sub(r"\{\{(\w+)\}\}", _replace, text)
+    result = placeholder_re.sub(_replace, text)
 
-    # Check for unresolved placeholders.
-    missing = re.findall(r"\{\{(\w+)\}\}", result)
     if missing:
         raise click.ClickException(
             f"Missing --arg for placeholder(s): {', '.join(sorted(set(missing)))}"

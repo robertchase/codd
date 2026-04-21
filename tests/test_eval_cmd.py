@@ -173,6 +173,41 @@ class TestFileEval:
         assert result.exit_code != 0
         assert "min_sal" in result.output
 
+    def test_arg_with_default_uses_default(self, tmp_path: Path) -> None:
+        """{{name:default}} uses the default when --arg is not supplied."""
+        script = tmp_path / "query.codd"
+        script.write_text("E ? salary > {{min_sal:70000}} # name\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--sample", "-f", str(script)])
+        assert result.exit_code == 0, result.output
+        # salary > 70000 in sample picks Dave.
+        assert "Dave" in result.output
+
+    def test_arg_with_default_overridden(self, tmp_path: Path) -> None:
+        """{{name:default}} is overridden when --arg is supplied."""
+        script = tmp_path / "query.codd"
+        script.write_text("E ? salary > {{min_sal:1000000}} # name\n")
+
+        runner = CliRunner()
+        # With the default (1000000), no rows would match.  Override with 70000.
+        result = runner.invoke(
+            main, ["--sample", "-f", str(script), "--arg", "min_sal=70000"],
+        )
+        assert result.exit_code == 0
+        assert "Dave" in result.output
+
+    def test_arg_default_string(self, tmp_path: Path) -> None:
+        """Default values can contain non-numeric text (e.g. role names)."""
+        script = tmp_path / "query.codd"
+        script.write_text('E ? role = "{{role:engineer}}" # name\n')
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--sample", "-f", str(script)])
+        assert result.exit_code == 0, result.output
+        # Engineers in the sample: Alice, Bob.
+        assert "Alice" in result.output
+
     def test_e_and_f_conflict(self, tmp_path: Path) -> None:
         """Using both -e and -f is an error."""
         script = tmp_path / "query.codd"
