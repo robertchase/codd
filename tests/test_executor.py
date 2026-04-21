@@ -1648,6 +1648,133 @@ class TestSort:
         assert len(result) == 5
 
 
+class TestRank:
+    """Test /^ (dense rank) operator."""
+
+    def test_basic_ascending(self) -> None:
+        """Single key ascending."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(n="a", v=10),
+            Tuple_(n="b", v=30),
+            Tuple_(n="c", v=20),
+        })))
+        result = run("R /^ r: v", env)
+        ranks = {t["n"]: t["r"] for t in result}
+        assert ranks == {"a": 1, "c": 2, "b": 3}
+
+    def test_basic_descending(self) -> None:
+        """Single key descending."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(n="a", v=10),
+            Tuple_(n="b", v=30),
+            Tuple_(n="c", v=20),
+        })))
+        result = run("R /^ r: v-", env)
+        ranks = {t["n"]: t["r"] for t in result}
+        assert ranks == {"b": 1, "c": 2, "a": 3}
+
+    def test_ties_get_same_rank(self) -> None:
+        """Tied key values produce the same rank; no gaps (dense)."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(n="a", v=10),
+            Tuple_(n="b", v=20),
+            Tuple_(n="c", v=20),  # tied with b
+            Tuple_(n="d", v=30),
+        })))
+        result = run("R /^ r: v", env)
+        by_v = {}
+        for t in result:
+            by_v.setdefault(t["v"], set()).add(t["r"])
+        # All tuples with v=20 share a rank; ranks are 1, 2, 3 (dense).
+        assert by_v[10] == {1}
+        assert by_v[20] == {2}
+        assert by_v[30] == {3}
+
+    def test_composite_key(self) -> None:
+        """Composite key with mixed directions."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(d="A", s=10),
+            Tuple_(d="A", s=20),
+            Tuple_(d="B", s=10),
+            Tuple_(d="B", s=20),
+        })))
+        # Rank by dept asc, salary desc.
+        result = run("R /^ r: [d s-]", env)
+        ranks = {(t["d"], t["s"]): t["r"] for t in result}
+        # A-20 < A-10 < B-20 < B-10 under (d asc, s desc)
+        assert ranks[("A", 20)] == 1
+        assert ranks[("A", 10)] == 2
+        assert ranks[("B", 20)] == 3
+        assert ranks[("B", 10)] == 4
+
+    def test_added_column_has_int_schema(self) -> None:
+        """The rank column is typed int in the result schema."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(v=1), Tuple_(v=2),
+        })))
+        result = run("R /^ r: v", env)
+        assert result.schema["r"] == "int"
+
+    def test_rank_sorts_numerically(self) -> None:
+        """After /^, $ rank sorts numerically (schema is int)."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(n="a", v=1),
+                    Tuple_(n="b", v=2),
+                    Tuple_(n="c", v=11),
+                }),
+                schema={"n": "str", "v": "int"},
+            ),
+        )
+        # /^ adds int-typed rank; $ on it sorts numerically.
+        result = run("R /^ r: v $ r", env)
+        vs = [t["v"] for t in result]
+        assert vs == [1, 2, 11]
+
+    def test_name_collision_errors(self) -> None:
+        """Naming the rank column with an existing attribute errors."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(v=1)})))
+        with pytest.raises(ExecutionError, match="already exists"):
+            run("R /^ v: v", env)
+
+    def test_unknown_key_errors(self) -> None:
+        """Ranking by an attribute that doesn't exist errors."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(v=1)})))
+        with pytest.raises(ExecutionError, match="unknown key"):
+            run("R /^ r: nope", env)
+
+    def test_empty_relation(self) -> None:
+        """Ranking an empty relation produces an empty relation."""
+        result = run("i. 1 ? i < 0 /^ r: i")
+        assert isinstance(result, Relation)
+        assert len(result) == 0
+        assert "r" in result.attributes
+
+    def test_rank_inherits_source_schema(self) -> None:
+        """Pre-existing schema is preserved; rank added as int."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({Tuple_(amt=10), Tuple_(amt=20)}),
+                schema={"amt": "int"},
+            ),
+        )
+        result = run("R /^ r: amt", env)
+        assert result.schema["amt"] == "int"
+        assert result.schema["r"] == "int"
+
+
 class TestOrderColumns:
     """Test $. (order columns)."""
 
@@ -2478,6 +2605,61 @@ class TestSchemaOps:
         )
         with pytest.raises(ExecutionError, match="not in Status.name"):
             run("R :: S", env)
+
+
+class TestScalarSubqueryCompare:
+    """Test scalar comparisons with 1x1 subqueries on the RHS."""
+
+    def test_less_than_scalar_subquery(self) -> None:
+        """R ? x < (R /. >. x) — scalar comparison unwraps 1x1 subquery."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(x=1), Tuple_(x=2), Tuple_(x=3), Tuple_(x=5),
+        })))
+        result = run("R ? x < (R /. >. x)", env)
+        assert {t["x"] for t in result} == {1, 2, 3}
+
+    def test_gte_scalar_subquery(self) -> None:
+        """R ? x >= (R /. >. x) — includes only the max row."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(x=1), Tuple_(x=2), Tuple_(x=5),
+        })))
+        result = run("R ? x >= (R /. >. x)", env)
+        assert {t["x"] for t in result} == {5}
+
+    def test_eq_scalar_subquery(self) -> None:
+        """R ? x = (1x1 subquery) compares equality directly."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(x=1), Tuple_(x=2), Tuple_(x=5),
+        })))
+        result = run("R ? x = (R /. >. x)", env)
+        assert {t["x"] for t in result} == {5}
+
+    def test_multi_row_subquery_still_set_membership_for_eq(self) -> None:
+        """Multi-row subquery on = still does set membership."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(x=1), Tuple_(x=2), Tuple_(x=3),
+        })))
+        env.bind("S", Relation(frozenset({
+            Tuple_(v=1), Tuple_(v=3),
+        })))
+        result = run("R ? x = (S # v)", env)
+        assert {t["x"] for t in result} == {1, 3}
+
+    def test_multi_row_subquery_with_ordered_op_errors(self) -> None:
+        """< with a multi-row subquery is an error (ambiguous semantics)."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(x=1), Tuple_(x=2),
+        })))
+        env.bind("S", Relation(frozenset({
+            Tuple_(v=1), Tuple_(v=5),
+        })))
+        with pytest.raises(ExecutionError, match="multi-row subquery"):
+            run("R ? x < (S # v)", env)
 
 
 class TestMembershipOp:

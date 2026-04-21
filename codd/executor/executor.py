@@ -111,6 +111,8 @@ class Executor:
             return self._eval_nest_by(node)
         if isinstance(node, ast.Sort):
             return self._eval_sort(node)
+        if isinstance(node, ast.Rank):
+            return self._eval_rank(node)
         if isinstance(node, ast.OrderColumns):
             return self._eval_order_columns(node)
         if isinstance(node, ast.Take):
@@ -642,6 +644,78 @@ class Executor:
             return tuple(parts)
 
         return source.sort(sort_key)
+
+    def _eval_rank(self, node: ast.Rank) -> Relation:
+        """Evaluate: source /^ name: keys.
+
+        Adds an attribute *name* with the dense rank of each tuple in
+        the sort order defined by *keys*.  Tied tuples receive the same
+        rank; ranks are 1-based with no gaps.
+        """
+        from codd.model.coerce import coerce_value, parse_type_string
+
+        source = self._as_relation(node.source)
+        if node.name in source.attributes:
+            raise ExecutionError(
+                f"/^: attribute {node.name!r} already exists "
+                f"(use #! to remove it first, or choose another name)"
+            )
+        for k in node.keys:
+            if k.attr not in source.attributes:
+                raise ExecutionError(
+                    f"/^: unknown key attribute {k.attr!r}"
+                )
+
+        # Mirror _eval_sort's schema-aware coercion for key values.
+        schema = source.schema
+        key_types: list[str | None] = []
+        for k in node.keys:
+            raw_type = schema.get(k.attr, "str")
+            base_type, _ = parse_type_string(raw_type)
+            key_types.append(None if base_type == "in" else base_type)
+
+        def coerced_values(t: Tuple_) -> tuple:
+            """Hashable tuple of coerced key values (no direction applied)."""
+            parts = []
+            for k, ktype in zip(node.keys, key_types):
+                val = t[k.attr]
+                if ktype is not None:
+                    try:
+                        val = coerce_value(val, ktype)
+                    except Exception:
+                        pass
+                parts.append(val)
+            return tuple(parts)
+
+        def sort_order_key(raw_key: tuple) -> tuple:
+            """Apply descending logic to a raw key tuple for ordering."""
+            parts = []
+            for val, k in zip(raw_key, node.keys):
+                if k.descending:
+                    if isinstance(val, (int, float, Decimal)):
+                        parts.append(-val)
+                    else:
+                        parts.append(_ReverseKey(val))
+                else:
+                    parts.append(val)
+            return tuple(parts)
+
+        # Collect distinct raw key values, sort them, assign dense ranks.
+        distinct_keys = sorted(
+            {coerced_values(t) for t in source}, key=sort_order_key
+        )
+        ranks: dict[tuple, int] = {k: i + 1 for i, k in enumerate(distinct_keys)}
+
+        # Build result: each tuple extended with its rank.
+        result_tuples = frozenset(
+            t.extend({node.name: ranks[coerced_values(t)]}) for t in source
+        )
+        new_attrs = source._attributes | frozenset({node.name})
+        new_schema = dict(source.schema)  # default fills in str for unset attrs
+        new_schema[node.name] = "int"
+        return Relation(
+            result_tuples, attributes=new_attrs, schema=new_schema
+        )
 
     def _eval_rotate(self, node: ast.Rotate) -> RotatedArray:
         """Evaluate: source r. — rotated (vertical) display.
@@ -1308,20 +1382,28 @@ class Executor:
                 return val
             return _make_dynamic_cmp(get_left, op, get_right)
         if isinstance(right_expr, ast.SubqueryExpr):
-            # Evaluate subquery and check membership
+            # Evaluate subquery and check membership or scalar comparison.
             result = self._as_relation(right_expr.query)
-            # The subquery result should be a single-attribute relation
+            # The subquery result should be a single-attribute relation.
             if len(result.attributes) != 1:
                 raise ExecutionError(
                     "Subquery in filter must return a single attribute"
                 )
             attr = next(iter(result.attributes))
+            # A 1x1 subquery is a scalar: unwrap and compare normally.
+            if len(result) == 1:
+                rval = next(iter(result))[attr]
+                return _make_scalar_cmp(get_left, op, rval)
             values = {t[attr] for t in result}
             if op == "=":
                 return lambda t: get_left(t) in values
             if op == "!=":
                 return lambda t: get_left(t) not in values
-            raise ExecutionError(f"Cannot use {op} with subquery")
+            raise ExecutionError(
+                f"Cannot use {op} with a multi-row subquery "
+                "(only = and != are set-membership; for scalar comparison "
+                "the subquery must return exactly one row)"
+            )
         # Fallback: evaluate as a constant scalar expression (e.g. "today" .d - 14).
         dummy = Tuple_({})
         rval = self._eval_expr(right_expr, dummy, None)

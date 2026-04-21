@@ -130,6 +130,10 @@ class Lexer:
             self._advance()
             self._advance()
             return self._make_token(TokenType.DOUBLE_SLASH, "//", line, col)
+        if ch == "/" and ch2 == "^":
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.SLASH_CARET, "/^", line, col)
 
         # +: +.
         if ch == "+" and ch2 == ":":

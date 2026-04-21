@@ -435,6 +435,20 @@ class Sort:
 
 
 @dataclass(frozen=True)
+class Rank:
+    """Rank: /^ name: key or /^ name: [key1 key2-].
+
+    Adds a new attribute *name* with the dense rank of each tuple
+    in the sort order defined by *keys*.  Tied tuples receive the
+    same rank; ranks are 1-based with no gaps.
+    """
+
+    source: RelExpr
+    name: str
+    keys: tuple[SortKey, ...]
+
+
+@dataclass(frozen=True)
 class OrderColumns:
     """Order columns: $. [col1 col2 ...] or $. col."""
 
@@ -520,6 +534,7 @@ RelExpr = (
     | SummarizeAll
     | NestBy
     | Sort
+    | Rank
     | OrderColumns
     | Take
     | Iota

@@ -308,6 +308,8 @@ class Parser:
                 left = self._parse_sort(left)
             elif tok.type == TokenType.DOLLAR_DOT:
                 left = self._parse_order_columns(left)
+            elif tok.type == TokenType.SLASH_CARET:
+                left = self._parse_rank(left)
             elif tok.type == TokenType.CARET:
                 left = self._parse_take(left)
             elif tok.type == TokenType.R_DOT:
@@ -496,6 +498,16 @@ class Parser:
         self._advance()  # consume $
         keys = self._parse_sort_key_list()
         return ast.Sort(source=source, keys=tuple(keys))
+
+    def _parse_rank(self, source: ast.RelExpr) -> ast.Rank:
+        """Parse: /^ name: key or /^ name: [key1 key2-]."""
+        self._advance()  # consume /^
+        name_tok = self._expect(TokenType.IDENT)
+        self._expect(TokenType.COLON)
+        keys = self._parse_sort_key_list()
+        return ast.Rank(
+            source=source, name=name_tok.value, keys=tuple(keys)
+        )
 
     def _parse_order_columns(self, source: ast.RelExpr) -> ast.OrderColumns:
         """Parse: $. col or $. [col1 col2 ...]."""

@@ -22,6 +22,7 @@ _RELATIONAL = [
     ("/:", "Nest by", "E /: dept_id -> team  or  E /: [dept_id role] -> team"),
     ("$", "Sort", "E $ salary-"),
     ("$.", "Order columns", "E $. [salary name]"),
+    ("/^", "Rank (dense)", "E /^ r: salary-"),
     ("^", "Take", "E $ salary- ^ 3"),
     ("r.", "Rotate", "E ? name = \"Alice\" r."),
     ("::", "Apply schema", "R :: S  or  R ::"),
@@ -252,6 +253,31 @@ and or not — Logical operators
     "{ratio:.1%}" .f                 Percentage                  → "42.0%"
 
   Full Python format spec reference applies after the colon.""",
+    "/^": """\
+/^ — Dense rank
+
+  Adds a new attribute whose value is the 1-based dense rank of each
+  tuple in the sort order defined by the key(s).  Tied tuples get the
+  same rank; there are no gaps (dense, not sparse).
+
+  The result is still a set — the added attribute is a deterministic
+  function of each tuple's values relative to the others.
+
+  Syntax:
+    R /^ name: key             Rank by a single key (ascending)
+    R /^ name: key-            Descending
+    R /^ name: [key1 key2-]    Composite key, key2 descending
+
+  Examples:
+    Sales /^ r: amount-        Highest amount gets r=1
+    R /^ ord: [dept salary-]   Rank by dept then salary desc
+    i. 5 /^ r: i               r = i (1..5)
+
+  Notes:
+    - The added column has schema type int.
+    - Error if *name* collides with an existing attribute; remove
+      first with #! if you want to replace.
+    - An empty relation passes through unchanged (still empty).""",
     "/*": """\
 /* — Broadcast aggregate
 

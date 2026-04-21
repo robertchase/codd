@@ -64,6 +64,7 @@ class TokenType(Enum):
     F_DOT = auto()          # .f  format string
     R_SCALAR_DOT = auto()   # .r  regex replace
     AS_DOT = auto()         # .as type cast
+    SLASH_CARET = auto()    # /^  rank (dense)
     DOUBLE_SLASH = auto()   # //  integer divide
     PERCENT = auto()        # %   remainder
     COLON_EQ = auto()       # :=  assign
