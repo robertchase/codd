@@ -65,6 +65,7 @@ class TokenType(Enum):
     R_SCALAR_DOT = auto()   # .r  regex replace
     AS_DOT = auto()         # .as type cast
     SLASH_CARET = auto()    # /^  rank (dense)
+    SLASH_GT = auto()       # />  split (explode rows)
     DOUBLE_SLASH = auto()   # //  integer divide
     PERCENT = auto()        # %   remainder
     COLON_EQ = auto()       # :=  assign

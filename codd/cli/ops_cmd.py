@@ -23,6 +23,7 @@ _RELATIONAL = [
     ("$", "Sort", "E $ salary-"),
     ("$.", "Order columns", "E $. [salary name]"),
     ("/^", "Rank (dense)", "E /^ r: salary-"),
+    ("/>", "Split (explode)", 'R /> tags ","  or  R /> [tag n]: tags ","'),
     ("^", "Take", "E $ salary- ^ 3"),
     ("r.", "Rotate", "E ? name = \"Alice\" r."),
     ("::", "Apply schema", "R :: S  or  R ::"),
@@ -253,6 +254,36 @@ and or not — Logical operators
     "{ratio:.1%}" .f                 Percentage                  → "42.0%"
 
   Full Python format spec reference applies after the colon.""",
+    "/>": """\
+/> — Split (explode rows by a delimited string column)
+
+  Splits the string value of a column in each tuple by a regex pattern
+  and emits one tuple per piece.  The common case — "expand a CSV
+  column into rows" — becomes a single postfix operation.
+
+  Syntax:
+    R /> col pattern                 Replace col with each split piece
+    R /> new: col pattern            Add new column, keep col
+    R /> [new pos]: col pattern      Named + 1-based position column
+    R /> [col pos]: col pattern      In-place + position column
+
+  The pattern is a regex (same flavour as =~ and .r).  To match a literal
+  special char, escape it: "\\.", "\\(", etc.
+
+  Examples:
+    R /> tags ","                    Split comma-separated tags in place
+    R /> tag: tags ","               Add "tag" column, keep tags string
+    R /> word: text "\\s+"           Split on whitespace runs
+    R /> tag: tags "," ?! tag = ""   Drop empty pieces
+    R /> [tag n]: tags ","           Keep original order via n (1, 2, 3)
+    R /> [tag n]: tags "," $ [id n]  Sort by original row then position
+
+  Notes:
+    - The source column must be a string; non-string values raise.
+    - Empty strings between delimiters are kept (re.split semantics).
+    - Named form: error if new already exists (unless new == col).
+    - Position column is typed int; errors if it collides with any
+      attribute other than the split source.""",
     "/^": """\
 /^ — Dense rank
 

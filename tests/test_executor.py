@@ -1775,6 +1775,178 @@ class TestRank:
         assert result.schema["r"] == "int"
 
 
+class TestSplit:
+    """Test /> (split/explode) operator."""
+
+    def test_in_place_comma(self) -> None:
+        """R /> tags "," replaces tags in place, one row per piece."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id=1, tags="a,b,c"),
+            Tuple_(id=2, tags="d"),
+        })))
+        result = run('R /> tags ","', env)
+        rows = {(t["id"], t["tags"]) for t in result}
+        assert rows == {(1, "a"), (1, "b"), (1, "c"), (2, "d")}
+        # Attribute set unchanged.
+        assert result.attributes == frozenset({"id", "tags"})
+
+    def test_named_adds_new_column(self) -> None:
+        """R /> tag: tags "," keeps tags, adds tag per piece."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id=1, tags="a,b"),
+        })))
+        result = run('R /> tag: tags ","', env)
+        assert result.attributes == frozenset({"id", "tags", "tag"})
+        # Both pieces present; original tags kept.
+        tags_seen = {(t["tag"], t["tags"]) for t in result}
+        assert tags_seen == {("a", "a,b"), ("b", "a,b")}
+
+    def test_regex_pattern(self) -> None:
+        """Pattern is a regex, so \\s+ splits on runs of whitespace."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(text="hello   world foo"),
+        })))
+        result = run('R /> word: text "\\s+"', env)
+        assert {t["word"] for t in result} == {"hello", "world", "foo"}
+
+    def test_empty_pieces_kept(self) -> None:
+        """Empty pieces between delimiters are kept."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(tags="a,,b"),
+        })))
+        result = run('R /> tags ","', env)
+        assert {t["tags"] for t in result} == {"a", "", "b"}
+
+    def test_new_collision_errors(self) -> None:
+        """Naming the new column with an existing attribute errors."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id=1, tags="a,b"),
+        })))
+        with pytest.raises(ExecutionError, match="already exists"):
+            run('R /> id: tags ","', env)
+
+    def test_unknown_source_errors(self) -> None:
+        """Source column must exist."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(v=1)})))
+        with pytest.raises(ExecutionError, match="unknown attribute"):
+            run('R /> x: nope ","', env)
+
+    def test_non_string_errors(self) -> None:
+        """Splitting a non-string value errors clearly."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(v=42)})))
+        with pytest.raises(ExecutionError, match="non-string"):
+            run('R /> v ","', env)
+
+    def test_empty_relation(self) -> None:
+        """Splitting an empty relation yields an empty relation."""
+        result = run('i. 1 ? i < 0 +: t: "a,b" /> t ","')
+        assert isinstance(result, Relation)
+        assert len(result) == 0
+
+    def test_empty_string_gives_one_empty(self) -> None:
+        """Splitting "" produces one tuple with empty value (re.split)."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(id=1, tags="")})))
+        result = run('R /> tags ","', env)
+        assert len(result) == 1
+        assert next(iter(result))["tags"] == ""
+
+    def test_schema_for_new_col_is_str(self) -> None:
+        """The split output column is typed str."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(tags="a,b")})))
+        result = run('R /> tag: tags ","', env)
+        assert result.schema["tag"] == "str"
+
+    def test_chained_with_filter(self) -> None:
+        """/> composes with subsequent ops like ?! to drop empties."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id=1, tags="a,,b"),
+        })))
+        result = run('R /> tag: tags "," ?! tag = ""', env)
+        assert {t["tag"] for t in result} == {"a", "b"}
+
+    def test_bracket_single_name_equals_named_form(self) -> None:
+        """[tag]: col pattern is equivalent to tag: col pattern."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(id=1, tags="a,b")})))
+        bare = run('R /> tag: tags ","', env)
+        bracket = run('R /> [tag]: tags ","', env)
+        assert {(t["id"], t["tag"]) for t in bare} == \
+               {(t["id"], t["tag"]) for t in bracket}
+
+    def test_bracket_with_position(self) -> None:
+        """[tag pos]: col pattern records 1-based position."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(id=1, tags="a,b,c")})))
+        result = run('R /> [tag pos]: tags ","', env)
+        by_pos = {t["pos"]: t["tag"] for t in result}
+        assert by_pos == {1: "a", 2: "b", 3: "c"}
+        assert result.schema["pos"] == "int"
+        assert result.schema["tag"] == "str"
+
+    def test_bracket_in_place_with_position(self) -> None:
+        """[col pos]: col pattern replaces col and adds pos."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(id=1, tags="a,b")})))
+        result = run('R /> [tags pos]: tags ","', env)
+        rows = {(t["pos"], t["tags"]) for t in result}
+        assert rows == {(1, "a"), (2, "b")}
+        assert "pos" in result.attributes
+
+    def test_position_preserves_empty_pieces(self) -> None:
+        """Empty pieces between delimiters still get their position."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(tags="a,,b")})))
+        result = run('R /> [tag pos]: tags ","', env)
+        by_pos = {t["pos"]: t["tag"] for t in result}
+        assert by_pos == {1: "a", 2: "", 3: "b"}
+
+    def test_position_restarts_per_source_tuple(self) -> None:
+        """Position is per source tuple, starting from 1."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id=1, tags="a,b"),
+            Tuple_(id=2, tags="x,y,z"),
+        })))
+        result = run('R /> [tag pos]: tags ","', env)
+        per_id: dict[int, set[int]] = {}
+        for t in result:
+            per_id.setdefault(t["id"], set()).add(t["pos"])
+        assert per_id[1] == {1, 2}
+        assert per_id[2] == {1, 2, 3}
+
+    def test_position_name_equals_new_errors(self) -> None:
+        """Position column must differ from piece column."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(tags="a")})))
+        with pytest.raises(ExecutionError, match="must differ"):
+            run('R /> [tag tag]: tags ","', env)
+
+    def test_position_collision_errors(self) -> None:
+        """Position column cannot collide with an existing non-source attr."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(id=1, tags="a")})))
+        with pytest.raises(ExecutionError, match="already exists"):
+            run('R /> [tag id]: tags ","', env)
+
+    def test_bracket_too_many_names(self) -> None:
+        """More than two names in brackets is a parse error."""
+        from codd.parser.parser import ParseError
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(tags="a")})))
+        with pytest.raises(ParseError, match="1 or 2 names"):
+            run('R /> [a b c]: tags ","', env)
+
+
 class TestOrderColumns:
     """Test $. (order columns)."""
 

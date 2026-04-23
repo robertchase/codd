@@ -113,6 +113,8 @@ class Executor:
             return self._eval_sort(node)
         if isinstance(node, ast.Rank):
             return self._eval_rank(node)
+        if isinstance(node, ast.Split):
+            return self._eval_split(node)
         if isinstance(node, ast.OrderColumns):
             return self._eval_order_columns(node)
         if isinstance(node, ast.Take):
@@ -715,6 +717,73 @@ class Executor:
         new_schema[node.name] = "int"
         return Relation(
             result_tuples, attributes=new_attrs, schema=new_schema
+        )
+
+    def _eval_split(self, node: ast.Split) -> Relation:
+        """Evaluate a /> split/explode.
+
+        See ast.Split for the forms supported.  Splits the string value
+        of *col* by the regex *pattern* and emits one tuple per piece.
+        When *pos* is set, a 1-based position column is also added.
+        """
+        source = self._as_relation(node.source)
+        if node.col not in source.attributes:
+            raise ExecutionError(
+                f"/>: unknown attribute {node.col!r}"
+            )
+        if node.new != node.col and node.new in source.attributes:
+            raise ExecutionError(
+                f"/>: attribute {node.new!r} already exists "
+                f"(use a different name or remove it first with #!)"
+            )
+        if node.pos is not None:
+            if node.pos == node.new:
+                raise ExecutionError(
+                    f"/>: position name must differ from piece name "
+                    f"({node.pos!r})"
+                )
+            if node.pos != node.col and node.pos in source.attributes:
+                raise ExecutionError(
+                    f"/>: position attribute {node.pos!r} already exists"
+                )
+        try:
+            pat = re.compile(node.pattern)
+        except re.error as e:
+            raise ExecutionError(f"/>: invalid regex {node.pattern!r}: {e}") from e
+
+        result: set[Tuple_] = set()
+        for t in source:
+            val = t[node.col]
+            if not isinstance(val, str):
+                raise ExecutionError(
+                    f"/>: cannot split non-string value "
+                    f"{node.col}={val!r} (type {type(val).__name__})"
+                )
+            pieces = pat.split(val)
+            for idx, piece in enumerate(pieces, start=1):
+                data = dict(t.data)
+                if node.new == node.col:
+                    data[node.col] = piece
+                else:
+                    data[node.new] = piece
+                if node.pos is not None:
+                    data[node.pos] = idx
+                result.add(Tuple_(data))
+
+        new_attrs = set(source._attributes)
+        new_attrs.add(node.new)
+        if node.pos is not None:
+            new_attrs.add(node.pos)
+
+        # Schema: piece is str, position is int.
+        new_schema = dict(source.schema)
+        new_schema[node.new] = "str"
+        if node.pos is not None:
+            new_schema[node.pos] = "int"
+        return Relation(
+            frozenset(result),
+            attributes=frozenset(new_attrs),
+            schema=new_schema,
         )
 
     def _eval_rotate(self, node: ast.Rotate) -> RotatedArray:

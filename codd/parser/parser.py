@@ -310,6 +310,8 @@ class Parser:
                 left = self._parse_order_columns(left)
             elif tok.type == TokenType.SLASH_CARET:
                 left = self._parse_rank(left)
+            elif tok.type == TokenType.SLASH_GT:
+                left = self._parse_split(left)
             elif tok.type == TokenType.CARET:
                 left = self._parse_take(left)
             elif tok.type == TokenType.R_DOT:
@@ -507,6 +509,56 @@ class Parser:
         keys = self._parse_sort_key_list()
         return ast.Rank(
             source=source, name=name_tok.value, keys=tuple(keys)
+        )
+
+    def _parse_split(self, source: ast.RelExpr) -> ast.Split:
+        """Parse one of:
+            /> col pattern                  in-place, no position
+            /> new: col pattern             named, no position
+            /> [new pos]: col pattern       named + position column
+        """
+        self._advance()  # consume />
+        new: str
+        pos: str | None = None
+
+        if self._peek().type == TokenType.LBRACKET:
+            # Bracketed names: [new] or [new pos]
+            self._advance()  # consume [
+            names: list[str] = []
+            while self._peek().type == TokenType.IDENT:
+                names.append(self._advance().value)
+            self._expect(TokenType.RBRACKET)
+            if len(names) == 1:
+                new = names[0]
+            elif len(names) == 2:
+                new, pos = names
+            else:
+                raise ParseError(
+                    "/>: bracket form expects 1 or 2 names, "
+                    f"got {len(names)}", self._peek(),
+                )
+            self._expect(TokenType.COLON)
+            col_tok = self._expect(TokenType.IDENT)
+        elif (
+            self._peek().type == TokenType.IDENT
+            and self._peek(1).type == TokenType.COLON
+        ):
+            # Named form: new: col pattern
+            new = self._advance().value
+            self._advance()  # consume :
+            col_tok = self._expect(TokenType.IDENT)
+        else:
+            # Bare form: col pattern — col serves as both source and target.
+            col_tok = self._expect(TokenType.IDENT)
+            new = col_tok.value
+
+        pattern_tok = self._expect(TokenType.STRING)
+        return ast.Split(
+            source=source,
+            col=col_tok.value,
+            pattern=pattern_tok.value,
+            new=new,
+            pos=pos,
         )
 
     def _parse_order_columns(self, source: ast.RelExpr) -> ast.OrderColumns:

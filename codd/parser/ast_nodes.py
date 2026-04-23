@@ -449,6 +449,34 @@ class Rank:
 
 
 @dataclass(frozen=True)
+class Split:
+    """Split / explode.
+
+    Forms (at the syntactic level):
+        /> col pattern                in-place, no position
+        /> new: col pattern           named, no position
+        /> [new pos]: col pattern     named + position column
+        /> [col pos]: col pattern     in-place + position column
+
+    Splits the string value of *col* in each tuple using *pattern* (a
+    regex) and emits one tuple per piece.  When *new* equals *col* the
+    source column is replaced in place; when they differ, *new* is
+    added and *col* is preserved.  It is an error for *new* to collide
+    with an existing attribute other than *col*.
+
+    When *pos* is set, an additional int-typed column records the 1-based
+    index of each piece within the original string (including empty
+    pieces between consecutive delimiters).
+    """
+
+    source: RelExpr
+    col: str             # source attribute to split
+    pattern: str         # regex
+    new: str             # new attribute name (equals col for in-place)
+    pos: str | None = None  # optional position column
+
+
+@dataclass(frozen=True)
 class OrderColumns:
     """Order columns: $. [col1 col2 ...] or $. col."""
 
@@ -535,6 +563,7 @@ RelExpr = (
     | NestBy
     | Sort
     | Rank
+    | Split
     | OrderColumns
     | Take
     | Iota
