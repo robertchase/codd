@@ -272,7 +272,7 @@ class TestJoin:
 
     def test_nest_join(self) -> None:
         """Nest join groups child tuples into a nested relation."""
-        result = run("E *: Phone -> phones")
+        result = run("E *: phones: Phone")
         assert isinstance(result, Relation)
         assert len(result) == 5
         for t in result:
@@ -389,7 +389,7 @@ class TestUnnest:
 
     def test_nest_then_unnest(self) -> None:
         """Unnest reverses a nest join, flattening nested tuples."""
-        result = run("E *: Phone -> phones <: phones")
+        result = run("E *: phones: Phone <: phones")
         assert isinstance(result, Relation)
         # Alice has 1 phone, Carol has 2 -> 3 tuples
         assert len(result) == 3
@@ -1589,7 +1589,7 @@ class TestNestBy:
 
     def test_nest_by(self) -> None:
         """Nest-by groups tuples into nested relations by key."""
-        result = run("E /: dept_id -> team")
+        result = run("E /: team: dept_id")
         assert isinstance(result, Relation)
         assert len(result) == 2
         for t in result:
@@ -1601,7 +1601,7 @@ class TestNestBy:
 
     def test_nest_by_multi_key(self) -> None:
         """Nest-by groups by multiple keys."""
-        result = run("E /: [dept_id role] -> team")
+        result = run("E /: team: [dept_id role]")
         assert isinstance(result, Relation)
         assert len(result) == 3
         for t in result:
@@ -2323,28 +2323,28 @@ class TestFilterAggregateLHS:
 
     def test_count_eq(self) -> None:
         """Filter by #. phones = 1 keeps employees with exactly one phone."""
-        result = run("E *: Phone -> phones ? #. phones = 1")
+        result = run("E *: phones: Phone ? #. phones = 1")
         assert isinstance(result, Relation)
         names = {t["name"] for t in result}
         assert names == {"Alice"}
 
     def test_count_gt(self) -> None:
         """Filter by #. phones > 1 keeps employees with more than one phone."""
-        result = run("E *: Phone -> phones ? #. phones > 1")
+        result = run("E *: phones: Phone ? #. phones > 1")
         assert isinstance(result, Relation)
         names = {t["name"] for t in result}
         assert names == {"Carol"}
 
     def test_count_zero(self) -> None:
         """Filter by #. phones = 0 keeps employees with no phones."""
-        result = run("E *: Phone -> phones ? #. phones = 0")
+        result = run("E *: phones: Phone ? #. phones = 0")
         assert isinstance(result, Relation)
         names = {t["name"] for t in result}
         assert names == {"Bob", "Dave", "Eve"}
 
     def test_count_bool_combination(self) -> None:
         """Boolean AND of aggregate count conditions."""
-        result = run("E *: Phone -> phones ? (#. phones >= 1 & #. phones <= 2)")
+        result = run("E *: phones: Phone ? (#. phones >= 1 & #. phones <= 2)")
         assert isinstance(result, Relation)
         names = {t["name"] for t in result}
         assert names == {"Alice", "Carol"}

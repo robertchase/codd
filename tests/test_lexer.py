@@ -313,12 +313,12 @@ class TestComplexExpressions:
         assert result == expected
 
     def test_nest_join(self) -> None:
-        """Nest join tokenizes *: and -> correctly."""
-        src = "E *: Phone -> phones"
+        """Nest join tokenizes *: correctly."""
+        src = "E *: phones: Phone"
         result = types(src)
         expected = [
             TokenType.IDENT, TokenType.STAR_COLON, TokenType.IDENT,
-            TokenType.ARROW, TokenType.IDENT,
+            TokenType.COLON, TokenType.IDENT,
         ]
         assert result == expected
 

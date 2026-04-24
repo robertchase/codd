@@ -365,11 +365,11 @@ class Parser:
         return ast.LeftJoin(source=source, right=right, defaults=tuple(defaults))
 
     def _parse_nest_join(self, source: ast.RelExpr) -> ast.NestJoin:
-        """Parse: *: RelName -> nest_name."""
+        """Parse: *: nest_name: RelName."""
         self._advance()  # consume *:
-        right = self._parse_atom()
-        self._expect(TokenType.ARROW)
         name_tok = self._expect(TokenType.IDENT)
+        self._expect(TokenType.COLON)
+        right = self._parse_atom()
         return ast.NestJoin(source=source, right=right, nest_name=name_tok.value)
 
     def _parse_unnest(self, source: ast.RelExpr) -> ast.Unnest:
@@ -484,11 +484,11 @@ class Parser:
         )
 
     def _parse_nest_by(self, source: ast.RelExpr) -> ast.NestBy:
-        """Parse: /: key -> name or /: [key1 key2] -> name."""
+        """Parse: /: name: key or /: name: [key1 key2]."""
         self._advance()  # consume /:
-        group_attrs = self._parse_attr_list()
-        self._expect(TokenType.ARROW)
         name_tok = self._expect(TokenType.IDENT)
+        self._expect(TokenType.COLON)
+        group_attrs = self._parse_attr_list()
         return ast.NestBy(
             source=source,
             group_attrs=group_attrs,

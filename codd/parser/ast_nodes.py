@@ -304,7 +304,7 @@ class LeftJoin:
 
 @dataclass(frozen=True)
 class NestJoin:
-    """Nest join: *: RelName > nest_name."""
+    """Nest join: *: nest_name: RelName."""
 
     source: RelExpr
     right: RelExpr
@@ -411,7 +411,7 @@ class BroadcastAggregateAll:
 
 @dataclass(frozen=True)
 class NestBy:
-    """Nest by: /: key > name or /: [key1 key2] > name."""
+    """Nest by: /: name: key or /: name: [key1 key2]."""
 
     source: RelExpr
     group_attrs: tuple[str, ...]

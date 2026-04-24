@@ -9,7 +9,7 @@ _RELATIONAL = [
     ("#!", "Remove", "E #! emp_id"),
     ("*.", "Natural join", "E *. D"),
     ("*<", "Left join", "E *< D [col: 0]"),
-    ("*:", "Nest join", "E *: Phone -> phones"),
+    ("*:", "Nest join", "E *: phones: Phone"),
     ("<:", "Unnest", "E <: phones"),
     ("+:", "Extend", "E +: bonus: salary * 0.1"),
     ("=:", "Modify", "E =: salary: salary * 1.1"),
@@ -19,15 +19,17 @@ _RELATIONAL = [
     ("&.", "Intersect", "E &. (D)"),
     ("/.", "Summarize", "E /. dept_id [n: #. avg: %. salary]  or  E /. [n: #.]"),
     ("/*", "Broadcast agg", "E /* dept_id [avg: %. salary]  or  E /* [total: +. salary]"),
-    ("/:", "Nest by", "E /: dept_id -> team  or  E /: [dept_id role] -> team"),
-    ("$", "Sort", "E $ salary-"),
-    ("$.", "Order columns", "E $. [salary name]"),
+    ("/:", "Nest by", "E /: team: dept_id  or  E /: team: [dept_id role]"),
     ("/^", "Rank (dense)", "E /^ r: salary-"),
     ("/>", "Split (explode)", 'R /> tags ","  or  R /> [tag n]: tags ","'),
+    ("::", "Apply schema", "R :: S  or  R ::"),
+]
+
+_DISPLAY = [
+    ("$", "Sort", "E $ salary-"),
+    ("$.", "Order columns", "E $. [salary name]"),
     ("^", "Take", "E $ salary- ^ 3"),
     ("r.", "Rotate", "E ? name = \"Alice\" r."),
-    ("::", "Apply schema", "R :: S  or  R ::"),
-    ("in.", "Membership test", "R ? status in. (Statuses # name)"),
 ]
 
 _AGGREGATES = [
@@ -44,6 +46,7 @@ _EXPRESSIONS = [
     ("+ - * / // %", "Arithmetic", "salary * 0.1  or  salary // 1000  or  i % 2"),
     ("= != < > <= >=", "Comparison", "salary > 50000  or  status != \"inactive\""),
     ("=~ !=~", "Regex match", 'name =~ "^A"  or  name !=~ "test"'),
+    ("in.", "Membership", "status in. (Statuses # name)"),
     ("and or not", "Logical", "age > 18 and status = \"active\"  or  not flag"),
     ("~", "Precision", "%. salary ~ 2"),
     (".s", "String", 'name .s [1 3]  or  name .s "upper"'),
@@ -345,6 +348,7 @@ def ops_output() -> str:
         ("Relational", _RELATIONAL),
         ("Aggregates", _AGGREGATES),
         ("Expressions", _EXPRESSIONS),
+        ("Display", _DISPLAY),
         ("Other", _OTHER),
     ]
     parts: list[str] = []

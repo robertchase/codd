@@ -159,7 +159,7 @@ class TestJoin:
 
     def test_nest_join(self) -> None:
         """Nest join with target nest name."""
-        result = parse("E *: Phone -> phones")
+        result = parse("E *: phones: Phone")
         assert isinstance(result, ast.NestJoin)
         assert isinstance(result.right, ast.RelName)
         assert result.nest_name == "phones"
@@ -200,7 +200,7 @@ class TestUnnest:
 
     def test_unnest_after_nest_join(self) -> None:
         """Unnest chains after a nest join."""
-        result = parse("E *: Phone -> phones <: phones")
+        result = parse("E *: phones: Phone <: phones")
         assert isinstance(result, ast.Unnest)
         assert result.nest_attr == "phones"
         assert isinstance(result.source, ast.NestJoin)
@@ -811,14 +811,14 @@ class TestSummarize:
 
     def test_nest_by(self) -> None:
         """Nest-by groups and assigns a nest name."""
-        result = parse("E /: dept_id -> team")
+        result = parse("E /: team: dept_id")
         assert isinstance(result, ast.NestBy)
         assert result.group_attrs == ("dept_id",)
         assert result.nest_name == "team"
 
     def test_nest_by_multi_key(self) -> None:
         """Nest-by with multiple grouping keys."""
-        result = parse("E /: [dept_id region] -> team")
+        result = parse("E /: team: [dept_id region]")
         assert isinstance(result, ast.NestBy)
         assert result.group_attrs == ("dept_id", "region")
         assert result.nest_name == "team"
@@ -873,7 +873,7 @@ class TestComplexExpressions:
 
     def test_nest_by_extend(self) -> None:
         """Extend with aggregate call after nest-by."""
-        result = parse("E /: dept_id -> team +: [top: >. team.salary]")
+        result = parse("E /: team: dept_id +: [top: >. team.salary]")
         assert isinstance(result, ast.Extend)
         assert isinstance(result.source, ast.NestBy)
         comp = result.computations[0]

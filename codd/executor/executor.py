@@ -261,7 +261,7 @@ class Executor:
         return Relation(frozenset(result), attributes=result_attrs, schema=schema)
 
     def _eval_nest_join(self, node: ast.NestJoin) -> Relation:
-        """Evaluate: source *: right > name."""
+        """Evaluate: source *: name: right."""
         left = self._as_relation(node.source)
         right = self._as_relation(node.right)
         return left.nest_join(right, node.nest_name)
@@ -598,7 +598,7 @@ class Executor:
         return t[attr]
 
     def _eval_nest_by(self, node: ast.NestBy) -> Relation:
-        """Evaluate: source /: group_attrs > name."""
+        """Evaluate: source /: name: group_attrs."""
         source = self._as_relation(node.source)
         return source.nest_by(frozenset(node.group_attrs), node.nest_name)
 

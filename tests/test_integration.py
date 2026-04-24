@@ -111,8 +111,8 @@ class TestJoinExamples:
         assert salaries == {"Alice": 80000, "Bob": 60000, "Dave": 90000}
 
     def test_nest_join(self) -> None:
-        """E *: Phone -> phones -> 5 tuples, nested phone relations."""
-        result = run("E *: Phone -> phones")
+        """E *: phones: Phone -> 5 tuples, nested phone relations."""
+        result = run("E *: phones: Phone")
         assert len(result) == 5
         for t in result:
             phones = t["phones"]
@@ -134,8 +134,8 @@ class TestUnnestExamples:
     """Test unnest examples from algebra.md."""
 
     def test_nest_then_unnest_roundtrip(self) -> None:
-        """E *: Phone -> phones <: phones -> same shape as E *. Phone."""
-        unnested = run("E *: Phone -> phones <: phones")
+        """E *: phones: Phone <: phones -> same shape as E *. Phone."""
+        unnested = run("E *: phones: Phone <: phones")
         joined = run("E *. Phone")
         assert isinstance(unnested, Relation)
         assert isinstance(joined, Relation)
@@ -145,7 +145,7 @@ class TestUnnestExamples:
 
     def test_unnest_drops_empty_rvas(self) -> None:
         """Unnest drops tuples with empty RVAs (no phones)."""
-        result = run("E *: Phone -> phones <: phones")
+        result = run("E *: phones: Phone <: phones")
         assert isinstance(result, Relation)
         # Only Alice (1 phone) and Carol (2 phones) survive
         names = {t["name"] for t in result}
@@ -237,8 +237,8 @@ class TestNestByExamples:
     """Test nest by examples from algebra.md."""
 
     def test_nest_by(self) -> None:
-        """E /: dept_id -> team -> 2 groups."""
-        result = run("E /: dept_id -> team")
+        """E /: team: dept_id -> 2 groups."""
+        result = run("E /: team: dept_id")
         assert len(result) == 2
         for t in result:
             team = t["team"]
@@ -249,11 +249,11 @@ class TestNestByExamples:
                 assert len(team) == 2
 
     def test_nest_by_with_aggregate(self) -> None:
-        """E /: dept_id -> team +: [top: >. team.salary] # [dept_id top].
+        """E /: team: dept_id +: [top: >. team.salary] # [dept_id top].
 
         dept 10: top=90000, dept 20: top=55000.
         """
-        result = run("E /: dept_id -> team +: [top: >. team.salary] # [dept_id top]")
+        result = run("E /: team: dept_id +: [top: >. team.salary] # [dept_id top]")
         assert len(result) == 2
         for t in result:
             if t["dept_id"] == 10:
@@ -349,9 +349,9 @@ class TestComplexChains:
         assert result[2]["name"] == "Bob"
 
     def test_filter_nest_join_project(self) -> None:
-        """E ? dept_id = 10 ? salary > 50000 *: Phone -> phones # [name salary phones]."""
+        """E ? dept_id = 10 ? salary > 50000 *: phones: Phone # [name salary phones]."""
         result = run(
-            "E ? dept_id = 10 ? salary > 50000 *: Phone -> phones # [name salary phones]"
+            "E ? dept_id = 10 ? salary > 50000 *: phones: Phone # [name salary phones]"
         )
         assert isinstance(result, Relation)
         assert len(result) == 3
