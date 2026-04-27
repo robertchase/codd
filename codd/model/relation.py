@@ -200,10 +200,41 @@ class Relation:
                         schema=self._schema)
 
     def rename(self, mapping: dict[str, str]) -> Relation:
-        """Rename: change attribute names (@)."""
+        """Rename: change attribute names (@).
+
+        Raises ValueError if:
+          - the source attribute doesn't exist
+          - two source attrs map to the same target name (collapse)
+          - a target name collides with an existing un-renamed attribute
+            (unless that attribute is itself being renamed away — i.e. swaps
+            are allowed)
+        """
         unknown = frozenset(mapping.keys()) - self._attributes
         if unknown:
             raise ValueError(f"rename references unknown attributes: {sorted(unknown)}")
+
+        # Detect duplicate target names from the mapping itself.
+        seen: dict[str, str] = {}
+        for old, new in mapping.items():
+            if new in seen:
+                raise ValueError(
+                    f"rename: multiple attributes ({sorted([seen[new], old])!r}) "
+                    f"would collapse to {new!r}"
+                )
+            seen[new] = old
+
+        # Detect collisions with existing attributes that aren't themselves
+        # being renamed away.  (If 'b' is in mapping.keys(), it's vacating
+        # the slot — fine for swaps like @ [a b  b a].)
+        for old, new in mapping.items():
+            if new == old:
+                continue
+            if new in self._attributes and new not in mapping:
+                raise ValueError(
+                    f"rename: target {new!r} already exists "
+                    f"(remove it first with #! or pick a different name)"
+                )
+
         new_attrs = frozenset(mapping.get(a, a) for a in self._attributes)
         result = frozenset(t.rename(mapping) for t in self._tuples)
         new_schema = None

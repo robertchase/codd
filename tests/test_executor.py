@@ -1374,6 +1374,32 @@ class TestRename:
         assert "salary" in result.attributes
         assert "pay" not in result.attributes
 
+    def test_rename_to_existing_attr_errors(self) -> None:
+        """Renaming to an existing column name raises (no silent collapse)."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(name="Alice", dept_name="Eng"),
+        })))
+        with pytest.raises(ExecutionError, match="already exists"):
+            run("R @ [name dept_name]", env)
+
+    def test_rename_duplicate_target_errors(self) -> None:
+        """Two source attrs renamed to the same name raises."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(name="Alice", dept_name="Eng"),
+        })))
+        with pytest.raises(ExecutionError, match="collapse"):
+            run("R @ [name x  dept_name x]", env)
+
+    def test_rename_swap_allowed(self) -> None:
+        """Mutual rename (swap) is allowed: @ [a b  b a] swaps the two."""
+        env = Environment()
+        env.bind("S", Relation(frozenset({Tuple_(a=1, b=2)})))
+        result = run("S @ [a b  b a]", env)
+        t = next(iter(result))
+        assert t["a"] == 2 and t["b"] == 1
+
 
 class TestSetOps:
     """Test |., -., &. (set operations)."""
