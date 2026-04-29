@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from codd.data.loader import LoadError, load_csv
@@ -143,9 +144,11 @@ def _handle_command(line: str, env: Environment) -> None:
 
 
 def _cmd_load(args: list[str], env: Environment, *, quiet: bool = False) -> None:
-    """Handle \\load: load sample data, a CSV file, or a workspace file.
+    """Handle \\load: load sample data, a CSV file, stdin, or a workspace file.
 
-    Syntax: \\load file [:: SchemaName] [name] [--genkey[=Name]] [+key=Col] [+uuid=Col]
+    Syntax:
+        \\load file [:: SchemaName] [name] [--genkey[=Name]] [+key=Col] [+uuid=Col]
+        \\load - [:: SchemaName] [name]      Read CSV from stdin
 
     When *quiet* is True, success messages are suppressed (errors still print).
     """
@@ -197,6 +200,17 @@ def _cmd_load(args: list[str], env: Environment, *, quiet: bool = False) -> None
 
     if file_arg is None:
         print("Error: \\load requires a filename")
+        return
+
+    # "-" reads CSV from stdin.
+    if file_arg == "-":
+        rel_name = alias if alias else "stdin"
+        # Resolve genkey name like the file path would.
+        if genkey_seen and genkey is None:
+            genkey = rel_name
+        _load_csv_stdin(env, rel_name, schema_name, genkey, genkey_col,
+                        genuuid_col=genuuid_col, genhash_col=genhash_col,
+                        quiet=quiet)
         return
 
     path = Path(file_arg)
@@ -275,6 +289,50 @@ def _load_csv_file(
         print(f"Error: {e}")
     except Exception as e:
         print(f"Error loading {path}: {e}")
+
+
+def _load_csv_stdin(
+    env: Environment,
+    name: str,
+    schema_name: str | None = None,
+    genkey: str | None = None,
+    genkey_col: str | None = None,
+    *,
+    genuuid_col: str | None = None,
+    genhash_col: str | None = None,
+    quiet: bool = False,
+) -> None:
+    """Load CSV data from stdin into the environment under *name*."""
+    if sys.stdin.isatty():
+        print("Error: \\load -: stdin is a terminal (no data piped)")
+        return
+    try:
+        rel = load_csv(sys.stdin, name, genkey=genkey, genkey_col=genkey_col,
+                       genuuid_col=genuuid_col, genhash_col=genhash_col)
+        if schema_name:
+            from codd.model.coerce import (
+                CoercionError,
+                apply_schema,
+                schema_from_relation,
+            )
+            try:
+                schema_rel = env.lookup(schema_name)
+            except KeyError:
+                print(f"Error: unknown schema relation: {schema_name!r}")
+                return
+            try:
+                schema_dict = schema_from_relation(schema_rel, env=env)
+                rel = apply_schema(rel, schema_dict, env=env)
+            except CoercionError as e:
+                print(f"Error applying schema: {e}")
+                return
+        env.bind(name, rel)
+        if not quiet:
+            print(f"Loaded {name}: {len(rel)} tuples, attrs: {sorted(rel.attributes)}")
+    except LoadError as e:
+        print(f"Error: {e}")
+    except Exception as e:
+        print(f"Error loading stdin: {e}")
 
 
 def _load_workspace_file(

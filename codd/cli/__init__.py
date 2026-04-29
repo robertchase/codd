@@ -208,8 +208,10 @@ def main(
             _load_file(env, path, rel_name, genkey=gk, genkey_col=gk_col,
                        genuuid_col=file_uuid, genhash_col=file_hash)
 
-    # Auto-load stdin if piped and not already consumed
-    if not stdin_consumed and not sys.stdin.isatty():
+    # Auto-load stdin if piped and not already consumed.  Skip when running
+    # a -f script — scripts read stdin explicitly with `\load -`.
+    if (not stdin_consumed and not sys.stdin.isatty()
+            and script_file is None):
         gk, gk_col = _resolve_genkey("stdin", None)
         _load_stdin(env, "stdin", genkey=gk, genkey_col=gk_col)
         stdin_consumed = True

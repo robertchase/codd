@@ -277,6 +277,34 @@ class TestScriptCommands:
         assert "1" in result.output
         assert "3" in result.output
 
+    def test_load_dash_reads_stdin(self, tmp_path: Path) -> None:
+        """\\load - reads CSV from stdin in a -f script."""
+        script = tmp_path / "query.codd"
+        script.write_text("\\load - widgets\nwidgets\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["-f", str(script)],
+            input="name,price\nApple,1.50\nBanana,0.75\n",
+        )
+        assert result.exit_code == 0, result.output
+        assert "Apple" in result.output
+        assert "Banana" in result.output
+
+    def test_load_dash_default_name(self, tmp_path: Path) -> None:
+        """\\load - without an alias binds to 'stdin'."""
+        script = tmp_path / "query.codd"
+        script.write_text("\\load -\nstdin\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["-f", str(script)],
+            input="x\n1\n2\n",
+        )
+        assert result.exit_code == 0, result.output
+        assert "1" in result.output
+        assert "2" in result.output
+
     def test_export_in_script(self, tmp_path: Path) -> None:
         """\\export works inside a -f script."""
         out_file = tmp_path / "out.csv"
