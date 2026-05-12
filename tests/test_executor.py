@@ -2707,6 +2707,203 @@ class TestSchemaOps:
             assert t["x"] == 1
             assert t["y"] == 2.5
 
+    def test_describe_basic(self) -> None:
+        """R ?. produces one row per attribute with stats."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(id=1, name="Alice"),
+                    Tuple_(id=2, name="Bob"),
+                    Tuple_(id=3, name="Carol"),
+                }),
+                schema={"id": "int", "name": "str"},
+            ),
+        )
+        result = run("R ?.", env)
+        assert isinstance(result, Relation)
+        rows = {t["attr"]: t for t in result}
+        assert set(rows) == {"id", "name"}
+        # Schema preserved.
+        assert rows["id"]["type"] == "int"
+        assert rows["name"]["type"] == "str"
+        # All distinct, no empties.
+        assert rows["id"]["distinct"] == 3
+        assert rows["name"]["distinct"] == 3
+        assert rows["id"]["empty"] == 0
+        assert rows["name"]["empty"] == 0
+        # min/max formatted as strings.
+        assert rows["id"]["min"] == "1"
+        assert rows["id"]["max"] == "3"
+        assert rows["name"]["min"] == "Alice"
+        assert rows["name"]["max"] == "Carol"
+
+    def test_describe_counts_empties(self) -> None:
+        """?. counts empty strings, zeros, and falses."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(frozenset({
+                Tuple_(s="", n=0, b=False),
+                Tuple_(s="hi", n=5, b=True),
+                Tuple_(s="", n=0, b=False),
+            })),
+        )
+        result = run("R ?.", env)
+        rows = {t["attr"]: t for t in result}
+        # Two unique tuples (the duplicate gets dedup'd by frozenset).
+        # s has "", "hi" → 1 empty.  n has 0, 5 → 1 zero.  b has False, True → 1 false.
+        assert rows["s"]["empty"] == 1
+        assert rows["n"]["empty"] == 1
+        assert rows["b"]["empty"] == 1
+
+    def test_describe_distinct_count(self) -> None:
+        """distinct correctly counts unique values per column."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id=1, role="a"),
+            Tuple_(id=2, role="a"),
+            Tuple_(id=3, role="b"),
+        })))
+        result = run("R ?.", env)
+        rows = {t["attr"]: t for t in result}
+        assert rows["id"]["distinct"] == 3
+        assert rows["role"]["distinct"] == 2
+
+    def test_describe_empty_relation(self) -> None:
+        """?. on an empty relation gives one row per attr with zeros."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset(),
+                attributes=frozenset({"x", "y"}),
+                schema={"x": "int", "y": "str"},
+            ),
+        )
+        result = run("R ?.", env)
+        rows = {t["attr"]: t for t in result}
+        assert set(rows) == {"x", "y"}
+        assert rows["x"]["distinct"] == 0
+        assert rows["x"]["min"] == ""
+        assert rows["x"]["max"] == ""
+        assert rows["x"]["sample"] == ""
+
+    def test_describe_composes(self) -> None:
+        """?. produces a relation, so filter/project compose."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(a="x", b=""),
+            Tuple_(a="y", b="z"),
+        })))
+        # Find columns with at least one empty.
+        result = run("R ?. ? empty > 0 # attr", env)
+        assert {t["attr"] for t in result} == {"b"}
+
+    def test_describe_output_schema(self) -> None:
+        """The describe result has a fixed, predictable schema."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(x=1)})))
+        result = run("R ?.", env)
+        s = result.schema
+        assert s["attr"] == "str"
+        assert s["type"] == "str"
+        assert s["inferred"] == "str"
+        assert s["distinct"] == "int"
+        assert s["pct"] == "int"
+        assert s["empty"] == "int"
+
+    def test_describe_pct_unique(self) -> None:
+        """pct is 100 when every row's value is distinct."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id=1), Tuple_(id=2), Tuple_(id=3),
+        })))
+        result = run("R ?.", env)
+        assert next(iter(result))["pct"] == 100
+
+    def test_describe_pct_categorical(self) -> None:
+        """pct is low for a categorical column."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id=i, kind=k)
+            for i, k in enumerate(["a", "b", "a", "b", "a", "b", "a", "b", "a", "b"])
+        })))
+        result = run("R ?.", env)
+        rows = {t["attr"]: t for t in result}
+        # 2 distinct kinds / 10 rows = 20%
+        assert rows["kind"]["pct"] == 20
+        # 10 distinct ids / 10 rows = 100%
+        assert rows["id"]["pct"] == 100
+
+    def test_describe_pct_empty_relation(self) -> None:
+        """pct is 0 for an empty source relation."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(frozenset(), attributes=frozenset({"x"})),
+        )
+        result = run("R ?.", env)
+        assert next(iter(result))["pct"] == 0
+
+    def test_describe_inferred_matches_declared(self) -> None:
+        """inferred matches declared type when values are already typed."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({Tuple_(id=1, name="Alice"),
+                           Tuple_(id=2, name="Bob")}),
+                schema={"id": "int", "name": "str"},
+            ),
+        )
+        result = run("R ?.", env)
+        rows = {t["attr"]: t for t in result}
+        assert rows["id"]["inferred"] == "int"
+        assert rows["name"]["inferred"] == "str"
+
+    def test_describe_inferred_finds_numeric_in_strings(self) -> None:
+        """inferred sees through a str-declared column of numeric-looking strings."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id="1", price="9.95"),
+            Tuple_(id="2", price="100.00"),
+        })))
+        result = run("R ?.", env)
+        rows = {t["attr"]: t for t in result}
+        assert rows["id"]["type"] == "str"
+        assert rows["id"]["inferred"] == "int"
+        assert rows["price"]["type"] == "str"
+        assert rows["price"]["inferred"] == "decimal"
+
+    def test_describe_inferred_bool_in_strings(self) -> None:
+        """All-'true'/'false' strings infer as bool."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(active="true"), Tuple_(active="false"),
+        })))
+        result = run("R ?.", env)
+        assert next(iter(result))["inferred"] == "bool"
+
+    def test_describe_inferred_date_in_strings(self) -> None:
+        """ISO-format strings infer as date."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(dob="1990-03-17"), Tuple_(dob="2001-12-01"),
+        })))
+        result = run("R ?.", env)
+        assert next(iter(result))["inferred"] == "date"
+
+    def test_describe_inferred_mixed_stays_str(self) -> None:
+        """When values don't all match a narrower type, inferred is str."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(x="1"), Tuple_(x="hello"),
+        })))
+        result = run("R ?.", env)
+        assert next(iter(result))["inferred"] == "str"
+
     def test_extract_schema_after_coercion(self) -> None:
         """Schema survives coercion and is extractable."""
         env = Environment()

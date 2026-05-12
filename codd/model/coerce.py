@@ -292,6 +292,72 @@ def infer_type(value: Value) -> str:
     return "str"
 
 
+def infer_type_from_values(values: list[Value]) -> str:
+    """Infer the narrowest type that fits all non-empty values.
+
+    Inspects actual Python values (post any coercion).  For string values,
+    tries parsing as int/decimal/bool/date.  Returns one of the builtin
+    type names: int, float, decimal, date, bool, str.
+
+    The result is conservative: if any value doesn't fit, falls back to
+    a wider type.  An all-empty (or empty) column infers as "str".
+    """
+    non_empty = [v for v in values if v != "" and v is not None]
+    if not non_empty:
+        return "str"
+
+    # First check homogeneous Python types (post-coercion case).
+    if all(isinstance(v, bool) for v in non_empty):
+        return "bool"
+    # bool is a subclass of int — exclude with explicit check.
+    if all(isinstance(v, int) and not isinstance(v, bool) for v in non_empty):
+        return "int"
+    if all(isinstance(v, Decimal) for v in non_empty):
+        return "decimal"
+    if all(isinstance(v, float) for v in non_empty):
+        return "float"
+    if all(isinstance(v, datetime.date) for v in non_empty):
+        return "date"
+
+    # Mixed-numeric (int + Decimal + float) — call it float as a widening.
+    numeric_types = (int, float, Decimal)
+    if all(isinstance(v, numeric_types) and not isinstance(v, bool)
+           for v in non_empty):
+        # Prefer decimal over float if any are Decimal.
+        if any(isinstance(v, Decimal) for v in non_empty):
+            return "decimal"
+        return "float"
+
+    # All strings — try parsing in order of narrowness.
+    if all(isinstance(v, str) for v in non_empty):
+        # int
+        try:
+            for v in non_empty:
+                int(v)
+            return "int"
+        except (ValueError, TypeError):
+            pass
+        # decimal
+        try:
+            for v in non_empty:
+                Decimal(v)
+            return "decimal"
+        except (InvalidOperation, ValueError, TypeError):
+            pass
+        # bool (only "true"/"false" case-insensitive)
+        if all(v.lower() in ("true", "false") for v in non_empty):
+            return "bool"
+        # date (ISO format)
+        try:
+            for v in non_empty:
+                str_to_date(v)
+            return "date"
+        except (ValueError, TypeError):
+            pass
+
+    return "str"
+
+
 def schema_from_relation(
     rel: Relation, env: object | None = None
 ) -> dict[str, str]:

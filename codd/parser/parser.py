@@ -319,6 +319,9 @@ class Parser:
                 left = ast.Rotate(source=left)
             elif tok.type == TokenType.COLON_COLON:
                 left = self._parse_schema_op(left)
+            elif tok.type == TokenType.QUESTION_DOT:
+                self._advance()  # consume ?.
+                left = ast.DescribeSchema(source=left)
             else:
                 break
         return left

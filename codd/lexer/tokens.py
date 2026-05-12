@@ -76,6 +76,7 @@ class TokenType(Enum):
     AMPERSAND_DOT = auto()  # &.  intersect
     ARROW = auto()          # ->  rename/alias arrow
     QUESTION_EQ = auto()    # ?=  update
+    QUESTION_DOT = auto()   # ?.  describe (column stats)
     BANG_EQ = auto()        # !=  not equal
     GT_EQ = auto()          # >=  greater or equal
     LT_EQ = auto()          # <=  less or equal

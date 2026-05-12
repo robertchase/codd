@@ -129,6 +129,8 @@ class Executor:
             return self._eval_apply_schema(node)
         if isinstance(node, ast.ExtractSchema):
             return self._eval_extract_schema(node)
+        if isinstance(node, ast.DescribeSchema):
+            return self._eval_describe_schema(node)
         raise ExecutionError(f"Unknown node type: {type(node).__name__}")
 
     def _as_relation(self, node: ast.RelExpr) -> Relation:
@@ -818,6 +820,98 @@ class Executor:
 
         source = self._as_relation(node.source)
         return extract_schema(source)
+
+    def _eval_describe_schema(self, node: ast.DescribeSchema) -> Relation:
+        """Evaluate: R ?. — describe each column (one row per attr).
+
+        Output columns: attr, type, inferred, distinct, pct, empty, min, max, sample.
+        Walks every tuple to compute distinct / range / counts and to infer
+        the narrowest type that fits the actual values.
+
+        min/max ignore empty values and use the inferred type for comparison
+        so numeric/date columns sort by value rather than lexicographically.
+        sample prefers a non-empty value when one is available.
+        pct = round(distinct * 100 / row_count) — low values suggest a
+        categorical column.
+        """
+        from codd.repl.formatter import format_value
+        from codd.model.coerce import (
+            infer_type_from_values, coerce_value, CoercionError,
+        )
+
+        source = self._as_relation(node.source)
+        schema = source.schema  # always returns a dict (defaults to all-str)
+        attrs = sorted(source._attributes)
+        row_count = len(source)
+
+        def _is_empty(v: object) -> bool:
+            return v == "" or v == 0 or v is False
+
+        result_tuples: set[Tuple_] = set()
+        for attr in attrs:
+            values = [t[attr] for t in source if attr in t._data]
+            distinct = len(set(values))
+            empty_count = sum(1 for v in values if _is_empty(v))
+            inferred = infer_type_from_values(values)
+
+            # min/max over non-empty values, compared per inferred type.
+            non_empty = [v for v in values if not _is_empty(v)]
+            if non_empty:
+                if inferred != "str":
+                    try:
+                        coerced = [coerce_value(v, inferred) for v in non_empty]
+                        mn_idx = min(range(len(coerced)), key=coerced.__getitem__)
+                        mx_idx = max(range(len(coerced)), key=coerced.__getitem__)
+                        mn = non_empty[mn_idx]
+                        mx = non_empty[mx_idx]
+                    except (CoercionError, ValueError, TypeError):
+                        mn = min(non_empty, key=str)
+                        mx = max(non_empty, key=str)
+                else:
+                    try:
+                        mn = min(non_empty)
+                        mx = max(non_empty)
+                    except TypeError:
+                        mn = min(non_empty, key=str)
+                        mx = max(non_empty, key=str)
+                mn_s = format_value(mn)
+                mx_s = format_value(mx)
+                sample_s = format_value(non_empty[0])
+            elif values:
+                # All values are empty; show empty for everything.
+                mn_s = mx_s = sample_s = ""
+            else:
+                mn_s = mx_s = sample_s = ""
+            pct = round(distinct * 100 / row_count) if row_count else 0
+            result_tuples.add(Tuple_({
+                "attr": attr,
+                "type": schema.get(attr, "str"),
+                "inferred": inferred,
+                "distinct": distinct,
+                "pct": pct,
+                "empty": empty_count,
+                "min": mn_s,
+                "max": mx_s,
+                "sample": sample_s,
+            }))
+        return Relation(
+            frozenset(result_tuples),
+            attributes=frozenset({
+                "attr", "type", "inferred", "distinct", "pct", "empty",
+                "min", "max", "sample",
+            }),
+            schema={
+                "attr": "str",
+                "type": "str",
+                "inferred": "str",
+                "distinct": "int",
+                "pct": "int",
+                "empty": "int",
+                "min": "str",
+                "max": "str",
+                "sample": "str",
+            },
+        )
 
     def _eval_order_columns(self, node: ast.OrderColumns) -> OrderedArray:
         """Evaluate: source $. [col1 col2 ...].

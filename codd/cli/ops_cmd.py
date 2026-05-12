@@ -20,6 +20,7 @@ _RELATIONAL = [
     ("/^", "Rank (dense)", "E /^ r: salary-"),
     ("/>", "Split (explode)", 'R /> tags ","  or  R /> [tag n]: tags ","'),
     ("::", "Apply schema", "R :: S  or  R ::"),
+    ("?.", "Describe columns", "R ?."),
 ]
 
 _NESTED = [
@@ -315,6 +316,46 @@ and or not — Logical operators
     - Error if *name* collides with an existing attribute; remove
       first with #! if you want to replace.
     - An empty relation passes through unchanged (still empty).""",
+    "?.": """\
+?. — Describe columns (column statistics)
+
+  Returns a relation with one row per attribute in the source, summarising
+  what's in each column.  The result is itself a relation, so it composes
+  with the rest of the language — you can filter, sort, project the stats.
+
+  Syntax:
+    R ?.
+
+  Result columns:
+    attr      str   attribute name
+    type      str   declared schema type
+    inferred  str   narrowest type that fits all non-empty values
+    distinct  int   number of distinct values
+    pct       int   distinct as a percentage of row count (0-100)
+    empty     int   count of empty strings, zeros, or false values
+    min       str   minimum value (formatted)
+    max       str   maximum value (formatted)
+    sample    str   one example value (formatted)
+
+  Useful patterns:
+    - "inferred" reveals columns whose declared type is "str" but whose
+      values actually look numeric / dated / boolean (a CSV-loaded
+      column that should be reschemed).
+    - "pct" close to 100 means values are nearly all unique (key-like);
+      a low pct suggests a categorical column.
+
+  Examples:
+    R ?.                                       All columns described
+    R ?. $. [attr type inferred distinct pct empty min max sample]   Nice order
+    R ?. ? type != inferred                    Columns worth retyping
+    R ?. ? pct < 25                            Likely categorical columns
+    R ?. ? empty > 0                           Columns with missing data
+    R ?. # [attr distinct pct]                 Cardinality overview
+
+  Notes:
+    - Walks every tuple to compute stats.  Not free on large relations.
+    - The output schema is fixed (int for distinct/empty, str for the rest)
+      so all min/max are formatted as strings regardless of source type.""",
     "/*": """\
 /* — Broadcast aggregate
 

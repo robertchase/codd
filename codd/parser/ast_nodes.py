@@ -530,6 +530,23 @@ class ExtractSchema:
 
 
 @dataclass(frozen=True)
+class DescribeSchema:
+    """Describe: R ?.  Returns a relation of column statistics.
+
+    The result has one row per attribute in *source* with columns:
+        attr     str   attribute name
+        type     str   declared schema type
+        distinct int   number of distinct values
+        empty    int   count of empty strings / zeros / falses
+        min      str   formatted minimum value
+        max      str   formatted maximum value
+        sample   str   one example value (formatted)
+    """
+
+    source: RelExpr
+
+
+@dataclass(frozen=True)
 class RelationLiteral:
     """Inline relation literal: {header; row; row; ...}.
 
@@ -571,6 +588,7 @@ RelExpr = (
     | RelationLiteral
     | ApplySchema
     | ExtractSchema
+    | DescribeSchema
 )
 
 
