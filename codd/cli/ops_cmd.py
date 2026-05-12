@@ -9,8 +9,6 @@ _RELATIONAL = [
     ("#!", "Remove", "E #! emp_id"),
     ("*.", "Natural join", "E *. D"),
     ("*<", "Left join", "E *< D [col: 0]"),
-    ("*:", "Nest join", "E *: phones: Phone"),
-    ("<:", "Unnest", "E <: phones"),
     ("+:", "Extend", "E +: bonus: salary * 0.1"),
     ("=:", "Modify", "E =: salary: salary * 1.1"),
     ("@", "Rename", "E @ [pay salary]"),
@@ -19,10 +17,16 @@ _RELATIONAL = [
     ("&.", "Intersect", "E &. (D)"),
     ("/.", "Summarize", "E /. dept_id [n: #. avg: %. salary]  or  E /. [n: #.]"),
     ("/*", "Broadcast agg", "E /* dept_id [avg: %. salary]  or  E /* [total: +. salary]"),
-    ("/:", "Nest by", "E /: team: dept_id  or  E /: team: [dept_id role]"),
     ("/^", "Rank (dense)", "E /^ r: salary-"),
     ("/>", "Split (explode)", 'R /> tags ","  or  R /> [tag n]: tags ","'),
     ("::", "Apply schema", "R :: S  or  R ::"),
+]
+
+_NESTED = [
+    ("*:", "Nest join", "E *: phones: Phone"),
+    ("<:", "Unnest", "E <: phones"),
+    ("/:", "Nest by", "E /: team: dept_id  or  E /: team: [dept_id role]"),
+    ("n.", "Collect (aggregate)", "E /. dept_id [members: n. name]"),
 ]
 
 _DISPLAY = [
@@ -38,7 +42,6 @@ _AGGREGATES = [
     (">.", "Max", ">. salary"),
     ("<.", "Min", "<. salary"),
     ("%.", "Mean", "%. salary"),
-    ("n.", "Collect", "n. activity"),
     ("p.", "Percent", "p. salary ~ 1"),
 ]
 
@@ -347,6 +350,7 @@ def ops_output() -> str:
         ("Sources", _SOURCES),
         ("Relational", _RELATIONAL),
         ("Aggregates", _AGGREGATES),
+        ("Nested", _NESTED),
         ("Expressions", _EXPRESSIONS),
         ("Display", _DISPLAY),
         ("Other", _OTHER),
