@@ -20,7 +20,7 @@ _RELATIONAL = [
     ("/^", "Rank (dense)", "E /^ r: salary-"),
     ("/>", "Split (explode)", 'R /> tags ","  or  R /> [tag n]: tags ","'),
     ("::", "Apply schema", "R :: S  or  R ::"),
-    ("?.", "Describe columns", "R ?."),
+    ("?.", "Describe columns", 'R ?.  or  R ?. "full"'),
 ]
 
 _NESTED = [
@@ -324,7 +324,8 @@ and or not — Logical operators
   with the rest of the language — you can filter, sort, project the stats.
 
   Syntax:
-    R ?.
+    R ?.              Describe (str-inferred columns get blank min/max/sample)
+    R ?. "full"       Populate min/max/sample for every column
 
   Result columns:
     attr      str   attribute name
@@ -332,7 +333,8 @@ and or not — Logical operators
     inferred  str   narrowest type that fits all non-empty values
     distinct  int   number of distinct values
     pct       int   distinct as a percentage of row count (0-100)
-    empty     int   count of empty strings, zeros, or false values
+    empty     int   count of empty-string ("") values (zeros and False
+                    are real values, not empties)
     min       str   minimum value (formatted)
     max       str   maximum value (formatted)
     sample    str   one example value (formatted)
@@ -346,6 +348,7 @@ and or not — Logical operators
 
   Examples:
     R ?.                                       All columns described
+    R ?. "full"                                Include str min/max/sample
     R ?. $. [attr type inferred distinct pct empty min max sample]   Nice order
     R ?. ? type != inferred                    Columns worth retyping
     R ?. ? pct < 25                            Likely categorical columns

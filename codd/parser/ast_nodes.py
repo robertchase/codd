@@ -533,10 +533,17 @@ class ExtractSchema:
 class DescribeSchema:
     """Describe: R ?.  Returns a relation of column statistics.
 
+    By default (``R ?.``), min/max/sample are blanked for columns whose
+    inferred type is "str" — these are usually free-text columns where
+    lex min/max isn't informative.  Pass ``"full"`` (``R ?. "full"``)
+    to populate min/max/sample for every column.
+
     The result has one row per attribute in *source* with columns:
         attr     str   attribute name
         type     str   declared schema type
+        inferred str   narrowest type that fits all non-empty values
         distinct int   number of distinct values
+        pct      int   distinct as a percentage of row count
         empty    int   count of empty strings / zeros / falses
         min      str   formatted minimum value
         max      str   formatted maximum value
@@ -544,6 +551,7 @@ class DescribeSchema:
     """
 
     source: RelExpr
+    full: bool = False
 
 
 @dataclass(frozen=True)

@@ -321,7 +321,18 @@ class Parser:
                 left = self._parse_schema_op(left)
             elif tok.type == TokenType.QUESTION_DOT:
                 self._advance()  # consume ?.
-                left = ast.DescribeSchema(source=left)
+                full = False
+                # Optional keyword: ?. "full" populates min/max/sample for
+                # every column (including str-inferred ones).
+                if self._peek().type == TokenType.STRING:
+                    kw_tok = self._advance()
+                    if kw_tok.value != "full":
+                        raise ParseError(
+                            f"?. expects keyword \"full\", got "
+                            f"{kw_tok.value!r}", kw_tok,
+                        )
+                    full = True
+                left = ast.DescribeSchema(source=left, full=full)
             else:
                 break
         return left

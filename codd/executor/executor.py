@@ -833,6 +833,9 @@ class Executor:
         sample prefers a non-empty value when one is available.
         pct = round(distinct * 100 / row_count) — low values suggest a
         categorical column.
+
+        By default str-inferred columns get blank min/max/sample (lex min/max
+        is rarely useful for free text).  Pass "full" to populate them.
         """
         from codd.repl.formatter import format_value
         from codd.model.coerce import (
@@ -844,18 +847,20 @@ class Executor:
         attrs = sorted(source._attributes)
         row_count = len(source)
 
-        def _is_empty(v: object) -> bool:
-            return v == "" or v == 0 or v is False
+        def _is_missing(v: object) -> bool:
+            # Genuinely-absent values.  0 and False are real values; only
+            # an empty string (or None, defensively) is "missing".
+            return v == "" or v is None
 
         result_tuples: set[Tuple_] = set()
         for attr in attrs:
             values = [t[attr] for t in source if attr in t._data]
             distinct = len(set(values))
-            empty_count = sum(1 for v in values if _is_empty(v))
+            empty_count = sum(1 for v in values if _is_missing(v))
             inferred = infer_type_from_values(values)
 
-            # min/max over non-empty values, compared per inferred type.
-            non_empty = [v for v in values if not _is_empty(v)]
+            # min/max over present values, compared per inferred type.
+            non_empty = [v for v in values if not _is_missing(v)]
             if non_empty:
                 if inferred != "str":
                     try:
@@ -883,6 +888,11 @@ class Executor:
             else:
                 mn_s = mx_s = sample_s = ""
             pct = round(distinct * 100 / row_count) if row_count else 0
+            # Default behaviour blanks min/max/sample for str-inferred
+            # columns (where lex min/max is rarely informative).  Pass
+            # "full" to populate them for every column.
+            if not node.full and inferred == "str":
+                mn_s = mx_s = sample_s = ""
             result_tuples.add(Tuple_({
                 "attr": attr,
                 "type": schema.get(attr, "str"),

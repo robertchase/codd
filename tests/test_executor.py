@@ -2708,7 +2708,10 @@ class TestSchemaOps:
             assert t["y"] == 2.5
 
     def test_describe_basic(self) -> None:
-        """R ?. produces one row per attribute with stats."""
+        """R ?. produces one row per attribute with stats.
+
+        By default str-inferred columns get blank min/max; use "full" to see them.
+        """
         env = Environment()
         env.bind(
             "R",
@@ -2721,7 +2724,7 @@ class TestSchemaOps:
                 schema={"id": "int", "name": "str"},
             ),
         )
-        result = run("R ?.", env)
+        result = run('R ?. "full"', env)
         assert isinstance(result, Relation)
         rows = {t["attr"]: t for t in result}
         assert set(rows) == {"id", "name"}
@@ -2739,8 +2742,24 @@ class TestSchemaOps:
         assert rows["name"]["min"] == "Alice"
         assert rows["name"]["max"] == "Carol"
 
+    def test_describe_default_blanks_str_minmax(self) -> None:
+        """By default, str-inferred columns get blank min/max/sample."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id=1, name="Alice"), Tuple_(id=2, name="Bob"),
+        })))
+        result = run("R ?.", env)
+        rows = {t["attr"]: t for t in result}
+        # name infers as str → blanked
+        assert rows["name"]["min"] == ""
+        assert rows["name"]["max"] == ""
+        assert rows["name"]["sample"] == ""
+        # id infers as int → populated
+        assert rows["id"]["min"] == "1"
+        assert rows["id"]["max"] == "2"
+
     def test_describe_counts_empties(self) -> None:
-        """?. counts empty strings, zeros, and falses."""
+        """?. counts only "" as empty — 0 and False are real values."""
         env = Environment()
         env.bind(
             "R",
@@ -2753,10 +2772,10 @@ class TestSchemaOps:
         result = run("R ?.", env)
         rows = {t["attr"]: t for t in result}
         # Two unique tuples (the duplicate gets dedup'd by frozenset).
-        # s has "", "hi" → 1 empty.  n has 0, 5 → 1 zero.  b has False, True → 1 false.
+        # s has "", "hi" → 1 empty string.  n and b have no "" values.
         assert rows["s"]["empty"] == 1
-        assert rows["n"]["empty"] == 1
-        assert rows["b"]["empty"] == 1
+        assert rows["n"]["empty"] == 0
+        assert rows["b"]["empty"] == 0
 
     def test_describe_distinct_count(self) -> None:
         """distinct correctly counts unique values per column."""
@@ -2894,6 +2913,73 @@ class TestSchemaOps:
         })))
         result = run("R ?.", env)
         assert next(iter(result))["inferred"] == "date"
+
+    def test_describe_full_populates_str_minmax(self) -> None:
+        """?. "full" populates min/max/sample for str-inferred columns too."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id=1, name="Alice"),
+            Tuple_(id=2, name="Bob"),
+        })))
+        result = run('R ?. "full"', env)
+        rows = {t["attr"]: t for t in result}
+        # name now has lex min/max
+        assert rows["name"]["min"] == "Alice"
+        assert rows["name"]["max"] == "Bob"
+        assert rows["name"]["sample"] in ("Alice", "Bob")
+        # id values still present
+        assert rows["id"]["min"] == "1"
+        assert rows["id"]["max"] == "2"
+
+    def test_describe_distinct_etc_unaffected_by_full(self) -> None:
+        """distinct/empty/pct/inferred are the same regardless of the keyword."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(name="Alice"), Tuple_(name="Bob"),
+        })))
+        t_default = next(iter(run("R ?.", env)))
+        t_full = next(iter(run('R ?. "full"', env)))
+        for col in ("distinct", "empty", "inferred", "pct"):
+            assert t_default[col] == t_full[col]
+
+    def test_describe_invalid_keyword(self) -> None:
+        """Non-'full' keyword is a parse error."""
+        from codd.parser.parser import ParseError
+        env = Environment()
+        env.bind("R", Relation(frozenset({Tuple_(x=1)})))
+        with pytest.raises(ParseError, match="full"):
+            run('R ?. "verbose"', env)
+
+    def test_describe_inferred_zero_one_int_is_bool(self) -> None:
+        """Int columns containing only 0/1 infer as bool, not int."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id=1, flag=0), Tuple_(id=2, flag=1), Tuple_(id=3, flag=1),
+        })))
+        result = run("R ?.", env)
+        rows = {t["attr"]: t for t in result}
+        assert rows["flag"]["inferred"] == "bool"
+        # id has values 1, 2, 3 — not 0/1 only, so still int.
+        assert rows["id"]["inferred"] == "int"
+
+    def test_describe_inferred_zero_one_str_is_bool(self) -> None:
+        """String columns containing only "0"/"1" infer as bool, not int."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(flag="0"), Tuple_(flag="1"), Tuple_(flag="1"),
+        })))
+        result = run("R ?.", env)
+        assert next(iter(result))["inferred"] == "bool"
+
+    def test_describe_inferred_zero_only_is_bool(self) -> None:
+        """A column of only 0s (or only 1s) still infers as bool."""
+        env = Environment()
+        env.bind("R", Relation(frozenset({
+            Tuple_(id=1, flag=0), Tuple_(id=2, flag=0),
+        })))
+        result = run("R ?.", env)
+        rows = {t["attr"]: t for t in result}
+        assert rows["flag"]["inferred"] == "bool"
 
     def test_describe_inferred_mixed_stays_str(self) -> None:
         """When values don't all match a narrower type, inferred is str."""

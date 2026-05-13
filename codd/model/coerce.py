@@ -311,6 +311,9 @@ def infer_type_from_values(values: list[Value]) -> str:
         return "bool"
     # bool is a subclass of int — exclude with explicit check.
     if all(isinstance(v, int) and not isinstance(v, bool) for v in non_empty):
+        # 0/1-only int columns infer as bool.
+        if all(v in (0, 1) for v in non_empty):
+            return "bool"
         return "int"
     if all(isinstance(v, Decimal) for v in non_empty):
         return "decimal"
@@ -330,10 +333,11 @@ def infer_type_from_values(values: list[Value]) -> str:
 
     # All strings — try parsing in order of narrowness.
     if all(isinstance(v, str) for v in non_empty):
-        # int
+        # int (and 0/1-only → bool)
         try:
-            for v in non_empty:
-                int(v)
+            ints = [int(v) for v in non_empty]
+            if all(i in (0, 1) for i in ints):
+                return "bool"
             return "int"
         except (ValueError, TypeError):
             pass
