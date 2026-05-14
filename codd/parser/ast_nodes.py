@@ -449,6 +449,25 @@ class Rank:
 
 
 @dataclass(frozen=True)
+class Bucket:
+    """Bucket: /& name: key N or /& name: [key1 key2-] N.
+
+    Sorts by *keys*, then assigns each tuple a bucket number 1..N
+    using equal-frequency (quantile) binning.  Tied tuples — those
+    sharing a dense rank — always go in the same bucket, so the
+    operation is deterministic.
+
+    Bucket 1 is at the "front" of the sort: with a descending key,
+    the highest values land in bucket 1.
+    """
+
+    source: RelExpr
+    name: str
+    keys: tuple[SortKey, ...]
+    count: int
+
+
+@dataclass(frozen=True)
 class Split:
     """Split / explode.
 
@@ -588,6 +607,7 @@ RelExpr = (
     | NestBy
     | Sort
     | Rank
+    | Bucket
     | Split
     | OrderColumns
     | Take

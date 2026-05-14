@@ -113,6 +113,8 @@ class Executor:
             return self._eval_sort(node)
         if isinstance(node, ast.Rank):
             return self._eval_rank(node)
+        if isinstance(node, ast.Bucket):
+            return self._eval_bucket(node)
         if isinstance(node, ast.Split):
             return self._eval_split(node)
         if isinstance(node, ast.OrderColumns):
@@ -716,6 +718,90 @@ class Executor:
         )
         new_attrs = source._attributes | frozenset({node.name})
         new_schema = dict(source.schema)  # default fills in str for unset attrs
+        new_schema[node.name] = "int"
+        return Relation(
+            result_tuples, attributes=new_attrs, schema=new_schema
+        )
+
+    def _eval_bucket(self, node: ast.Bucket) -> Relation:
+        """Evaluate: source /& name: keys N.
+
+        Sorts by keys, then assigns each tuple a bucket number 1..N via
+        equal-frequency binning over the dense ranks.  Tied tuples (same
+        dense rank) always share a bucket so the operation is deterministic.
+        """
+        from codd.model.coerce import coerce_value, parse_type_string
+
+        source = self._as_relation(node.source)
+        if node.count <= 0:
+            raise ExecutionError(
+                f"/&: bucket count must be positive, got {node.count}"
+            )
+        if node.name in source.attributes:
+            raise ExecutionError(
+                f"/&: attribute {node.name!r} already exists "
+                f"(use #! to remove it first, or choose another name)"
+            )
+        for k in node.keys:
+            if k.attr not in source.attributes:
+                raise ExecutionError(
+                    f"/&: unknown key attribute {k.attr!r}"
+                )
+
+        # Schema-aware key coercion (same approach as /^).
+        schema = source.schema
+        key_types: list[str | None] = []
+        for k in node.keys:
+            raw_type = schema.get(k.attr, "str")
+            base_type, _ = parse_type_string(raw_type)
+            key_types.append(None if base_type == "in" else base_type)
+
+        def coerced_values(t: Tuple_) -> tuple:
+            parts = []
+            for k, ktype in zip(node.keys, key_types):
+                val = t[k.attr]
+                if ktype is not None:
+                    try:
+                        val = coerce_value(val, ktype)
+                    except Exception:
+                        pass
+                parts.append(val)
+            return tuple(parts)
+
+        def sort_order_key(raw_key: tuple) -> tuple:
+            parts = []
+            for val, k in zip(raw_key, node.keys):
+                if k.descending:
+                    if isinstance(val, (int, float, Decimal)):
+                        parts.append(-val)
+                    else:
+                        parts.append(_ReverseKey(val))
+                else:
+                    parts.append(val)
+            return tuple(parts)
+
+        # Build dense-rank map keyed by raw (pre-direction) tuples.
+        distinct_keys = sorted(
+            {coerced_values(t) for t in source}, key=sort_order_key
+        )
+        rank_of: dict[tuple, int] = {
+            k: i + 1 for i, k in enumerate(distinct_keys)
+        }
+
+        # Equal-frequency bucket assignment.  Each distinct rank gets
+        # exactly one bucket; tied rows share both rank and bucket.
+        total = len(distinct_keys)
+        N = node.count
+        bucket_of_rank: dict[int, int] = {}
+        for r in range(1, total + 1):
+            bucket_of_rank[r] = ((r - 1) * N) // total + 1 if total else 1
+
+        result_tuples = frozenset(
+            t.extend({node.name: bucket_of_rank[rank_of[coerced_values(t)]]})
+            for t in source
+        )
+        new_attrs = source._attributes | frozenset({node.name})
+        new_schema = dict(source.schema)
         new_schema[node.name] = "int"
         return Relation(
             result_tuples, attributes=new_attrs, schema=new_schema

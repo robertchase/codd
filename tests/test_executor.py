@@ -1801,6 +1801,126 @@ class TestRank:
         assert result.schema["r"] == "int"
 
 
+class TestBucket:
+    """Test /& (equal-frequency bucket) operator."""
+
+    def _ranked(self, num: int, schema: dict[str, str] | None = None) -> Relation:
+        return Relation(
+            frozenset({Tuple_(v=i) for i in range(1, num + 1)}),
+            schema=schema or {"v": "int"},
+        )
+
+    def test_quartiles_even_split(self) -> None:
+        """4 buckets across 8 distinct values: 2 per bucket."""
+        env = Environment()
+        env.bind("R", self._ranked(8))
+        result = run("R /& q: v 4", env)
+        by_v = {t["v"]: t["q"] for t in result}
+        # Ascending v, ascending bucket — 1,2 → q=1; 3,4 → q=2; ...
+        assert by_v == {1: 1, 2: 1, 3: 2, 4: 2, 5: 3, 6: 3, 7: 4, 8: 4}
+
+    def test_descending_puts_largest_in_bucket_1(self) -> None:
+        """With key-, the highest value goes in bucket 1."""
+        env = Environment()
+        env.bind("R", self._ranked(8))
+        result = run("R /& q: v- 4", env)
+        by_v = {t["v"]: t["q"] for t in result}
+        # 8 (highest) → q=1; 1 (lowest) → q=4
+        assert by_v[8] == 1
+        assert by_v[1] == 4
+
+    def test_ties_share_a_bucket(self) -> None:
+        """Tied values always end up in the same bucket."""
+        env = Environment()
+        env.bind(
+            "T",
+            Relation(
+                frozenset({
+                    Tuple_(id=1, score=100),
+                    Tuple_(id=2, score=100),
+                    Tuple_(id=3, score=80),
+                    Tuple_(id=4, score=80),
+                    Tuple_(id=5, score=50),
+                }),
+                schema={"id": "int", "score": "int"},
+            ),
+        )
+        result = run("T /& b: score- 3", env)
+        by_id = {t["id"]: t["b"] for t in result}
+        # Ties on score → same bucket.
+        assert by_id[1] == by_id[2]
+        assert by_id[3] == by_id[4]
+        # Descending: 100 in bucket 1, 80 in 2, 50 in 3.
+        assert by_id[1] == 1
+        assert by_id[3] == 2
+        assert by_id[5] == 3
+
+    def test_composite_key(self) -> None:
+        """Composite key works the same way."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(g="a", v=1), Tuple_(g="a", v=2),
+                    Tuple_(g="b", v=1), Tuple_(g="b", v=2),
+                }),
+                schema={"g": "str", "v": "int"},
+            ),
+        )
+        result = run("R /& q: [g v-] 2", env)
+        # 4 distinct (g, v-) keys: (a, 2), (a, 1), (b, 2), (b, 1).
+        # Buckets 1,2 split as 1,1,2,2.
+        by_key = {(t["g"], t["v"]): t["q"] for t in result}
+        assert by_key[("a", 2)] == 1
+        assert by_key[("a", 1)] == 1
+        assert by_key[("b", 2)] == 2
+        assert by_key[("b", 1)] == 2
+
+    def test_n_equals_1_all_in_one(self) -> None:
+        """N=1 puts every row in bucket 1."""
+        env = Environment()
+        env.bind("R", self._ranked(5))
+        result = run("R /& q: v 1", env)
+        assert {t["q"] for t in result} == {1}
+
+    def test_zero_count_errors(self) -> None:
+        """N=0 (or negative) is a runtime error."""
+        env = Environment()
+        env.bind("R", self._ranked(3))
+        with pytest.raises(ExecutionError, match="positive"):
+            run("R /& q: v 0", env)
+
+    def test_name_collision_errors(self) -> None:
+        """Bucket name colliding with an existing attribute errors."""
+        env = Environment()
+        env.bind("R", self._ranked(3))
+        with pytest.raises(ExecutionError, match="already exists"):
+            run("R /& v: v 2", env)
+
+    def test_unknown_key_errors(self) -> None:
+        """Bucketing by an unknown key errors."""
+        env = Environment()
+        env.bind("R", self._ranked(3))
+        with pytest.raises(ExecutionError, match="unknown key"):
+            run("R /& q: nope 2", env)
+
+    def test_added_column_has_int_schema(self) -> None:
+        """The bucket column is typed int in the result schema."""
+        env = Environment()
+        env.bind("R", self._ranked(3))
+        result = run("R /& q: v 2", env)
+        assert result.schema["q"] == "int"
+        assert result.schema["v"] == "int"
+
+    def test_empty_relation(self) -> None:
+        """Bucketing an empty relation yields an empty relation."""
+        result = run("i. 1 ? i < 0 /& q: i 4")
+        assert isinstance(result, Relation)
+        assert len(result) == 0
+        assert "q" in result.attributes
+
+
 class TestSplit:
     """Test /> (split/explode) operator."""
 

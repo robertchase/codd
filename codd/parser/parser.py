@@ -310,6 +310,8 @@ class Parser:
                 left = self._parse_order_columns(left)
             elif tok.type == TokenType.SLASH_CARET:
                 left = self._parse_rank(left)
+            elif tok.type == TokenType.SLASH_AMP:
+                left = self._parse_bucket(left)
             elif tok.type == TokenType.SLASH_GT:
                 left = self._parse_split(left)
             elif tok.type == TokenType.CARET:
@@ -523,6 +525,20 @@ class Parser:
         keys = self._parse_sort_key_list()
         return ast.Rank(
             source=source, name=name_tok.value, keys=tuple(keys)
+        )
+
+    def _parse_bucket(self, source: ast.RelExpr) -> ast.Bucket:
+        """Parse: /& name: key N  or  /& name: [key1 key2-] N."""
+        self._advance()  # consume /&
+        name_tok = self._expect(TokenType.IDENT)
+        self._expect(TokenType.COLON)
+        keys = self._parse_sort_key_list()
+        n_tok = self._expect(TokenType.INTEGER)
+        return ast.Bucket(
+            source=source,
+            name=name_tok.value,
+            keys=tuple(keys),
+            count=int(n_tok.value),
         )
 
     def _parse_split(self, source: ast.RelExpr) -> ast.Split:
