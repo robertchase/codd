@@ -179,7 +179,11 @@ class Executor:
         tuples = frozenset(
             Tuple_({node.name: i}) for i in range(start, start + count_val)
         )
-        return Relation(tuples, attributes=frozenset({node.name}))
+        return Relation(
+            tuples,
+            attributes=frozenset({node.name}),
+            schema={node.name: "int"},
+        )
 
     def _eval_relation_literal(self, node: ast.RelationLiteral) -> Relation:
         """Evaluate an inline relation literal."""
@@ -312,6 +316,47 @@ class Executor:
             rel._tuples, attributes=rel._attributes, schema=schema
         )
 
+    def _merge_inferred_schema(
+        self,
+        rel: Relation,
+        computations: tuple[ast.NamedExpr, ...],
+        skip: frozenset[str],
+    ) -> Relation:
+        """Update schema entries by inferring types from the new values.
+
+        For each computation whose name is not in *skip* (those handled
+        by a .as cast), inspect the Python types of the column's values
+        and update the schema entry if it doesn't match.
+
+        Only overrides plain built-in types (int, str, float, decimal,
+        date, bool).  Non-plain entries — decimal(N), in(R, a), and UDT
+        aliases — are preserved so validation still enforces them.
+        Mixed-type columns are left alone.
+        """
+        from codd.model.coerce import infer_python_type, BUILTIN_TYPES
+        updates: dict[str, str] = {}
+        for comp in computations:
+            if comp.name in skip:
+                continue
+            values = [t[comp.name] for t in rel if comp.name in t._data]
+            inferred = infer_python_type(values)
+            if inferred is None:
+                continue
+            current = rel.schema.get(comp.name)
+            # Only update plain built-in entries; preserve constraints
+            # and parameterised types so validation still runs.
+            if current not in BUILTIN_TYPES:
+                continue
+            if inferred != current:
+                updates[comp.name] = inferred
+        if not updates:
+            return rel
+        schema = dict(rel.schema)
+        schema.update(updates)
+        return Relation(
+            rel._tuples, attributes=rel._attributes, schema=schema
+        )
+
     def _eval_extend(self, node: ast.Extend) -> Relation:
         """Evaluate: source + computations."""
         source = self._as_relation(node.source)
@@ -324,7 +369,11 @@ class Executor:
             return result
 
         result = source.extend(compute, added_attrs=new_names)
-        result = self._merge_cast_schema(result, self._extract_cast_types(node.computations))
+        cast_types = self._extract_cast_types(node.computations)
+        result = self._merge_cast_schema(result, cast_types)
+        result = self._merge_inferred_schema(
+            result, node.computations, skip=frozenset(cast_types.keys())
+        )
         self._enforce_schema(result, changed_attrs=new_names)
         return result
 
@@ -340,7 +389,11 @@ class Executor:
             return result
 
         result = source.modify(compute)
-        result = self._merge_cast_schema(result, self._extract_cast_types(node.computations))
+        cast_types = self._extract_cast_types(node.computations)
+        result = self._merge_cast_schema(result, cast_types)
+        result = self._merge_inferred_schema(
+            result, node.computations, skip=frozenset(cast_types.keys())
+        )
         self._enforce_schema(result, changed_attrs=changed_names)
         return result
 

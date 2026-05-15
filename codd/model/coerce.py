@@ -292,6 +292,23 @@ def infer_type(value: Value) -> str:
     return "str"
 
 
+def infer_python_type(values: list[Value]) -> str | None:
+    """Infer the type name by examining the Python types of values.
+
+    Unlike infer_type_from_values, this does not try parsing strings or
+    treat 0/1-only ints as bool — it just reports what Python type the
+    values already have.  Returns None if the column is empty or mixed
+    (in which case the caller should leave the existing schema alone).
+    """
+    if not values:
+        return None
+    first_type = infer_type(values[0])
+    for v in values[1:]:
+        if infer_type(v) != first_type:
+            return None
+    return first_type
+
+
 def infer_type_from_values(values: list[Value]) -> str:
     """Infer the narrowest type that fits all non-empty values.
 

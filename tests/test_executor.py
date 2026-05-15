@@ -659,6 +659,17 @@ class TestIota:
         values = {t["i"] for t in result}
         assert values == {1, 2, 3, 4, 5}
 
+    def test_schema_is_int(self) -> None:
+        """i. attaches schema {name: int} so the column is typed."""
+        result = run("i. 5")
+        assert result.schema == {"i": "int"}
+
+    def test_sorts_numerically(self) -> None:
+        """Since i. has int schema, $ sorts numerically (not lex)."""
+        result = run("i. 11 $ i")
+        # 11 rows, ascending int: 1, 2, 3, ..., 11 (not 1, 10, 11, 2, ...)
+        assert [t["i"] for t in result] == list(range(1, 12))
+
     def test_named(self) -> None:
         """i. month: 3 produces a relation with attribute 'month'."""
         result = run("i. month: 3")
