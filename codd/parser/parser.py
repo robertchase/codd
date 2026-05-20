@@ -26,6 +26,24 @@ class ParseError(Exception):
         self.token = token
 
 
+def _render_tokens(tokens: list[Token]) -> str:
+    """Render a list of tokens back to a source-like string.
+
+    Whitespace is normalised to single spaces between tokens; string
+    literals are re-quoted with escapes for embedded quotes/backslashes.
+    The result re-parses to the same AST (round-trip safe) but won't
+    match the user's original spacing.
+    """
+    parts: list[str] = []
+    for t in tokens:
+        if t.type == TokenType.STRING:
+            escaped = t.value.replace("\\", "\\\\").replace('"', '\\"')
+            parts.append(f'"{escaped}"')
+        else:
+            parts.append(t.value)
+    return " ".join(parts)
+
+
 class Parser:
     """Recursive descent parser for the relational algebra."""
 
@@ -33,11 +51,14 @@ class Parser:
         self._tokens = tokens
         self._pos = 0
 
-    def parse(self) -> ast.RelExpr | ast.Assignment | ast.TypeAlias:
+    def parse(
+        self,
+    ) -> ast.RelExpr | ast.Assignment | ast.TypeAlias | ast.FunctionDef:
         """Parse the token stream into an AST.
 
         Checks for assignment (IDENT := expr) before parsing as expression.
-        A type alias (IDENT := type ...) is a special form of assignment.
+        A type alias (IDENT := type ...) and a function definition
+        (IDENT := fn ...) are special forms of assignment.
         """
         if (
             self._peek().type == TokenType.IDENT
@@ -52,8 +73,10 @@ class Parser:
             )
         return result
 
-    def _parse_assignment(self) -> ast.Assignment | ast.TypeAlias:
-        """Parse: name := expr  or  name := type <target>."""
+    def _parse_assignment(
+        self,
+    ) -> ast.Assignment | ast.TypeAlias | ast.FunctionDef:
+        """Parse: name := expr | name := type <target> | name := fn <body>."""
         name_tok = self._advance()  # consume IDENT
         self._advance()  # consume :=
 
@@ -73,6 +96,34 @@ class Parser:
                     "definition", self._peek()
                 )
             return ast.TypeAlias(name=name_tok.value, target_type=target)
+
+        # Detect `name := fn <body>` — function definition.  `fn` is a
+        # contextual keyword: special only immediately after :=.  The body
+        # is a postfix chain rooted at the implicit function input.
+        if (
+            self._peek().type == TokenType.IDENT
+            and self._peek().value == "fn"
+        ):
+            self._advance()  # consume 'fn'
+            body_start = self._pos  # snapshot for body-source rendering
+            body = self._parse_postfix_chain(ast.FnInput())
+            body_end = self._pos
+            if isinstance(body, ast.FnInput):
+                raise ParseError(
+                    "fn body must apply at least one operator to its input",
+                    self._peek(),
+                )
+            if self._peek().type != TokenType.EOF:
+                raise ParseError(
+                    f"Unexpected token {self._peek().value!r} after fn body",
+                    self._peek(),
+                )
+            body_source = _render_tokens(self._tokens[body_start:body_end])
+            return ast.FunctionDef(
+                name=name_tok.value,
+                body=body,
+                body_source=body_source,
+            )
 
         expr = self._parse_expr()
         if self._peek().type != TokenType.EOF:
@@ -319,6 +370,10 @@ class Parser:
             elif tok.type == TokenType.R_DOT:
                 self._advance()  # consume r.
                 left = ast.Rotate(source=left)
+            elif tok.type == TokenType.IDENT:
+                # Bare-juxtaposition function application: `R fname`.
+                self._advance()
+                left = ast.FunctionCall(source=left, name=tok.value)
             elif tok.type == TokenType.COLON_COLON:
                 left = self._parse_schema_op(left)
             elif tok.type == TokenType.QUESTION_DOT:

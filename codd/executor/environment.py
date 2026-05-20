@@ -13,6 +13,9 @@ class Environment:
         # User-defined type aliases: name -> target type string (e.g. "decimal(2)").
         # Separate namespace from relations.
         self._types: dict[str, str] = {}
+        # User-defined functions: name -> FunctionDef AST node.
+        # Separate namespace from relations and types.
+        self._functions: dict[str, object] = {}
 
     def bind(self, name: str, relation: Relation) -> None:
         """Bind a name to a relation."""
@@ -63,3 +66,23 @@ class Environment:
     def has_type(self, name: str) -> bool:
         """Check if a type alias is defined."""
         return name in self._types
+
+    # --- Function namespace ---
+
+    def bind_function(self, name: str, fn: object) -> None:
+        """Bind a user-defined function (a FunctionDef AST node)."""
+        self._functions[name] = fn
+
+    def lookup_function(self, name: str) -> object:
+        """Look up a user-defined function.  Raises KeyError if not defined."""
+        if name not in self._functions:
+            raise KeyError(f"Unknown function: {name!r}")
+        return self._functions[name]
+
+    def function_names(self) -> list[str]:
+        """Return all bound function names, sorted."""
+        return sorted(self._functions.keys())
+
+    def has_function(self, name: str) -> bool:
+        """Check if a function is defined."""
+        return name in self._functions

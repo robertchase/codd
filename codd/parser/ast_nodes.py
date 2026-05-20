@@ -585,6 +585,26 @@ class RelationLiteral:
     rows: tuple[tuple[str | int | float | bool, ...], ...]
 
 
+@dataclass(frozen=True)
+class FnInput:
+    """Placeholder for a function's input — the relation piped in at the
+    call site.  Only appears inside a FunctionDef body; resolved at call
+    time to the relation the function is applied to."""
+
+
+@dataclass(frozen=True)
+class FunctionCall:
+    """Apply a named function to a relation: source name.
+
+    Bare-juxtaposition application: an IDENT in postfix position is a
+    function call on whatever precedes it.  Resolved against the
+    environment's function namespace at execution time.
+    """
+
+    source: RelExpr
+    name: str
+
+
 # RelExpr is the union of all relational expression types
 RelExpr = (
     RelName
@@ -617,6 +637,8 @@ RelExpr = (
     | ApplySchema
     | ExtractSchema
     | DescribeSchema
+    | FnInput
+    | FunctionCall
 )
 
 
@@ -643,3 +665,21 @@ class TypeAlias:
 
     name: str
     target_type: str
+
+
+@dataclass(frozen=True)
+class FunctionDef:
+    """Function definition: name := fn <body>.
+
+    *body* is a postfix chain rooted at FnInput — a reusable, deferred
+    transformation applied to whatever relation precedes the function
+    name at a call site.  Binds in the environment's function namespace
+    (separate from relations and types).
+
+    *body_source* is a string rendering of the body tokens, suitable
+    for display via ``\\fn``.  It should re-parse to the same AST.
+    """
+
+    name: str
+    body: RelExpr
+    body_source: str = ""

@@ -26,6 +26,10 @@ class Executor:
 
     def __init__(self, env: Environment) -> None:
         self._env = env
+        # Stack of input relations for in-flight function calls (FnInput
+        # resolves to the top).  Parallel stack of names for cycle detection.
+        self._fn_input_stack: list[Relation] = []
+        self._fn_call_stack: list[str] = []
 
     @property
     def env(self) -> Environment:
@@ -45,6 +49,8 @@ class Executor:
                 return self._eval_assignment(node)
             if isinstance(node, ast.TypeAlias):
                 return self._eval_type_alias(node)
+            if isinstance(node, ast.FunctionDef):
+                return self._eval_function_def(node)
             return self._eval_rel(node)
         except ExecutionError:
             raise
@@ -66,6 +72,48 @@ class Executor:
         """Evaluate a type alias: name := type target."""
         self._env.bind_type(node.name, node.target_type)
         return None
+
+    def _eval_function_def(self, node: ast.FunctionDef) -> None:
+        """Evaluate a function definition: name := fn <body>."""
+        self._env.bind_function(node.name, node)
+        return None
+
+    def _eval_function_call(
+        self, node: ast.FunctionCall
+    ) -> Relation | list[Tuple_]:
+        """Evaluate: source name — apply a named function to source."""
+        try:
+            fn = self._env.lookup_function(node.name)
+        except KeyError:
+            raise ExecutionError(
+                f"Unknown function {node.name!r} "
+                f"(not defined with := fn)"
+            )
+        if node.name in self._fn_call_stack:
+            chain = " -> ".join(self._fn_call_stack + [node.name])
+            raise ExecutionError(f"Recursive function call: {chain}")
+
+        source = self._eval_rel(node.source)
+        if not isinstance(source, Relation):
+            raise ExecutionError(
+                f"Function {node.name!r} input must be a relation "
+                "(did a sort/take produce a list upstream?)"
+            )
+        self._fn_input_stack.append(source)
+        self._fn_call_stack.append(node.name)
+        try:
+            return self._eval_rel(fn.body)
+        finally:
+            self._fn_input_stack.pop()
+            self._fn_call_stack.pop()
+
+    def _eval_fn_input(self, node: ast.FnInput) -> Relation:
+        """Resolve FnInput to the current function's input relation."""
+        if not self._fn_input_stack:
+            raise ExecutionError(
+                "fn input referenced outside a function body"
+            )
+        return self._fn_input_stack[-1]
 
     def _eval_rel(self, node: ast.RelExpr) -> Relation | list[Tuple_]:
         """Evaluate a relational expression node."""
@@ -133,6 +181,10 @@ class Executor:
             return self._eval_extract_schema(node)
         if isinstance(node, ast.DescribeSchema):
             return self._eval_describe_schema(node)
+        if isinstance(node, ast.FnInput):
+            return self._eval_fn_input(node)
+        if isinstance(node, ast.FunctionCall):
+            return self._eval_function_call(node)
         raise ExecutionError(f"Unknown node type: {type(node).__name__}")
 
     def _as_relation(self, node: ast.RelExpr) -> Relation:

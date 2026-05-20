@@ -119,6 +119,8 @@ def _handle_command(line: str, env: Environment) -> None:
         _cmd_drop(args, env)
     elif cmd == "\\env":
         _cmd_env(env)
+    elif cmd == "\\fn":
+        _cmd_fn(args, env)
     elif cmd == "\\export":
         _cmd_export(args, env)
     elif cmd == "\\include":
@@ -441,3 +443,34 @@ def _cmd_env(env: Environment) -> None:
         print("Types:")
         for name in type_names:
             print(f"  {name} := type {env.lookup_type(name)}")
+    fn_names = env.function_names()
+    if fn_names:
+        print("Functions:")
+        for name in fn_names:
+            print(f"  {name} := fn ...")
+
+
+def _cmd_fn(args: list[str], env: Environment) -> None:
+    """Handle \\fn: show user-defined function bodies.
+
+    \\fn          List every defined function with its body.
+    \\fn name     Show one function's body.
+    """
+    if args:
+        name = args[0]
+        try:
+            fn = env.lookup_function(name)
+        except KeyError:
+            print(f"Error: unknown function: {name!r}")
+            return
+        body = getattr(fn, "body_source", "") or "..."
+        print(f"{name} := fn {body}")
+        return
+    names = env.function_names()
+    if not names:
+        print("(no functions defined)")
+        return
+    for name in names:
+        fn = env.lookup_function(name)
+        body = getattr(fn, "body_source", "") or "..."
+        print(f"{name} := fn {body}")

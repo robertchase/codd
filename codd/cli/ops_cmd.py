@@ -71,6 +71,8 @@ _SOURCES = [
 _OTHER = [
     (":=", "Assignment", "high := E ? salary > 70000"),
     (":= type", "Type alias", 'Money := type decimal(2)  or  Status := type in(S, n)'),
+    (":= fn", "Function def", 'active := fn ? status = "active"'),
+    ("fn apply", "Function call", "Orders active  or  Orders active top"),
 ]
 
 _HEADERS = ["Primitive", "Name", "Example"]
@@ -239,6 +241,56 @@ and or not — Logical operators
     E ? age .as Age > 18
 
   Cycles (A -> B -> A) raise an error when the alias is resolved.""",
+    ":= fn": """\
+:= fn — User-defined function (named, reusable chain)
+
+  Binds a name in the function namespace (separate from relations and
+  types) to a deferred postfix chain.  The body transforms an implicit
+  input — whatever relation precedes the function name at a call site.
+
+  Syntax:
+    name := fn <postfix chain>
+
+  Apply by bare juxtaposition, as if it were a built-in operator:
+    R name                 Apply function `name` to R
+    R name other ...       Functions compose left-to-right like operators
+
+  Examples:
+    active := fn ? status = "active"
+    big    := fn ? amount > 1000
+    Orders active big # [id amount]      Inline use
+    summary := fn active big # [id amount]   Compose into a new function
+    Orders summary
+
+  Notes:
+    - The body must apply at least one operator to its input; a bare
+      `fn` (empty body) or `fn SomeRelation` style source is rejected.
+    - A function is exactly as composable as its body: if the body ends
+      in $/^/$./r. it produces a list and must be last in a chain
+      (same rule as writing those operators inline).
+    - Unknown function name → runtime error.
+    - Recursive/cyclic definitions (a := fn b; b := fn a) are detected
+      and raise at call time.
+    - \\fn lists defined functions; \\fn name shows one function's body.
+    - v1 has no parameters; compose small functions instead.""",
+    "fn apply": """\
+fn apply — Calling a function
+
+  An IDENT in postfix position applies the named function to whatever
+  precedes it.  This is "bare juxtaposition" — functions read like
+  custom operators in the left-to-right chain.
+
+  Syntax:
+    R fname
+    R fname other            Chain multiple functions / operators
+
+  Examples:
+    Orders active            active(Orders)
+    Orders active big        big(active(Orders))
+    Orders active ? amount > 0   Mix functions and built-in operators
+
+  See ":= fn" for how to define them.  Unknown names raise at runtime;
+  they are resolved against the function namespace when the call runs.""",
     ".f": """\
 .f — Format string
 

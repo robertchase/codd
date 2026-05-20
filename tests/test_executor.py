@@ -2775,6 +2775,133 @@ class TestPercentAggregate:
                 assert t["pct"] == Decimal("0.2424")
 
 
+class TestFunctions:
+    """Test := fn definitions and bare-juxtaposition application."""
+
+    def test_define_and_apply(self) -> None:
+        """A function applies its body to the piped-in relation."""
+        env = _make_env()
+        run('engineers := fn ? role = "engineer"', env)
+        result = run("E engineers", env)
+        assert isinstance(result, Relation)
+        assert {t["name"] for t in result} == {"Alice", "Carol", "Dave", "Eve"}
+
+    def test_function_registered_in_namespace(self) -> None:
+        """fn definitions land in the function namespace, not relations."""
+        env = _make_env()
+        run("hi := fn ? salary > 70000", env)
+        assert env.has_function("hi")
+        assert "hi" not in env  # not a relation
+
+    def test_definition_returns_no_output(self) -> None:
+        """Defining a function produces no result value."""
+        env = _make_env()
+        result = run("f := fn ? salary > 0", env)
+        assert result is None
+
+    def test_inline_chaining_with_operators(self) -> None:
+        """Functions mix with built-in operators in a chain."""
+        env = _make_env()
+        run('eng := fn ? role = "engineer"', env)
+        result = run("E eng ? salary > 50000 # name", env)
+        assert {t["name"] for t in result} == {"Alice", "Carol", "Dave"}
+
+    def test_composition(self) -> None:
+        """A function body can call other functions."""
+        env = _make_env()
+        run('eng := fn ? role = "engineer"', env)
+        run("wellpaid := fn ? salary > 70000", env)
+        run("topeng := fn eng wellpaid # name", env)
+        result = run("E topeng", env)
+        assert {t["name"] for t in result} == {"Alice", "Dave"}
+
+    def test_terminal_function_returns_list(self) -> None:
+        """A body ending in $/^ yields a list (terminal)."""
+        env = _make_env()
+        run("top2 := fn $ salary- ^ 2", env)
+        result = run("E top2", env)
+        assert isinstance(result, list)
+        assert [t["name"] for t in result] == ["Dave", "Alice"]
+
+    def test_unknown_function_errors(self) -> None:
+        """Applying an undefined function raises a clear error."""
+        env = _make_env()
+        with pytest.raises(ExecutionError, match="Unknown function 'nope'"):
+            run("E nope", env)
+
+    def test_recursion_detected(self) -> None:
+        """Cyclic function definitions raise at call time."""
+        env = _make_env()
+        run("a := fn b", env)
+        run("b := fn a", env)
+        with pytest.raises(ExecutionError, match="Recursive function call"):
+            run("E a", env)
+
+    def test_self_recursion_detected(self) -> None:
+        """A function that calls itself is detected."""
+        env = _make_env()
+        run("loop := fn loop", env)
+        with pytest.raises(ExecutionError, match="Recursive function call"):
+            run("E loop", env)
+
+    def test_empty_body_is_parse_error(self) -> None:
+        """`name := fn` with no body is a parse error."""
+        from codd.parser.parser import ParseError
+        env = _make_env()
+        with pytest.raises(ParseError, match="fn body must apply"):
+            run("bad := fn", env)
+
+    def test_function_redefinition(self) -> None:
+        """Redefining a function uses the latest body."""
+        env = _make_env()
+        run("f := fn ? salary > 100000", env)
+        assert len(run("E f", env)) == 0
+        run("f := fn ? salary > 50000", env)
+        assert len(run("E f", env)) == 4
+
+    def test_assign_function_result(self) -> None:
+        """A function call can be the RHS of an assignment."""
+        env = _make_env()
+        run('eng := fn ? role = "engineer"', env)
+        run("X := E eng", env)
+        result = run("X # name", env)
+        assert {t["name"] for t in result} == {
+            "Alice", "Carol", "Dave", "Eve"
+        }
+
+    def test_function_using_global_relation(self) -> None:
+        """A function body may reference a global relation by name."""
+        env = _make_env()
+        run("withdept := fn *. D", env)
+        result = run("E withdept", env)
+        assert "dept_name" in result.attributes
+
+    def test_body_source_captured(self) -> None:
+        """FunctionDef.body_source captures the rendered body text."""
+        env = _make_env()
+        run('eng := fn ? role = "engineer"', env)
+        fn = env.lookup_function("eng")
+        # Strings get re-quoted; tokens are joined with spaces.
+        assert 'role' in fn.body_source
+        assert '"engineer"' in fn.body_source
+
+    def test_body_source_reparses(self) -> None:
+        """The body_source round-trips: re-parsing produces the same AST body."""
+        env = _make_env()
+        run("active := fn ? status = \"on\"", env)
+        fn = env.lookup_function("active")
+        # Build "x := fn <body_source>" and re-parse.
+        from codd.lexer.lexer import Lexer
+        from codd.parser.parser import Parser
+        tree = Parser(
+            Lexer(f"x := fn {fn.body_source}").tokenize()
+        ).parse()
+        from codd.parser import ast_nodes as ast
+        assert isinstance(tree, ast.FunctionDef)
+        # Same body shape (Filter rooted at FnInput here).
+        assert type(tree.body).__name__ == type(fn.body).__name__
+
+
 class TestSchemaOps:
     """Test :: (schema) operator."""
 
