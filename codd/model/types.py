@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Union
 
 # A Value can be a scalar or a nested Relation.
@@ -50,6 +50,44 @@ def _values_equal(a: Value, b: Value) -> bool:
         except Exception:
             return False
     return False
+
+
+def coarse_match_key(value: Value) -> tuple:
+    """A hashable bucket key for hash-join matching.
+
+    Guarantees: if ``_values_equal(a, b)`` then ``coarse_match_key(a) ==
+    coarse_match_key(b)``.  The reverse need NOT hold — the key may
+    over-group values that aren't actually equal (e.g. the strings "1"
+    and "1.0", which _values_equal treats as distinct).  Callers must
+    therefore verify candidates in the same bucket with the exact
+    ``Tuple_.matches`` / ``_values_equal`` before accepting a match.
+
+    Buckets:
+      ("n", Decimal)  numerics, bools, and numeric-looking strings
+      ("d", date)     dates and ISO-date strings
+      ("s", str)      everything else
+    """
+    if isinstance(value, bool):
+        return ("n", Decimal(int(value)))
+    if isinstance(value, (int, float, Decimal)):
+        try:
+            return ("n", Decimal(str(value)))
+        except (InvalidOperation, ValueError):
+            return ("s", str(value))
+    if isinstance(value, datetime.date):
+        return ("d", value)
+    if isinstance(value, str):
+        try:
+            return ("n", Decimal(value))
+        except (InvalidOperation, ValueError):
+            pass
+        try:
+            return ("d", str_to_date(value))
+        except (ValueError, TypeError):
+            pass
+        return ("s", value)
+    # Nested relations or anything else: fall back to identity-by-repr.
+    return ("s", repr(value))
 
 
 class Tuple_:

@@ -124,15 +124,59 @@ class Relation:
         return Relation(filtered, attributes=self._attributes, schema=self._schema)
 
     def natural_join(self, other: Relation) -> Relation:
-        """Natural join: combine on shared attributes (*)."""
+        """Natural join: combine on shared attributes (*).
+
+        Uses a hash join keyed by a coarse match-key over the shared
+        attributes — O(n + m) instead of the naive O(n * m) nested loop.
+        Candidates sharing a bucket are verified with the exact,
+        coercion-aware ``Tuple_.matches`` so behaviour is unchanged.
+        """
         result_attrs = self._attributes | other._attributes
+        shared = self._attributes & other._attributes
+        schema = self._merge_schema(other)
+
+        if not shared:
+            # No join key — full cartesian product; no matching cost.
+            result = {t1.merge(t2)
+                      for t1 in self._tuples for t2 in other._tuples}
+            return Relation(frozenset(result), attributes=result_attrs,
+                            schema=schema)
+
+        index = self._build_join_index(other, shared)
         result: set[Tuple_] = set()
         for t1 in self._tuples:
-            for t2 in other._tuples:
+            for t2 in self._probe_join_index(index, t1, shared):
                 if t1.matches(t2):
                     result.add(t1.merge(t2))
         return Relation(frozenset(result), attributes=result_attrs,
-                        schema=self._merge_schema(other))
+                        schema=schema)
+
+    @staticmethod
+    def _build_join_index(
+        other: Relation, shared: frozenset[str]
+    ) -> dict[tuple, list[Tuple_]]:
+        """Index *other*'s tuples by their coarse match-key over *shared*."""
+        from codd.model.types import coarse_match_key
+
+        keys = sorted(shared)
+        index: dict[tuple, list[Tuple_]] = {}
+        for t in other._tuples:
+            k = tuple(coarse_match_key(t.get(a)) for a in keys)
+            index.setdefault(k, []).append(t)
+        return index
+
+    @staticmethod
+    def _probe_join_index(
+        index: dict[tuple, list[Tuple_]],
+        t: Tuple_,
+        shared: frozenset[str],
+    ) -> list[Tuple_]:
+        """Return candidate tuples from *index* matching *t* on *shared*."""
+        from codd.model.types import coarse_match_key
+
+        keys = sorted(shared)
+        k = tuple(coarse_match_key(t.get(a)) for a in keys)
+        return index.get(k, ())
 
     def nest_join(self, other: Relation, nest_name: str) -> Relation:
         """Nest join: like natural join but nests unmatched as empty sets (*:).
@@ -145,10 +189,17 @@ class Relation:
         non_shared = other._attributes - shared
         result_attrs = self._attributes | frozenset({nest_name})
 
+        index = (
+            self._build_join_index(other, shared) if shared else None
+        )
         result: set[Tuple_] = set()
         for t1 in self._tuples:
             matches: set[Tuple_] = set()
-            for t2 in other._tuples:
+            if shared:
+                candidates = self._probe_join_index(index, t1, shared)
+            else:
+                candidates = other._tuples
+            for t2 in candidates:
                 if t1.matches(t2):
                     matches.add(t2.project(non_shared))
             nested = Relation(frozenset(matches), attributes=non_shared)

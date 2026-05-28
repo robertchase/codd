@@ -299,10 +299,19 @@ class Executor:
         for comp in node.defaults:
             defaults[comp.name] = self._eval_expr(comp.expr, Tuple_({}), left)
 
+        # Hash join keyed by a coarse match-key over the shared attributes
+        # (O(n + m) instead of nested-loop O(n * m)).  Candidates in a
+        # bucket are verified with the exact coercion-aware matches().
+        index = left._build_join_index(right, shared) if shared else None
+
         result: set[Tuple_] = set()
         for t_left in left:
             matched = False
-            for t_right in right:
+            if shared:
+                candidates = left._probe_join_index(index, t_left, shared)
+            else:
+                candidates = right._tuples
+            for t_right in candidates:
                 if t_left.matches(t_right):
                     # t_right.merge(t_left): left wins for shared attrs,
                     # preserving the left side's types (e.g. str vs int).

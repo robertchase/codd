@@ -222,6 +222,52 @@ class TestRelation:
             else:
                 assert t["dept_name"] == "Sales"
 
+    def test_natural_join_no_shared_attrs_is_cartesian(self) -> None:
+        """With no shared attribute, natural join is the cartesian product."""
+        a = Relation(frozenset({Tuple_(x=1), Tuple_(x=2)}))
+        b = Relation(frozenset({Tuple_(y="p"), Tuple_(y="q")}))
+        result = a.natural_join(b)
+        assert len(result) == 4
+        assert {(t["x"], t["y"]) for t in result} == {
+            (1, "p"), (1, "q"), (2, "p"), (2, "q")
+        }
+
+    def test_natural_join_coercion_str_int(self) -> None:
+        """Hash join still matches str keys against int keys (coercion)."""
+        left = Relation(frozenset({
+            Tuple_(id="1", a="x"), Tuple_(id="2", a="y"),
+        }))
+        right = Relation(frozenset({
+            Tuple_(id=1, b="p"), Tuple_(id=2, b="q"),
+        }))
+        result = left.natural_join(right)
+        assert len(result) == 2
+        by_a = {t["a"]: t["b"] for t in result}
+        assert by_a == {"x": "p", "y": "q"}
+
+    def test_natural_join_non_transitive_no_false_match(self) -> None:
+        """"1" and "1.0" as strings must NOT match (verified, not just bucketed).
+
+        Both land in the same coarse numeric bucket, but _values_equal
+        treats two strings with raw ==, so they are distinct.  The hash
+        join must verify and reject this pairing.
+        """
+        left = Relation(frozenset({Tuple_(k="1", a="L")}))
+        right = Relation(frozenset({Tuple_(k="1.0", b="R")}))
+        result = left.natural_join(right)
+        assert len(result) == 0
+
+    def test_natural_join_large_is_correct(self) -> None:
+        """A large join returns exactly the matching rows."""
+        left = Relation(frozenset({Tuple_(k=i, a=i) for i in range(2000)}))
+        right = Relation(frozenset({Tuple_(k=i, b=i * 2) for i in range(1000, 3000)}))
+        result = left.natural_join(right)
+        # Overlap is k in [1000, 2000): 1000 rows.
+        assert len(result) == 1000
+        for t in result:
+            assert 1000 <= t["k"] < 2000
+            assert t["b"] == t["k"] * 2
+
     def test_nest_join(self) -> None:
         """Nest join produces relation-valued attribute."""
         e = self._employees()
