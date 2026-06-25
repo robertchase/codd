@@ -75,6 +75,18 @@ _OTHER = [
     ("fn apply", "Function call", "Orders active  or  Orders active top"),
 ]
 
+_COMMANDS = [
+    ("\\load", "Load relation", "\\load orders.csv  or  \\load - ord"),
+    ("\\save", "Save workspace", "\\save session.codd"),
+    ("\\drop", "Drop relation", "\\drop tmp"),
+    ("\\env", "Show env", "\\env"),
+    ("\\export", "Export to CSV", "\\export out.csv E # name"),
+    ("\\include", "Include script", "\\include helpers.codd"),
+    ("\\fn", "Show fn body", "\\fn  or  \\fn active"),
+    ("\\ops", "Help reference", "\\ops  or  \\ops *."),
+    ("\\quit", "Exit REPL", "\\quit  (also \\q)"),
+]
+
 _HEADERS = ["Primitive", "Name", "Example"]
 
 
@@ -1153,7 +1165,147 @@ r. — Rotate (vertical display)
       or .as casts a value); UDT references in schemas don't have to
       be defined before declaration, only before use.
     - Cycles (A → B → A) raise at resolution time.""",
+    "\\load": """\
+\\load — Load relation(s) into the environment
+
+  Syntax:
+    \\load                              Load built-in sample data
+                                        (E, D, Phone, ContractorPay)
+    \\load file [name] [options...]     Load a CSV (or .codd workspace)
+    \\load - [name] [options...]        Read CSV from stdin
+
+  Positional:
+    file    Path to a .csv or .codd workspace, or - for stdin
+    name    Optional alias (defaults to file stem, or "stdin" for -)
+
+  Schema:
+    :: SchemaName                       Apply a schema relation already
+                                        in the environment
+
+  Generated-column options:
+    --genkey                            Add int key column "{name}_id"
+    --genkey=Name                       ... named "Name_id"
+    +key=Col                            Add int key column "Col"
+    +uuid=Col                           Random UUID v4 string per row
+    +hash=Col                           Deterministic content hash
+                                        (SHA-256, first 16 hex chars)
+
+  Examples:
+    \\load                              Sample data
+    \\load orders.csv                   → relation "orders"
+    \\load orders.csv ord               → relation "ord"
+    \\load - data                       Read stdin → "data"
+    \\load orders.csv :: OrderSchema    Apply typed schema
+    \\load orders.csv +key=oid          Add int key "oid"
+    \\load orders.csv +hash=fp          Add content fingerprint
+    \\load orders.csv ord +uuid=uid :: OrderSchema
+
+  Workspace files (.codd from \\save) restore an environment; the
+  options above are rejected for them — just `\\load saved.codd`.
+
+  In -f scripts, auto-stdin load is suppressed; use `\\load -`
+  explicitly.""",
+    "\\save": """\
+\\save — Save the current environment to a workspace file
+
+  Syntax:
+    \\save                Save to the most recent save path
+    \\save file           Save to file
+
+  Writes relations and their schemas to a .codd workspace file that
+  `\\load` can restore.  Subsequent `\\save` with no argument reuses
+  the last path used in this session.
+
+  Examples:
+    \\save session.codd
+    \\save                Re-save to the same path""",
+    "\\drop": """\
+\\drop — Remove a relation from the environment
+
+  Syntax:
+    \\drop name           Unbind the relation called `name`
+
+  Only relations; types and functions stay.  Errors if `name` isn't
+  bound.
+
+  Example:
+    \\drop tmp""",
+    "\\env": """\
+\\env — Show the current environment
+
+  Syntax:
+    \\env
+
+  Lists three groups, when present:
+    Relations — name, row count, attributes
+    Types     — UDT aliases (name := type target)
+    Functions — defined function names (use \\fn to see bodies)""",
+    "\\export": """\
+\\export — Write a query result to a CSV file
+
+  Syntax:
+    \\export file <expression>
+
+  Evaluates the expression against the current environment and writes
+  the result as CSV.  Works for relations and ordered arrays (sort/take
+  results).  Errors if the expression yields a scalar.
+
+  Examples:
+    \\export out.csv E # name
+    \\export top.csv E $ salary- ^ 10""",
+    "\\include": """\
+\\include — Run another codd file in the current environment
+
+  Syntax:
+    \\include file
+
+  Reads the file and executes each statement in the current environment
+  as if you'd typed them.  Useful for sharing helper definitions
+  (functions, type aliases, schemas) across scripts.
+
+  Paths resolve against the current working directory (like \\load),
+  not the including file's directory.  Cycle detection prevents
+  infinite \\include loops.
+
+  Example:
+    \\include helpers.codd
+    \\include ~/codd/lib/types.codd""",
+    "\\fn": """\
+\\fn — Show user-defined function bodies
+
+  Syntax:
+    \\fn                  List every defined function with its body
+    \\fn name             Show one function's body
+
+  The body is rendered from the captured tokens — whitespace is
+  normalised but it re-parses to the same definition.  See `:= fn`
+  for the definition syntax and `fn apply` for calling.""",
+    "\\ops": """\
+\\ops — Operator and command reference
+
+  Syntax:
+    \\ops                 Print the whole operator/command table
+    \\ops name            Print detailed help for one operator or command
+
+  For backslash commands the leading slash is optional in the lookup:
+  `\\ops \\load` and `\\ops load` both work.
+
+  Examples:
+    \\ops
+    \\ops *.              Detail for natural join
+    \\ops .r              Detail for regex replace
+    \\ops := fn           Detail for function definition
+    \\ops \\load           Detail for the load command
+    \\ops include         Same as \\ops \\include""",
+    "\\quit": """\
+\\quit — Exit the REPL
+
+  Syntax:
+    \\quit                Exit (alias: \\q)
+
+  No-op outside the REPL.""",
 }
+_DETAIL["\\q"] = _DETAIL["\\quit"]
 _DETAIL["!=~"] = _DETAIL["=~"]
 for _op in ("!=", "<", ">", "<=", ">="):
     _DETAIL[_op] = _DETAIL["="]
@@ -1176,6 +1328,7 @@ def ops_output() -> str:
         ("Expressions", _EXPRESSIONS),
         ("Display", _DISPLAY),
         ("Other", _OTHER),
+        ("Commands", _COMMANDS),
     ]
     parts: list[str] = []
     for title, rows in sections:
@@ -1185,5 +1338,14 @@ def ops_output() -> str:
 
 
 def ops_detail(op: str) -> str | None:
-    """Return detailed help for a specific operator, or None if not found."""
-    return _DETAIL.get(op)
+    """Return detailed help for a specific operator, or None if not found.
+
+    REPL commands can be looked up with or without their leading backslash
+    (``\\load`` and ``load`` both resolve to the same entry).
+    """
+    if op in _DETAIL:
+        return _DETAIL[op]
+    # Accept "load" as shorthand for "\load".
+    if "\\" + op in _DETAIL:
+        return _DETAIL["\\" + op]
+    return None
