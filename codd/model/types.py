@@ -65,22 +65,35 @@ def coarse_match_key(value: Value) -> tuple:
     Buckets:
       ("n", Decimal)  numerics, bools, and numeric-looking strings
       ("d", date)     dates and ISO-date strings
-      ("s", str)      everything else
+      ("s", str)      everything else (incl. NaNs and non-parseable text)
+
+    NaNs (signaling or quiet) are routed to the ("s", ...) bucket
+    because Python refuses to hash them and because NaN never equals
+    NaN under _values_equal anyway — they should land in their own
+    inert bucket where nothing matches.
     """
+    def _num_or_str(d: Decimal, raw: str) -> tuple:
+        if d.is_nan():
+            return ("s", raw)
+        return ("n", d)
+
     if isinstance(value, bool):
         return ("n", Decimal(int(value)))
     if isinstance(value, (int, float, Decimal)):
         try:
-            return ("n", Decimal(str(value)))
+            d = Decimal(str(value))
         except (InvalidOperation, ValueError):
             return ("s", str(value))
+        return _num_or_str(d, str(value))
     if isinstance(value, datetime.date):
         return ("d", value)
     if isinstance(value, str):
         try:
-            return ("n", Decimal(value))
+            d = Decimal(value)
         except (InvalidOperation, ValueError):
-            pass
+            d = None
+        if d is not None:
+            return _num_or_str(d, value)
         try:
             return ("d", str_to_date(value))
         except (ValueError, TypeError):

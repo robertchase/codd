@@ -257,6 +257,45 @@ class TestRelation:
         result = left.natural_join(right)
         assert len(result) == 0
 
+    def test_natural_join_nan_keys_do_not_crash(self) -> None:
+        """Decimal NaN / signaling-NaN join keys must not crash hash build."""
+        from decimal import Decimal
+        # Signaling and quiet NaNs via Decimal-from-string.
+        left = Relation(frozenset({
+            Tuple_(k="sNaN", a="L1"),
+            Tuple_(k="NaN", a="L2"),
+            Tuple_(k="1", a="L3"),
+        }))
+        right = Relation(frozenset({
+            Tuple_(k="sNaN", b="R1"),
+            Tuple_(k="NaN", b="R2"),
+            Tuple_(k="1", b="R3"),
+        }))
+        # Must not raise.
+        result = left.natural_join(right)
+        # Strings "sNaN" and "NaN" are equal to themselves via raw == so
+        # they DO match between the two sides; "1" matches "1".
+        # NaN-as-Decimal is unhashable, but as raw strings == works fine.
+        assert {t["a"] for t in result} == {"L1", "L2", "L3"}
+
+    def test_natural_join_decimal_nan_values(self) -> None:
+        """Actual Decimal('NaN') values are handled (do not crash, do not match)."""
+        from decimal import Decimal
+        nan = Decimal("NaN")
+        left = Relation(frozenset({
+            Tuple_(k=nan, a="L"), Tuple_(k=Decimal("1"), a="L1"),
+        }))
+        right = Relation(frozenset({
+            Tuple_(k=nan, b="R"), Tuple_(k=Decimal("1"), b="R1"),
+        }))
+        # Must not raise.  NaN != NaN under _values_equal, so NaN rows don't match.
+        result = left.natural_join(right)
+        # Only the (1, 1) pair matches.
+        names = {(t["a"], t["b"]) for t in result}
+        assert ("L1", "R1") in names
+        # No NaN match.
+        assert ("L", "R") not in names
+
     def test_natural_join_large_is_correct(self) -> None:
         """A large join returns exactly the matching rows."""
         left = Relation(frozenset({Tuple_(k=i, a=i) for i in range(2000)}))
