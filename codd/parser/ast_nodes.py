@@ -577,12 +577,14 @@ class DescribeSchema:
 class RelationLiteral:
     """Inline relation literal: {header; row; row; ...}.
 
-    Header is a tuple of attribute names.
-    Each row is a tuple of literal values (str, int, float, bool).
+    Header is a tuple of attribute names.  Each row cell is either a
+    literal value (str, int, float, bool) or an AST expression node
+    that the executor will evaluate at runtime (and unwrap to scalar
+    if it returns a 1x1 relation).
     """
 
     attributes: tuple[str, ...]
-    rows: tuple[tuple[str | int | float | bool, ...], ...]
+    rows: tuple[tuple[object, ...], ...]
 
 
 @dataclass(frozen=True)

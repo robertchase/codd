@@ -281,14 +281,23 @@ class Parser:
 
     def _parse_literal_row(
         self, expected_cols: int
-    ) -> list[str | int | float | bool]:
-        """Parse a single row of literal values."""
-        values: list[str | int | float | bool] = []
+    ) -> list[object]:
+        """Parse a single row of literal values or (expr) cells.
+
+        Cells are either bare literals (str/int/float/bool, with -INT
+        / -FLOAT for negatives) or parenthesized expressions that the
+        executor evaluates at runtime (and unwraps 1x1 relation results
+        to scalars).
+        """
+        values: list[object] = []
         while (
             self._peek().type in self._LITERAL_VALUE_TYPES
             or self._peek().type == TokenType.MINUS
+            or self._peek().type == TokenType.LPAREN
         ):
-            if self._peek().type == TokenType.MINUS:
+            if self._peek().type == TokenType.LPAREN:
+                values.append(self._parse_value_expr())
+            elif self._peek().type == TokenType.MINUS:
                 self._advance()  # consume -
                 tok = self._peek()
                 if tok.type == TokenType.INTEGER:

@@ -851,6 +851,42 @@ class TestRelationLiteral:
         assert len(result) == 0
         assert result.attributes == frozenset({"x"})
 
+    def test_scalar_expression_cell(self) -> None:
+        """A row cell can be a parenthesized scalar expression.
+
+        codd is left-to-right with no precedence, so (1 + 2 * 3) = 9.
+        """
+        result = run("{x; (1 + 2 * 3)}")
+        assert isinstance(result, Relation)
+        assert next(iter(result))["x"] == 9
+
+    def test_subquery_cell_unwraps_1x1(self) -> None:
+        """A 1x1 subquery in a row cell unwraps to a scalar."""
+        env = _make_env()
+        result = run("{maxpay; (E /. >. salary)}", env)
+        assert next(iter(result))["maxpay"] == 90000
+
+    def test_mixed_literal_and_expr_cells(self) -> None:
+        """Literals and expression cells can share a row."""
+        env = _make_env()
+        result = run('{label maxpay floor; "top" (E /. >. salary) 0}', env)
+        t = next(iter(result))
+        assert t["label"] == "top"
+        assert t["maxpay"] == 90000
+        assert t["floor"] == 0
+
+    def test_multi_row_subquery_in_cell_errors(self) -> None:
+        """A subquery returning multiple rows can't be a scalar cell."""
+        env = _make_env()
+        with pytest.raises(ExecutionError, match="(?i)exactly 1 tuple"):
+            run("{x; (E # name)}", env)
+
+    def test_multi_column_subquery_in_cell_errors(self) -> None:
+        """A subquery returning multiple columns can't be a scalar cell."""
+        env = _make_env()
+        with pytest.raises(ExecutionError, match="(?i)exactly 1 attribute"):
+            run("{x; (E # [name salary])}", env)
+
     def test_negative_values(self) -> None:
         """Negative numbers work."""
         result = run("{x; -5; -10}")

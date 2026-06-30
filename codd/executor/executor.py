@@ -238,12 +238,27 @@ class Executor:
         )
 
     def _eval_relation_literal(self, node: ast.RelationLiteral) -> Relation:
-        """Evaluate an inline relation literal."""
+        """Evaluate an inline relation literal.
+
+        Row cells that are plain Python values are used as-is; anything
+        else is treated as an AST expression and evaluated in an empty
+        tuple/source context.  Subquery results are unwrapped to scalars
+        (1x1) by the standard ``_eval_expr`` path; multi-row or multi-
+        column subqueries error there.
+        """
         attrs = node.attributes
-        tuples = frozenset(
-            Tuple_(dict(zip(attrs, row))) for row in node.rows
-        )
-        return Relation(tuples, attributes=frozenset(attrs))
+        result: set[Tuple_] = set()
+        for row in node.rows:
+            cells: list[Value] = []
+            for v in row:
+                if isinstance(v, (str, int, float, bool, Decimal, datetime.date)):
+                    cells.append(v)
+                else:
+                    cells.append(self._eval_expr(
+                        v, Tuple_({}), Relation(frozenset())
+                    ))
+            result.add(Tuple_(dict(zip(attrs, cells))))
+        return Relation(frozenset(result), attributes=frozenset(attrs))
 
     def _eval_rel_name(self, node: ast.RelName) -> Relation:
         """Look up a named relation in the environment."""
