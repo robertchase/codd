@@ -343,12 +343,15 @@ def _load_workspace_file(
     """Load a .codd workspace file into the environment."""
     global _last_save_path
     try:
-        relations = load_workspace(path)
-        for name, rel in relations.items():
-            env.bind(name, rel)
+        ws = load_workspace(path)
+        ws.bind_into(env)
         if not quiet:
-            names = sorted(relations.keys())
-            print(f"Loaded workspace: {', '.join(names)}")
+            parts = [f"Loaded workspace: {', '.join(sorted(ws.relations))}"]
+            if ws.types:
+                parts.append(f"types: {', '.join(sorted(ws.types))}")
+            if ws.functions:
+                parts.append(f"functions: {', '.join(sorted(ws.functions))}")
+            print("; ".join(parts))
         _last_save_path = path
     except Exception as e:
         print(f"Error loading workspace {path}: {e}")
@@ -450,6 +453,14 @@ def _cmd_env(env: Environment) -> None:
             print(f"  {name} := fn ...")
 
 
+def _render_fn_def(name: str, fn: object) -> str:
+    """Render a FunctionDef as a re-parseable definition line."""
+    body = getattr(fn, "body_source", "") or "..."
+    params = getattr(fn, "params", ())
+    sig = f"{name}({' '.join(params)})" if params else name
+    return f"{sig} := fn {body}"
+
+
 def _cmd_fn(args: list[str], env: Environment) -> None:
     """Handle \\fn: show user-defined function bodies.
 
@@ -463,14 +474,11 @@ def _cmd_fn(args: list[str], env: Environment) -> None:
         except KeyError:
             print(f"Error: unknown function: {name!r}")
             return
-        body = getattr(fn, "body_source", "") or "..."
-        print(f"{name} := fn {body}")
+        print(_render_fn_def(name, fn))
         return
     names = env.function_names()
     if not names:
         print("(no functions defined)")
         return
     for name in names:
-        fn = env.lookup_function(name)
-        body = getattr(fn, "body_source", "") or "..."
-        print(f"{name} := fn {body}")
+        print(_render_fn_def(name, env.lookup_function(name)))

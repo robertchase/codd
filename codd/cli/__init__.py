@@ -467,7 +467,7 @@ def _run_script_command(
 ) -> None:
     """Handle a backslash command inside a -f script or -e expression.
 
-    Supports \\load, \\export, and \\include.  Other commands are ignored
+    Supports \\load, \\save, \\export, and \\include.  Other commands are ignored
     with a warning.  *quiet* suppresses success messages; defaults to True
     for -f scripts, pass False for interactive -e use.
 
@@ -483,6 +483,10 @@ def _run_script_command(
         from codd.repl.repl import _cmd_load
 
         _cmd_load(args, env, quiet=quiet)
+    elif cmd == "\\save":
+        from codd.repl.repl import _cmd_save
+
+        _cmd_save(args, env)
     elif cmd == "\\export":
         from codd.repl.repl import _cmd_export
 

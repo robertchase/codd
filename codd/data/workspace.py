@@ -13,7 +13,8 @@ from codd.model.relation import Relation
 from codd.model.types import Tuple_, Value
 
 # Workspace file format version.
-WORKSPACE_VERSION = 1
+# v1: relations only.  v2: adds "types" (UDT aliases) and "functions".
+WORKSPACE_VERSION = 2
 
 # Type tag strings used in the serialized format.
 _TYPE_STR = "str"
@@ -26,25 +27,107 @@ _TYPE_DATE = "date"
 
 
 def save_workspace(env: Environment, path: Path) -> None:
-    """Serialize all relations in the environment to a .codd JSON file."""
+    """Serialize the environment (relations, types, functions) to a .codd file.
+
+    Written atomically: to a temp file in the same directory, then renamed.
+    """
     relations: dict[str, Any] = {}
     for name in env.names():
         rel = env.lookup(name)
         relations[name] = _serialize_relation(rel)
 
-    doc = {"version": WORKSPACE_VERSION, "relations": relations}
-    path.write_text(json.dumps(doc, indent=2) + "\n")
+    types = {name: env.lookup_type(name) for name in env.type_names()}
+
+    functions: dict[str, Any] = {}
+    for name in env.function_names():
+        fn = env.lookup_function(name)
+        functions[name] = {
+            "params": list(getattr(fn, "params", ())),
+            "body": getattr(fn, "body_source", ""),
+        }
+
+    doc = {
+        "version": WORKSPACE_VERSION,
+        "relations": relations,
+        "types": types,
+        "functions": functions,
+    }
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(doc, indent=2) + "\n")
+    tmp.replace(path)
 
 
-def load_workspace(path: Path) -> dict[str, Relation]:
-    """Deserialize a .codd workspace file into a dict of named Relations."""
+def load_workspace(path: Path) -> "Workspace":
+    """Deserialize a .codd workspace file.
+
+    Accepts v1 (relations only) and v2 (relations + types + functions).
+    Function bodies are re-parsed from their stored source; a body that
+    no longer parses raises ValueError naming the function.
+    """
     doc = json.loads(path.read_text())
     _validate_workspace(doc, path)
 
-    result: dict[str, Relation] = {}
+    relations: dict[str, Relation] = {}
     for name, rel_data in doc["relations"].items():
-        result[name] = _deserialize_relation(rel_data)
-    return result
+        relations[name] = _deserialize_relation(rel_data)
+
+    types: dict[str, str] = dict(doc.get("types", {}))
+
+    functions: dict[str, Any] = {}
+    for name, spec in doc.get("functions", {}).items():
+        functions[name] = _parse_function(
+            name, spec.get("params", []), spec.get("body", ""), path
+        )
+
+    return Workspace(relations=relations, types=types, functions=functions)
+
+
+class Workspace:
+    """A deserialized workspace: relations, type aliases, functions."""
+
+    def __init__(
+        self,
+        relations: dict[str, Relation],
+        types: dict[str, str],
+        functions: dict[str, Any],
+    ) -> None:
+        self.relations = relations
+        self.types = types
+        self.functions = functions
+
+    def bind_into(self, env: Environment) -> None:
+        """Bind everything in this workspace into *env*."""
+        for name, rel in self.relations.items():
+            env.bind(name, rel)
+        for name, target in self.types.items():
+            env.bind_type(name, target)
+        for name, fn in self.functions.items():
+            env.bind_function(name, fn)
+
+
+def _parse_function(
+    name: str, params: list[str], body: str, path: Path
+) -> Any:
+    """Re-parse a stored function definition into a FunctionDef node."""
+    # Local imports avoid a hard parser dependency at module import time.
+    from codd.lexer.lexer import Lexer
+    from codd.parser.parser import Parser
+    from codd.parser import ast_nodes as ast
+
+    sig = f"{name}({' '.join(params)})" if params else name
+    source = f"{sig} := fn {body}"
+    try:
+        node = Parser(Lexer(source).tokenize()).parse()
+    except Exception as e:
+        raise ValueError(
+            f"Workspace {path}: function {name!r} failed to re-parse: {e}"
+        ) from e
+    if not isinstance(node, ast.FunctionDef):
+        raise ValueError(
+            f"Workspace {path}: function {name!r} did not parse to a "
+            "function definition"
+        )
+    return node
 
 
 def is_workspace_file(path: Path) -> bool:
@@ -64,7 +147,7 @@ def _validate_workspace(doc: Any, path: Path) -> None:
     """Validate workspace document structure."""
     if not isinstance(doc, dict):
         raise ValueError(f"Invalid workspace file: {path}")
-    if doc.get("version") != WORKSPACE_VERSION:
+    if doc.get("version") not in (1, 2):
         raise ValueError(
             f"Unsupported workspace version {doc.get('version')} in {path}"
         )

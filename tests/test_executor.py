@@ -2921,6 +2921,88 @@ class TestFunctions:
         assert 'role' in fn.body_source
         assert '"engineer"' in fn.body_source
 
+    def test_param_in_take(self) -> None:
+        """A parameter can be the count of ^ (take)."""
+        env = _make_env()
+        run("top(n) := fn $ salary- ^ n", env)
+        result = run("E top(2)", env)
+        assert [t["name"] for t in result] == ["Dave", "Alice"]
+
+    def test_param_in_comparison(self) -> None:
+        """A parameter works on the RHS of a filter comparison."""
+        env = _make_env()
+        run("over(t) := fn ? salary > t", env)
+        result = run("E over(70000)", env)
+        assert {t["name"] for t in result} == {"Alice", "Dave"}
+
+    def test_param_in_bucket_count(self) -> None:
+        """A parameter can be the N of /& (bucket)."""
+        env = _make_env()
+        run("tiles(n) := fn /& q: salary- n", env)
+        result = run("E tiles(2)", env)
+        qs = {t["q"] for t in result}
+        assert qs == {1, 2}
+
+    def test_multiple_params(self) -> None:
+        """Multiple parameters bind positionally."""
+        env = _make_env()
+        run("band(lo hi) := fn ? salary > lo ? salary < hi", env)
+        result = run("E band(50000 70000)", env)
+        assert {t["name"] for t in result} == {"Bob", "Carol"}
+
+    def test_param_passthrough_nested_call(self) -> None:
+        """An outer function can pass its parameter to an inner one."""
+        env = _make_env()
+        run("over(t) := fn ? salary > t", env)
+        run("outer(m) := fn over(m)", env)
+        result = run("E outer(79000)", env)
+        assert {t["name"] for t in result} == {"Alice", "Dave"}
+
+    def test_subquery_argument(self) -> None:
+        """A 1x1 subquery works as a call argument."""
+        env = _make_env()
+        run("over(t) := fn ? salary > t", env)
+        result = run("E over((E /. %. salary))", env)
+        # Mean salary is 66000; Alice and Dave are above it.
+        assert {t["name"] for t in result} == {"Alice", "Dave"}
+
+    def test_param_shadows_attribute(self) -> None:
+        """A parameter named like an attribute shadows it in the body."""
+        env = _make_env()
+        run("shadow(salary) := fn ? name = salary", env)
+        result = run('E shadow("Bob")', env)
+        assert {t["name"] for t in result} == {"Bob"}
+
+    def test_arity_mismatch_errors(self) -> None:
+        """Wrong argument count raises with expected/actual."""
+        env = _make_env()
+        run("top(n) := fn $ salary- ^ n", env)
+        with pytest.raises(ExecutionError, match="expects 1 argument"):
+            run("E top", env)
+        with pytest.raises(ExecutionError, match="expects 1 argument"):
+            run("E top(1 2)", env)
+
+    def test_args_to_parameterless_fn_errors(self) -> None:
+        """Passing args to a parameterless function errors."""
+        env = _make_env()
+        run('eng := fn ? role = "engineer"', env)
+        with pytest.raises(ExecutionError, match="expects 0 argument"):
+            run("E eng(5)", env)
+
+    def test_duplicate_param_is_parse_error(self) -> None:
+        """Duplicate parameter names are rejected at parse time."""
+        from codd.parser.parser import ParseError
+        env = _make_env()
+        with pytest.raises(ParseError, match="Duplicate parameter"):
+            run("f(a a) := fn ? x > a", env)
+
+    def test_params_on_non_fn_is_parse_error(self) -> None:
+        """A parameter list on a plain assignment is rejected."""
+        from codd.parser.parser import ParseError
+        env = _make_env()
+        with pytest.raises(ParseError, match="only supported for fn"):
+            run("f(a) := E ? salary > a", env)
+
     def test_body_source_reparses(self) -> None:
         """The body_source round-trips: re-parsing produces the same AST body."""
         env = _make_env()

@@ -50,6 +50,9 @@ class Parser:
     def __init__(self, tokens: list[Token]) -> None:
         self._tokens = tokens
         self._pos = 0
+        # Parameter names in scope while parsing a fn body.  A bare IDENT
+        # matching one of these parses as ParamRef instead of AttrRef.
+        self._fn_params: frozenset[str] = frozenset()
 
     def parse(
         self,
@@ -65,6 +68,8 @@ class Parser:
             and self._peek(1).type == TokenType.COLON_EQ
         ):
             return self._parse_assignment()
+        if self._looks_like_param_def():
+            return self._parse_assignment()
 
         result = self._parse_expr()
         if self._peek().type != TokenType.EOF:
@@ -73,12 +78,57 @@ class Parser:
             )
         return result
 
+    def _looks_like_param_def(self) -> bool:
+        """Detect `name(p1 p2) := ...` — a parameterised definition.
+
+        Bounded lookahead: IDENT LPAREN (IDENT|COMMA)* RPAREN COLON_EQ.
+        The := after the closing paren is what disambiguates from an
+        expression starting with a relation name.
+        """
+        if (
+            self._peek().type != TokenType.IDENT
+            or self._peek(1).type != TokenType.LPAREN
+        ):
+            return False
+        i = 2
+        while self._peek(i).type in (TokenType.IDENT, TokenType.COMMA):
+            i += 1
+        return (
+            self._peek(i).type == TokenType.RPAREN
+            and self._peek(i + 1).type == TokenType.COLON_EQ
+        )
+
     def _parse_assignment(
         self,
     ) -> ast.Assignment | ast.TypeAlias | ast.FunctionDef:
-        """Parse: name := expr | name := type <target> | name := fn <body>."""
+        """Parse: name := expr | name := type <target> | name := fn <body>
+        | name(p1 p2) := fn <body>."""
         name_tok = self._advance()  # consume IDENT
+
+        # Optional parameter list — only legal for fn definitions.
+        params: list[str] = []
+        if self._peek().type == TokenType.LPAREN:
+            self._advance()  # consume (
+            while self._peek().type in (TokenType.IDENT, TokenType.COMMA):
+                tok = self._advance()
+                if tok.type == TokenType.IDENT:
+                    if tok.value in params:
+                        raise ParseError(
+                            f"Duplicate parameter name {tok.value!r}", tok
+                        )
+                    params.append(tok.value)
+            self._expect(TokenType.RPAREN)
+
         self._advance()  # consume :=
+
+        if params and not (
+            self._peek().type == TokenType.IDENT
+            and self._peek().value == "fn"
+        ):
+            raise ParseError(
+                "Parameters are only supported for fn definitions "
+                "(name(p1 p2) := fn ...)", self._peek(),
+            )
 
         # Detect `name := type <target>` — type alias.  The `type` keyword
         # is contextual: treated specially only when followed by an IDENT
@@ -106,7 +156,12 @@ class Parser:
         ):
             self._advance()  # consume 'fn'
             body_start = self._pos  # snapshot for body-source rendering
-            body = self._parse_postfix_chain(ast.FnInput())
+            saved_params = self._fn_params
+            self._fn_params = frozenset(params)
+            try:
+                body = self._parse_postfix_chain(ast.FnInput())
+            finally:
+                self._fn_params = saved_params
             body_end = self._pos
             if isinstance(body, ast.FnInput):
                 raise ParseError(
@@ -123,6 +178,7 @@ class Parser:
                 name=name_tok.value,
                 body=body,
                 body_source=body_source,
+                params=tuple(params),
             )
 
         expr = self._parse_expr()
@@ -380,9 +436,21 @@ class Parser:
                 self._advance()  # consume r.
                 left = ast.Rotate(source=left)
             elif tok.type == TokenType.IDENT:
-                # Bare-juxtaposition function application: `R fname`.
+                # Bare-juxtaposition function application: `R fname` or
+                # `R fname(arg1 arg2)`.
                 self._advance()
-                left = ast.FunctionCall(source=left, name=tok.value)
+                args: list[ast.Expr] = []
+                if self._peek().type == TokenType.LPAREN:
+                    self._advance()  # consume (
+                    while self._peek().type != TokenType.RPAREN:
+                        if self._peek().type == TokenType.COMMA:
+                            self._advance()
+                            continue
+                        args.append(self._parse_value_expr())
+                    self._expect(TokenType.RPAREN)
+                left = ast.FunctionCall(
+                    source=left, name=tok.value, args=tuple(args)
+                )
             elif tok.type == TokenType.COLON_COLON:
                 left = self._parse_schema_op(left)
             elif tok.type == TokenType.QUESTION_DOT:
@@ -592,17 +660,26 @@ class Parser:
         )
 
     def _parse_bucket(self, source: ast.RelExpr) -> ast.Bucket:
-        """Parse: /& name: key N  or  /& name: [key1 key2-] N."""
+        """Parse: /& name: key N  or  /& name: [key1 key2-] N.
+
+        N is an int literal, or a param inside a fn body.
+        """
         self._advance()  # consume /&
         name_tok = self._expect(TokenType.IDENT)
         self._expect(TokenType.COLON)
         keys = self._parse_sort_key_list()
-        n_tok = self._expect(TokenType.INTEGER)
+        count: int | ast.ParamRef
+        tok = self._peek()
+        if tok.type == TokenType.IDENT and tok.value in self._fn_params:
+            self._advance()
+            count = ast.ParamRef(name=tok.value)
+        else:
+            count = int(self._expect(TokenType.INTEGER).value)
         return ast.Bucket(
             source=source,
             name=name_tok.value,
             keys=tuple(keys),
-            count=int(n_tok.value),
+            count=count,
         )
 
     def _parse_split(self, source: ast.RelExpr) -> ast.Split:
@@ -662,8 +739,12 @@ class Parser:
         return ast.OrderColumns(source=source, columns=columns)
 
     def _parse_take(self, source: ast.RelExpr) -> ast.Take:
-        """Parse: ^ N."""
+        """Parse: ^ N  (N is an int literal, or a param inside a fn body)."""
         self._advance()  # consume ^
+        tok = self._peek()
+        if tok.type == TokenType.IDENT and tok.value in self._fn_params:
+            self._advance()
+            return ast.Take(source=source, count=ast.ParamRef(name=tok.value))
         tok = self._expect(TokenType.INTEGER)
         return ast.Take(source=source, count=int(tok.value))
 
@@ -988,6 +1069,9 @@ class Parser:
             self._expect(TokenType.RPAREN)
             return ast.SubqueryExpr(query=query)
         if tok.type == TokenType.IDENT:
+            if tok.value in self._fn_params:
+                self._advance()
+                return ast.ParamRef(name=tok.value)
             return self._parse_attr_ref()
         raise ParseError(f"Expected value, got {tok.value!r}", tok)
 
@@ -1208,6 +1292,9 @@ class Parser:
         if tok.type in self._AGG_TOKENS:
             return self._parse_aggregate_call()
         if tok.type == TokenType.IDENT:
+            if tok.value in self._fn_params:
+                self._advance()
+                return ast.ParamRef(name=tok.value)
             return self._parse_attr_ref()
         if tok.type == TokenType.LPAREN:
             self._advance()

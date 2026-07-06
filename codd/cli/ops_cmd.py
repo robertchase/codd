@@ -262,17 +262,31 @@ and or not — Logical operators
 
   Syntax:
     name := fn <postfix chain>
+    name(p1 p2) := fn <postfix chain>     Parameterized
 
   Apply by bare juxtaposition, as if it were a built-in operator:
     R name                 Apply function `name` to R
+    R name(arg ...)        With arguments (scalars, evaluated per call)
     R name other ...       Functions compose left-to-right like operators
 
   Examples:
     active := fn ? status = "active"
-    big    := fn ? amount > 1000
-    Orders active big # [id amount]      Inline use
-    summary := fn active big # [id amount]   Compose into a new function
-    Orders summary
+    top(n) := fn $ amount- ^ n
+    over(t) := fn ? amount > t
+    band(lo hi) := fn ? amount > lo ? amount < hi
+    Orders active top(5)                 Inline use
+    Orders over((Orders /. %. amount))   Subquery argument
+    summary := fn active over(100)       Compose into a new function
+
+  Parameters:
+    - Inside the body, a bare name matching a declared parameter is a
+      parameter reference — it shadows any same-named attribute (in
+      scalar positions).
+    - Valid wherever a scalar goes: comparisons, +: expressions,
+      the N of ^ (take) and /& (bucket), i. counts, call arguments
+      of nested functions.
+    - Arguments are evaluated once per call in the caller's context
+      (constants, arithmetic, 1x1 subqueries) — not per tuple.
 
   Notes:
     - The body must apply at least one operator to its input; a bare
@@ -284,7 +298,8 @@ and or not — Logical operators
     - Recursive/cyclic definitions (a := fn b; b := fn a) are detected
       and raise at call time.
     - \\fn lists defined functions; \\fn name shows one function's body.
-    - v1 has no parameters; compose small functions instead.""",
+    - Functions (and type aliases) are persisted by \\save and restored
+      by \\load of a workspace file.""",
     "fn apply": """\
 fn apply — Calling a function
 
@@ -294,11 +309,13 @@ fn apply — Calling a function
 
   Syntax:
     R fname
-    R fname other            Chain multiple functions / operators
+    R fname(arg ...)          With arguments (space or comma separated)
+    R fname other             Chain multiple functions / operators
 
   Examples:
-    Orders active            active(Orders)
-    Orders active big        big(active(Orders))
+    Orders active             active(Orders)
+    Orders top(5)             top(Orders, 5)
+    Orders active big         big(active(Orders))
     Orders active ? amount > 0   Mix functions and built-in operators
 
   See ":= fn" for how to define them.  Unknown names raise at runtime;
@@ -1212,9 +1229,10 @@ r. — Rotate (vertical display)
     \\save                Save to the most recent save path
     \\save file           Save to file
 
-  Writes relations and their schemas to a .codd workspace file that
-  `\\load` can restore.  Subsequent `\\save` with no argument reuses
-  the last path used in this session.
+  Writes relations (with schemas), type aliases, and user-defined
+  functions to a .codd workspace file that `\\load` can restore.
+  The write is atomic (temp file + rename).  Subsequent `\\save`
+  with no argument reuses the last path used in this session.
 
   Examples:
     \\save session.codd

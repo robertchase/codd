@@ -305,6 +305,28 @@ class TestScriptCommands:
         assert "1" in result.output
         assert "2" in result.output
 
+    def test_save_in_script_persists_functions(self, tmp_path: Path) -> None:
+        """\\save works in -f scripts; a second session restores functions."""
+        ws = tmp_path / "session.codd"
+        script1 = tmp_path / "one.codd"
+        script1.write_text(
+            "top(n) := fn $ x- ^ n\n"
+            "R := {x; 1; 5; 3}\n"
+            f"\\save {ws}\n"
+        )
+        script2 = tmp_path / "two.codd"
+        script2.write_text(
+            f"\\load {ws}\n"
+            "R top(1)\n"
+        )
+        runner = CliRunner()
+        r1 = runner.invoke(main, ["-f", str(script1)])
+        assert r1.exit_code == 0, r1.output
+        assert ws.exists()
+        r2 = runner.invoke(main, ["-f", str(script2)])
+        assert r2.exit_code == 0, r2.output
+        assert "5" in r2.output
+
     def test_export_in_script(self, tmp_path: Path) -> None:
         """\\export works inside a -f script."""
         out_file = tmp_path / "out.csv"

@@ -27,9 +27,11 @@ class Executor:
     def __init__(self, env: Environment) -> None:
         self._env = env
         # Stack of input relations for in-flight function calls (FnInput
-        # resolves to the top).  Parallel stack of names for cycle detection.
+        # resolves to the top).  Parallel stacks of names (cycle detection)
+        # and parameter frames (ParamRef resolves against the top frame).
         self._fn_input_stack: list[Relation] = []
         self._fn_call_stack: list[str] = []
+        self._fn_param_stack: list[dict[str, Value]] = []
 
     @property
     def env(self) -> Environment:
@@ -81,7 +83,7 @@ class Executor:
     def _eval_function_call(
         self, node: ast.FunctionCall
     ) -> Relation | list[Tuple_]:
-        """Evaluate: source name — apply a named function to source."""
+        """Evaluate: source name[(args)] — apply a named function to source."""
         try:
             fn = self._env.lookup_function(node.name)
         except KeyError:
@@ -93,6 +95,21 @@ class Executor:
             chain = " -> ".join(self._fn_call_stack + [node.name])
             raise ExecutionError(f"Recursive function call: {chain}")
 
+        params: tuple[str, ...] = getattr(fn, "params", ())
+        if len(node.args) != len(params):
+            plist = f"({' '.join(params)})" if params else "(no parameters)"
+            raise ExecutionError(
+                f"Function {node.name!r} expects {len(params)} argument(s) "
+                f"{plist}, got {len(node.args)}"
+            )
+
+        # Evaluate args in the CALLER's context (its param frame, if any,
+        # is still on top) so params can be passed through nested calls.
+        empty = Relation(frozenset())
+        arg_vals = [
+            self._eval_expr(a, Tuple_({}), empty) for a in node.args
+        ]
+
         source = self._eval_rel(node.source)
         if not isinstance(source, Relation):
             raise ExecutionError(
@@ -101,11 +118,13 @@ class Executor:
             )
         self._fn_input_stack.append(source)
         self._fn_call_stack.append(node.name)
+        self._fn_param_stack.append(dict(zip(params, arg_vals)))
         try:
             return self._eval_rel(fn.body)
         finally:
             self._fn_input_stack.pop()
             self._fn_call_stack.pop()
+            self._fn_param_stack.pop()
 
     def _eval_fn_input(self, node: ast.FnInput) -> Relation:
         """Resolve FnInput to the current function's input relation."""
@@ -114,6 +133,20 @@ class Executor:
                 "fn input referenced outside a function body"
             )
         return self._fn_input_stack[-1]
+
+    def _resolve_param(self, name: str) -> Value:
+        """Resolve a function parameter against the current call frame."""
+        if not self._fn_param_stack:
+            raise ExecutionError(
+                f"parameter {name!r} referenced outside a function call"
+            )
+        frame = self._fn_param_stack[-1]
+        if name not in frame:
+            raise ExecutionError(
+                f"unknown parameter {name!r} in function "
+                f"{self._fn_call_stack[-1]!r}"
+            )
+        return frame[name]
 
     def _eval_rel(self, node: ast.RelExpr) -> Relation | list[Tuple_]:
         """Evaluate a relational expression node."""
@@ -665,6 +698,8 @@ class Executor:
             return expr.value
         if isinstance(expr, ast.BoolLiteral):
             return expr.value
+        if isinstance(expr, ast.ParamRef):
+            return self._resolve_param(expr.name)
         if isinstance(expr, ast.AggregateCall):
             if expr.func == "p.":
                 attr_name = expr.arg.parts[0] if expr.arg else None
@@ -862,9 +897,10 @@ class Executor:
         from codd.model.coerce import coerce_value, parse_type_string
 
         source = self._as_relation(node.source)
-        if node.count <= 0:
+        count = self._resolve_count(node.count, "/&")
+        if count <= 0:
             raise ExecutionError(
-                f"/&: bucket count must be positive, got {node.count}"
+                f"/&: bucket count must be positive, got {count}"
             )
         if node.name in source.attributes:
             raise ExecutionError(
@@ -920,7 +956,7 @@ class Executor:
         # Equal-frequency bucket assignment.  Each distinct rank gets
         # exactly one bucket; tied rows share both rank and bucket.
         total = len(distinct_keys)
-        N = node.count
+        N = count
         bucket_of_rank: dict[int, int] = {}
         for r in range(1, total + 1):
             bucket_of_rank[r] = ((r - 1) * N) // total + 1 if total else 1
@@ -1173,12 +1209,25 @@ class Executor:
 
     def _eval_take(self, node: ast.Take) -> list[Tuple_]:
         """Evaluate: source ^ N."""
+        count = self._resolve_count(node.count, "^")
         source = self._eval_rel(node.source)
         if isinstance(source, Relation):
-            return list(source)[: node.count]
+            return list(source)[:count]
         if isinstance(source, list):
-            return source[: node.count]
+            return source[:count]
         raise ExecutionError("^ (take) requires a relation or sorted array")
+
+    def _resolve_count(self, count: "int | ast.ParamRef", op: str) -> int:
+        """Resolve a literal-or-param count to a positive int."""
+        if isinstance(count, int):
+            return count
+        val = self._resolve_param(count.name)
+        if not isinstance(val, int) or isinstance(val, bool):
+            raise ExecutionError(
+                f"{op}: count parameter {count.name!r} must be an integer, "
+                f"got {val!r}"
+            )
+        return val
 
     # --- Expression evaluation ---
 
@@ -1197,6 +1246,8 @@ class Executor:
             return expr.value
         if isinstance(expr, ast.BoolLiteral):
             return expr.value
+        if isinstance(expr, ast.ParamRef):
+            return self._resolve_param(expr.name)
         if isinstance(expr, ast.AttrRef):
             return self._eval_attr_ref(expr, t)
         if isinstance(expr, ast.BinOp):

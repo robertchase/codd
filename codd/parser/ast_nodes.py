@@ -173,6 +173,20 @@ class TypeCast:
     target_type: str
 
 
+@dataclass(frozen=True)
+class ParamRef:
+    """Reference to a function parameter inside a fn body.
+
+    Recognised at parse time: while a parameterised fn body is being
+    parsed, a bare IDENT matching a declared parameter name becomes a
+    ParamRef instead of an AttrRef.  Resolved at call time against the
+    executor's parameter frame.  Params shadow same-named attributes
+    within the body (in scalar positions).
+    """
+
+    name: str
+
+
 # Expr is the union of all expression types
 Expr = (
     IntLiteral
@@ -192,6 +206,7 @@ Expr = (
     | DateOp
     | FormatStr
     | TypeCast
+    | ParamRef
 )
 
 
@@ -464,7 +479,7 @@ class Bucket:
     source: RelExpr
     name: str
     keys: tuple[SortKey, ...]
-    count: int
+    count: "int | ParamRef"
 
 
 @dataclass(frozen=True)
@@ -505,10 +520,13 @@ class OrderColumns:
 
 @dataclass(frozen=True)
 class Take:
-    """Take: ^ N (follows Sort)."""
+    """Take: ^ N (follows Sort).
+
+    count is an int literal, or a ParamRef inside a fn body.
+    """
 
     source: RelExpr
-    count: int
+    count: "int | ParamRef"
 
 
 @dataclass(frozen=True)
@@ -596,15 +614,19 @@ class FnInput:
 
 @dataclass(frozen=True)
 class FunctionCall:
-    """Apply a named function to a relation: source name.
+    """Apply a named function to a relation: source name  or  source name(args).
 
     Bare-juxtaposition application: an IDENT in postfix position is a
     function call on whatever precedes it.  Resolved against the
     environment's function namespace at execution time.
+
+    *args* are scalar expressions evaluated once per call (in the
+    caller's context) and bound to the function's declared parameters.
     """
 
     source: RelExpr
     name: str
+    args: tuple["Expr", ...] = ()
 
 
 # RelExpr is the union of all relational expression types
@@ -671,17 +693,23 @@ class TypeAlias:
 
 @dataclass(frozen=True)
 class FunctionDef:
-    """Function definition: name := fn <body>.
+    """Function definition: name := fn <body>  or  name(p1 p2) := fn <body>.
 
     *body* is a postfix chain rooted at FnInput — a reusable, deferred
     transformation applied to whatever relation precedes the function
     name at a call site.  Binds in the environment's function namespace
     (separate from relations and types).
 
+    *params* are the declared parameter names; inside the body a bare
+    IDENT matching one parses as ParamRef (shadowing attributes in
+    scalar positions).
+
     *body_source* is a string rendering of the body tokens, suitable
-    for display via ``\\fn``.  It should re-parse to the same AST.
+    for display via ``\\fn`` and workspace persistence.  Together with
+    *params* it re-parses to the same definition.
     """
 
     name: str
     body: RelExpr
     body_source: str = ""
+    params: tuple[str, ...] = ()
