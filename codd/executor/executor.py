@@ -1549,10 +1549,12 @@ class Executor:
 
     _DATE_COMPONENTS: dict[str, str] = {
         "year": "year",
+        "iyear": "iyear",
         "month": "month",
         "day": "day",
         "week": "week",
         "ww": "ww",
+        "iyy": "iyy",
         "dow": "dow",
         "q": "q",
         "qq": "qq",
@@ -1603,6 +1605,8 @@ class Executor:
         """Extract an integer component from a date."""
         if component == "year":
             return d.year
+        if component == "iyear":
+            return d.isocalendar().year
         if component == "month":
             return d.month
         if component == "day":
@@ -1611,6 +1615,8 @@ class Executor:
             return d.isocalendar().week
         if component == "ww":
             return f"{d.isocalendar().week:02d}"
+        if component == "iyy":
+            return f"{d.isocalendar().year % 100:02d}"
         if component == "dow":
             return d.isoweekday()
         if component == "q":
@@ -1640,6 +1646,10 @@ class Executor:
                 return f"{d.year % 100:02d}"
             if token == "yyyy":
                 return str(d.year)
+            if token == "iyy":
+                return f"{d.isocalendar().year % 100:02d}"
+            if token == "iyyyy":
+                return str(d.isocalendar().year)
             if token == "week":
                 return str(d.isocalendar().week)
             if token == "ww":

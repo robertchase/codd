@@ -130,10 +130,12 @@ _DETAIL: dict[str, str] = {
 
   Extraction (keyword):
     expr .d "year"          → int (e.g. 2026)
+    expr .d "iyear"         → int, ISO week-year (pairs with "week")
     expr .d "month"         → int (1-12)
     expr .d "day"           → int (1-31)
     expr .d "week"          → int (ISO week number)
     expr .d "ww"            → str, zero-padded week (e.g. "05")
+    expr .d "iyy"           → str, 2-digit ISO week-year (pairs with "ww")
     expr .d "dow"           → int (1=Mon, 7=Sun)
     expr .d "q"             → int (1-4, quarter)
     expr .d "qq"            → str ("Q1"-"Q4")
@@ -142,10 +144,17 @@ _DETAIL: dict[str, str] = {
     expr .d "{dd}/{mm}/{yyyy}"    → "17/03/2026"
     expr .d "{d} {mmm} {yyyy}"    → "17 MAR 2026"
     expr .d "{ddd}"               → "TUE"
-    expr .d "{yyyy}-W{ww}"        → "2026-W05"
+    expr .d "{iyy}{ww}"           → "2605"  (sortable week key)
+    expr .d "{iyyyy}-W{ww}"       → "2026-W05"
     expr .d "{yyyy}-{qq}"         → "2026-Q1"
 
-    Tokens: {d} {dd} {m} {mm} {mmm} {yy} {yyyy} {week} {ww} {dow} {ddd} {q} {qq}
+    Tokens: {d} {dd} {m} {mm} {mmm} {yy} {yyyy} {iyy} {iyyyy} {week} {ww}
+            {dow} {ddd} {q} {qq}
+
+    Week-key warning: pair {ww} with {iyy}/{iyyyy} (ISO week-year), not
+    {yy}/{yyyy} (calendar year).  Around New Year the two disagree —
+    2027-01-01 is ISO week 53 of 2026, so "{yy}{ww}" gives the phantom
+    key "2753" while "{iyy}{ww}" correctly gives "2653".
 
   Arithmetic:
     date + int              Add N days

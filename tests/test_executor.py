@@ -966,6 +966,45 @@ class TestDateOp:
         for t in result:
             assert t["d"] == 2
 
+    def test_extract_iyear(self) -> None:
+        """.d "iyear" extracts the ISO week-year, not the calendar year."""
+        # 2027-01-01 is a Friday: ISO week 53 of 2026.
+        result = run('E +: y: "2027-01-01" .d "iyear" # [name y]')
+        for t in result:
+            assert t["y"] == 2026
+        # 2025-12-29 is a Monday: ISO week 1 of 2026.
+        result2 = run('E +: y: "2025-12-29" .d "iyear" # [name y]')
+        for t in result2:
+            assert t["y"] == 2026
+        # Mid-year, iyear == year.
+        result3 = run('E +: y: "2026-05-11" .d "iyear" # [name y]')
+        for t in result3:
+            assert t["y"] == 2026
+
+    def test_extract_iyy(self) -> None:
+        """.d "iyy" is the zero-padded 2-digit ISO week-year string."""
+        result = run('E +: y: "2027-01-01" .d "iyy" # [name y]')
+        for t in result:
+            assert t["y"] == "26"
+
+    def test_format_iyy_ww_week_key(self) -> None:
+        """{iyy}{ww} produces a consistent key across a year boundary."""
+        # All three dates are in the same ISO week (2026-W53).
+        for datestr in ("2026-12-28", "2027-01-01", "2027-01-03"):
+            result = run(f'E +: k: "{datestr}" .d "{{iyy}}{{ww}}" # [name k]')
+            for t in result:
+                assert t["k"] == "2653", datestr
+        # The next Monday starts 2027-W01.
+        result = run('E +: k: "2027-01-04" .d "{iyy}{ww}" # [name k]')
+        for t in result:
+            assert t["k"] == "2701"
+
+    def test_format_iyyyy(self) -> None:
+        """{iyyyy} is the 4-digit ISO week-year."""
+        result = run('E +: k: "2027-01-01" .d "{iyyyy}-W{ww}" # [name k]')
+        for t in result:
+            assert t["k"] == "2026-W53"
+
     def test_extract_q(self) -> None:
         """.d "q" extracts quarter as int (1-4)."""
         result = run('E +: q: "2026-03-17" .d "q" # [name q]')
