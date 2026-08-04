@@ -2007,6 +2007,152 @@ class TestBucket:
         assert "q" in result.attributes
 
 
+class TestCumulative:
+    """Test /+ (cumulative aggregate) operator."""
+
+    def _sales(self) -> Environment:
+        env = Environment()
+        env.bind(
+            "Sales",
+            Relation(
+                frozenset({
+                    Tuple_(date="2026-01-05", product="a", amount=10),
+                    Tuple_(date="2026-01-12", product="b", amount=40),
+                    Tuple_(date="2026-01-12", product="c", amount=20),
+                    Tuple_(date="2026-01-19", product="d", amount=30),
+                }),
+                schema={"date": "date", "product": "str", "amount": "int"},
+            ),
+        )
+        return env
+
+    def test_running_sum(self) -> None:
+        """Running total in key order."""
+        env = self._sales()
+        result = run("Sales /+ date [cum: +. amount]", env)
+        by_product = {t["product"]: t["cum"] for t in result}
+        assert by_product["a"] == 10
+        assert by_product["d"] == 100
+
+    def test_ties_share_value_including_whole_group(self) -> None:
+        """Tied keys share a cum that includes the entire tied group."""
+        env = self._sales()
+        result = run("Sales /+ date [cum: +. amount]", env)
+        by_product = {t["product"]: t["cum"] for t in result}
+        # b and c are both 2026-01-12: cum = 10 + 40 + 20 = 70 for both.
+        assert by_product["b"] == 70
+        assert by_product["c"] == 70
+
+    def test_descending_prefix(self) -> None:
+        """key- accumulates from the top of the sort."""
+        env = self._sales()
+        result = run("Sales /+ date- [left: +. amount]", env)
+        by_product = {t["product"]: t["left"] for t in result}
+        assert by_product["d"] == 30    # latest date first
+        assert by_product["b"] == 90    # 30 + 40 + 20 (tied group)
+        assert by_product["c"] == 90
+        assert by_product["a"] == 100
+
+    def test_pareto_share_and_filter(self) -> None:
+        """p. gives cumulative percent share; filter keeps the head."""
+        env = self._sales()
+        result = run(
+            "Sales /+ amount- [share: p. amount] ? share <= 80", env
+        )
+        # b (40%) and d (70%) are within the first 80% of revenue.
+        assert {t["product"] for t in result} == {"b", "d"}
+
+    def test_running_max_and_count_one_pass(self) -> None:
+        """Multiple aggregates evaluate in one pass."""
+        env = self._sales()
+        result = run("Sales /+ date [hi: >. amount  n: #.]", env)
+        by_product = {t["product"]: (t["hi"], t["n"]) for t in result}
+        assert by_product["a"] == (10, 1)
+        assert by_product["b"] == (40, 3)
+        assert by_product["c"] == (40, 3)
+        assert by_product["d"] == (40, 4)
+
+    def test_composite_key(self) -> None:
+        """Composite sort key orders the prefix."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(g="x", k=1, v=1),
+                    Tuple_(g="x", k=2, v=2),
+                    Tuple_(g="y", k=1, v=4),
+                }),
+                schema={"g": "str", "k": "int", "v": "int"},
+            ),
+        )
+        result = run("R /+ [g k] [cum: +. v]", env)
+        by_key = {(t["g"], t["k"]): t["cum"] for t in result}
+        assert by_key[("x", 1)] == 1
+        assert by_key[("x", 2)] == 3
+        assert by_key[("y", 1)] == 7
+
+    def test_auto_name(self) -> None:
+        """Bare aggregate auto-names like /. and /*."""
+        env = self._sales()
+        result = run("Sales /+ date +. amount", env)
+        assert "sum_amount" in result.attributes
+
+    def test_schema_of_new_columns(self) -> None:
+        """New columns get /. -style schema types."""
+        env = self._sales()
+        result = run("Sales /+ date [cum: +. amount  n: #.]", env)
+        assert result.schema["cum"] == "int"   # inherits amount's type
+        assert result.schema["n"] == "int"
+
+    def test_name_collision_errors(self) -> None:
+        """New column colliding with an existing attribute errors."""
+        env = self._sales()
+        with pytest.raises(ExecutionError, match="already exists"):
+            run("Sales /+ date [amount: +. amount]", env)
+
+    def test_unknown_key_errors(self) -> None:
+        """Unknown sort key errors."""
+        env = self._sales()
+        with pytest.raises(ExecutionError, match="unknown key"):
+            run("Sales /+ nope [cum: +. amount]", env)
+
+    def test_empty_relation(self) -> None:
+        """Empty source passes through with new attrs in the heading."""
+        env = self._sales()
+        result = run("Sales ? amount > 999 /+ date [cum: +. amount]", env)
+        assert isinstance(result, Relation)
+        assert len(result) == 0
+        assert "cum" in result.attributes
+
+    def test_schema_aware_key_ordering(self) -> None:
+        """String keys with int schema order numerically, not lex."""
+        env = Environment()
+        env.bind(
+            "R",
+            Relation(
+                frozenset({
+                    Tuple_(k="2", v=1),
+                    Tuple_(k="10", v=2),
+                }),
+                schema={"k": "int", "v": "int"},
+            ),
+        )
+        result = run("R /+ k [cum: +. v]", env)
+        by_k = {t["k"]: t["cum"] for t in result}
+        # Numeric order: 2 before 10.
+        assert by_k["2"] == 1
+        assert by_k["10"] == 3
+
+    def test_composes_downstream(self) -> None:
+        """The result is a relation — filters and joins apply."""
+        env = self._sales()
+        result = run(
+            "Sales /+ date [cum: +. amount] ? cum > 50 # product", env
+        )
+        assert {t["product"] for t in result} == {"b", "c", "d"}
+
+
 class TestSplit:
     """Test /> (split/explode) operator."""
 

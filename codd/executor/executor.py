@@ -196,6 +196,8 @@ class Executor:
             return self._eval_rank(node)
         if isinstance(node, ast.Bucket):
             return self._eval_bucket(node)
+        if isinstance(node, ast.Cumulative):
+            return self._eval_cumulative(node)
         if isinstance(node, ast.Split):
             return self._eval_split(node)
         if isinstance(node, ast.OrderColumns):
@@ -970,6 +972,98 @@ class Executor:
         new_schema[node.name] = "int"
         return Relation(
             result_tuples, attributes=new_attrs, schema=new_schema
+        )
+
+    def _eval_cumulative(self, node: ast.Cumulative) -> Relation:
+        """Evaluate: source /+ keys [name: agg ...].
+
+        RANGE semantics: walks the distinct key values in sort order,
+        growing a prefix set; after absorbing each tied group, evaluates
+        the aggregate list over the prefix (whole source as the p.
+        denominator) and broadcasts the values onto that group's tuples.
+        Tied tuples therefore share identical cumulative values.
+        """
+        from codd.model.coerce import coerce_value, parse_type_string
+
+        source = self._as_relation(node.source)
+        for comp in node.computations:
+            if comp.name in source.attributes:
+                raise ExecutionError(
+                    f"/+: attribute {comp.name!r} already exists "
+                    f"(use #! to remove it first, or choose another name)"
+                )
+        for k in node.keys:
+            if k.attr not in source.attributes:
+                raise ExecutionError(
+                    f"/+: unknown key attribute {k.attr!r}"
+                )
+
+        # Schema-aware key coercion (same approach as /^ and /&).
+        schema = source.schema
+        key_types: list[str | None] = []
+        for k in node.keys:
+            raw_type = schema.get(k.attr, "str")
+            base_type, _ = parse_type_string(raw_type)
+            key_types.append(None if base_type == "in" else base_type)
+
+        def coerced_values(t: Tuple_) -> tuple:
+            parts = []
+            for k, ktype in zip(node.keys, key_types):
+                val = t[k.attr]
+                if ktype is not None:
+                    try:
+                        val = coerce_value(val, ktype)
+                    except Exception:
+                        pass
+                parts.append(val)
+            return tuple(parts)
+
+        def sort_order_key(raw_key: tuple) -> tuple:
+            parts = []
+            for val, k in zip(raw_key, node.keys):
+                if k.descending:
+                    if isinstance(val, (int, float, Decimal)):
+                        parts.append(-val)
+                    else:
+                        parts.append(_ReverseKey(val))
+                else:
+                    parts.append(val)
+            return tuple(parts)
+
+        # Group tuples by key, order the distinct keys, walk the prefix.
+        groups: dict[tuple, list[Tuple_]] = {}
+        for t in source:
+            groups.setdefault(coerced_values(t), []).append(t)
+        ordered = sorted(groups, key=sort_order_key)
+
+        result: set[Tuple_] = set()
+        prefix: set[Tuple_] = set()
+        for key in ordered:
+            prefix.update(groups[key])
+            prefix_rel = Relation(
+                frozenset(prefix),
+                attributes=source._attributes,
+                schema=source._schema,
+            )
+            values = {
+                comp.name: self._eval_summarize_expr(
+                    comp.expr, prefix_rel, source
+                )
+                for comp in node.computations
+            }
+            for t in groups[key]:
+                result.add(t.extend(values))
+
+        new_attrs = source._attributes | frozenset(
+            c.name for c in node.computations
+        )
+        agg_schema = self._build_agg_schema(
+            list(node.computations), source
+        ) or {}
+        new_schema = dict(source.schema)
+        new_schema.update(agg_schema)
+        return Relation(
+            frozenset(result), attributes=new_attrs, schema=new_schema
         )
 
     def _eval_split(self, node: ast.Split) -> Relation:

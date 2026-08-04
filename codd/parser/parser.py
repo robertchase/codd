@@ -428,6 +428,8 @@ class Parser:
                 left = self._parse_rank(left)
             elif tok.type == TokenType.SLASH_AMP:
                 left = self._parse_bucket(left)
+            elif tok.type == TokenType.SLASH_PLUS:
+                left = self._parse_cumulative(left)
             elif tok.type == TokenType.SLASH_GT:
                 left = self._parse_split(left)
             elif tok.type == TokenType.CARET:
@@ -680,6 +682,18 @@ class Parser:
             name=name_tok.value,
             keys=tuple(keys),
             count=count,
+        )
+
+    def _parse_cumulative(self, source: ast.RelExpr) -> ast.Cumulative:
+        """Parse: /+ key [name: agg ...]  or  /+ key agg (auto-named).
+
+        The key uses sort-key syntax (key, key-, or [key1 key2-]).
+        """
+        self._advance()  # consume /+
+        keys = self._parse_sort_key_list()
+        computations = self._parse_named_expr_list(allow_auto_name=True)
+        return ast.Cumulative(
+            source=source, keys=tuple(keys), computations=tuple(computations)
         )
 
     def _parse_split(self, source: ast.RelExpr) -> ast.Split:

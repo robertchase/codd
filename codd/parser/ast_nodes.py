@@ -483,6 +483,22 @@ class Bucket:
 
 
 @dataclass(frozen=True)
+class Cumulative:
+    """Cumulative aggregate: /+ key [name: agg ...].
+
+    For each tuple, evaluates the aggregates over the *prefix set* —
+    all tuples whose sort key (per *keys*, direction-aware) is at or
+    before the tuple's own — and broadcasts the results onto the tuple.
+    RANGE semantics: tied tuples share identical values that include
+    the whole tied group.  Set in, set out.
+    """
+
+    source: RelExpr
+    keys: tuple[SortKey, ...]
+    computations: tuple["NamedExpr", ...]
+
+
+@dataclass(frozen=True)
 class Split:
     """Split / explode.
 
@@ -652,6 +668,7 @@ RelExpr = (
     | Sort
     | Rank
     | Bucket
+    | Cumulative
     | Split
     | OrderColumns
     | Take

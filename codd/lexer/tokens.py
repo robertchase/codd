@@ -66,6 +66,7 @@ class TokenType(Enum):
     AS_DOT = auto()         # .as type cast
     SLASH_CARET = auto()    # /^  rank (dense)
     SLASH_AMP = auto()      # /&  bucket (equal-frequency)
+    SLASH_PLUS = auto()     # /+  cumulative aggregate
     SLASH_GT = auto()       # />  split (explode rows)
     DOUBLE_SLASH = auto()   # //  integer divide
     PERCENT = auto()        # %   remainder

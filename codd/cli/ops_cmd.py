@@ -19,6 +19,7 @@ _RELATIONAL = [
     ("/*", "Broadcast agg", "E /* dept_id [avg: %. salary]  or  E /* [total: +. salary]"),
     ("/^", "Rank (dense)", "E /^ r: salary-"),
     ("/&", "Bucket (n-tile)", "E /& q: salary- 4"),
+    ("/+", "Cumulative agg", "Sales /+ date [cum: +. amount]"),
     ("/>", "Split (explode)", 'R /> tags ","  or  R /> [tag n]: tags ","'),
     ("::", "Apply schema", "R :: S  or  R ::"),
     ("?.", "Describe columns", 'R ?.  or  R ?. "full"'),
@@ -407,6 +408,40 @@ fn apply — Calling a function
     - Error if *name* collides with an existing attribute; remove
       first with #! if you want to replace.
     - An empty relation passes through unchanged (still empty).""",
+    "/+": """\
+/+ — Cumulative aggregate (running totals)
+
+  For each tuple, evaluates the aggregate(s) over the tuple's *prefix
+  set* — every tuple whose sort key is at or before its own — and adds
+  the results as new columns.  Set in, set out: the result composes
+  with filters, joins, and everything else.
+
+  RANGE semantics: tied tuples share identical values, and the value
+  includes the entire tied group (same tie rule as /^ dense rank —
+  this is not a row-by-row running sum).
+
+  Syntax:
+    R /+ key [name: agg ...]           Single key, ascending
+    R /+ key- [name: agg ...]          Descending (prefix from the top)
+    R /+ [key1 key2-] [name: agg ...]  Composite key
+    R /+ key agg                       Auto-named (+. amount → sum_amount)
+
+  Aggregates are evaluated with the prefix as the group and the whole
+  relation as the p. denominator, so p. gives cumulative share (0-100).
+
+  Examples:
+    Sales /+ date [cum: +. amount]              Running total
+    Sales /+ date [hi: >. amount  n: #.]        Running max + count
+    Sales /+ date- [left: +. amount]            Remaining-to-go
+    Sales /+ amount- [share: p. amount] ? share <= 80
+                                                Pareto: head 80% of revenue
+    Temps /+ date [hi: >. temp] ? temp = hi     Record-setting days
+
+  Notes:
+    - Key ordering is schema-aware (like $, /^, /&).
+    - New columns inherit types like /. (sum inherits, #. int, %./p.
+      float, .as wins).  Collision with an existing attr is an error.
+    - Empty relation passes through empty (heading gains the columns).""",
     "/&": """\
 /& — Bucket (equal-frequency n-tile)
 

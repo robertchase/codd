@@ -146,6 +146,10 @@ class Lexer:
             self._advance()
             self._advance()
             return self._make_token(TokenType.SLASH_AMP, "/&", line, col)
+        if ch == "/" and ch2 == "+":
+            self._advance()
+            self._advance()
+            return self._make_token(TokenType.SLASH_PLUS, "/+", line, col)
 
         # +: +.
         if ch == "+" and ch2 == ":":
