@@ -519,6 +519,72 @@ class TestExportWithEval:
         assert not out_file.exists()
 
 
+class TestInteractiveFlag:
+    """Test -i / --interactive: enter the REPL after -e/-f."""
+
+    def test_repl_after_script(self, tmp_path: Path) -> None:
+        """-f script -i runs the script, then the REPL sees its bindings."""
+        script = tmp_path / "setup.codd"
+        script.write_text('X := {n; "alpha"; "beta"}\n')
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["-f", str(script), "-i"],
+            input="X # n\n\\q\n",
+        )
+        assert result.exit_code == 0, result.output
+        # REPL banner appeared and the script's binding was usable.
+        assert "Codd REPL" in result.output
+        assert "alpha" in result.output
+
+    def test_repl_after_eval(self, monkeypatch) -> None:
+        """-e expr -i prints the result, then dispatches into the REPL.
+
+        (Real REPL interaction is exercised via -f above; under CliRunner
+        the -e path consumes piped stdin as data, so the REPL would need
+        /dev/tty — here we just verify the dispatch.)
+        """
+        import codd.cli as cli_mod
+
+        entered: list[bool] = []
+        monkeypatch.setattr(
+            cli_mod, "_enter_repl", lambda env, sc: entered.append(True)
+        )
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["--sample", "-e", "E # name", "-i"],
+        )
+        assert result.exit_code == 0, result.output
+        assert "Alice" in result.output
+        assert entered == [True]
+
+    def test_no_interactive_exits(self, tmp_path: Path) -> None:
+        """Without -i, -f still exits after the script (no REPL banner)."""
+        script = tmp_path / "setup.codd"
+        script.write_text('{n; "alpha"}\n')
+        runner = CliRunner()
+        result = runner.invoke(main, ["-f", str(script)])
+        assert result.exit_code == 0
+        assert "Codd REPL" not in result.output
+
+    def test_functions_survive_into_repl(self, tmp_path: Path) -> None:
+        """Functions defined in the script are callable from the REPL."""
+        script = tmp_path / "setup.codd"
+        script.write_text(
+            "top(n) := fn $ x- ^ n\n"
+            "R := {x; 1; 9; 5}\n"
+        )
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["-f", str(script), "-i"],
+            input="R top(1)\n\\q\n",
+        )
+        assert result.exit_code == 0, result.output
+        assert "9" in result.output
+
+
 class TestInitFlag:
     """Test --init flag."""
 

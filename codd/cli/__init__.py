@@ -44,6 +44,14 @@ from codd.executor.environment import Environment
     help="Run codd file(s) as setup before anything else (repeatable).",
 )
 @click.option(
+    "-i",
+    "--interactive",
+    "interactive",
+    is_flag=True,
+    default=False,
+    help="After -e/-f runs, enter the REPL with the session intact.",
+)
+@click.option(
     "--sample", "sample", is_flag=True, default=False,
     help="Load sample data (E, D, Phone, ContractorPay).",
 )
@@ -73,6 +81,7 @@ def main(
     script_file: str | None,
     args: tuple[str, ...],
     init_files: tuple[str, ...],
+    interactive: bool,
     sample: bool,
     auto_load: bool,
     genkey: bool,
@@ -91,6 +100,7 @@ def main(
         codd prices.csv                            # REPL with prices loaded
         codd prices.csv -e "prices ? price > 100"  # evaluate and exit
         codd prices.csv -f query.codd --arg min=50 # run script with args
+        codd prices.csv -f setup.codd -i           # run script, then REPL
         codd p=prices.csv --csv -e "p $ price"     # CSV output
         codd --init types.codd -f main.codd        # setup then script
         codd --ops                                  # print reference
@@ -220,13 +230,18 @@ def main(
         output_csv = True
 
     if expression is not None:
-        # Eval mode: evaluate and exit.
+        # Eval mode: evaluate, then exit or (with -i) enter the REPL.
         _run_eval(expression, env, output_csv, no_header)
     elif script_file is not None:
-        # File mode: run script and exit.
+        # File mode: run script, then exit or (with -i) enter the REPL.
         _run_file(script_file, args, env, output_csv, no_header)
     else:
         # REPL mode.
+        _enter_repl(env, stdin_consumed)
+        return
+
+    if interactive:
+        # -i: keep the session alive with everything -e/-f built up.
         _enter_repl(env, stdin_consumed)
 
 
