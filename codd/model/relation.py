@@ -301,6 +301,18 @@ class Relation:
                 f"{sorted(self._attributes)} vs {sorted(other._attributes)}"
             )
 
+    def _is_dum(self) -> bool:
+        """True for the degenerate empty relation: no attributes, no tuples.
+
+        This only arises from loading a zero-byte file (or constructing
+        ``Relation(frozenset())`` directly) — the language cannot produce
+        it mid-query.  Set operations treat it as an identity element so
+        the "accumulator starts as an empty file" pattern works.  An
+        empty relation that HAS a heading is not Dum and still gets the
+        full heading check (a wrong heading is a real error).
+        """
+        return not self._attributes and not self._tuples
+
     def _normalize(self) -> Relation:
         """Return a copy of this relation with all tuple values coerced to their
         effective schema types.
@@ -365,7 +377,15 @@ class Relation:
                         schema=self._schema)
 
     def union(self, other: Relation) -> Relation:
-        """Union: tuples in either relation (|).  LHS schema prevails."""
+        """Union: tuples in either relation (|).  LHS schema prevails.
+
+        The attributeless empty relation (see _is_dum) is the identity:
+        R |. Dum and Dum |. R both yield R.
+        """
+        if self._is_dum():
+            return other
+        if other._is_dum():
+            return self
         self._check_same_heading(other, "union")
         target_schema = self.schema
         left = self._normalize_to(target_schema)
@@ -376,7 +396,15 @@ class Relation:
         )
 
     def difference(self, other: Relation) -> Relation:
-        """Difference: tuples in self but not in other (-).  LHS schema prevails."""
+        """Difference: tuples in self but not in other (-).  LHS schema prevails.
+
+        The attributeless empty relation (see _is_dum) acts neutrally:
+        R -. Dum yields R; Dum -. R yields Dum.
+        """
+        if other._is_dum():
+            return self
+        if self._is_dum():
+            return self
         self._check_same_heading(other, "difference")
         target_schema = self.schema
         left = self._normalize_to(target_schema)
@@ -387,7 +415,17 @@ class Relation:
         )
 
     def intersect(self, other: Relation) -> Relation:
-        """Intersect: tuples in both relations (&).  LHS schema prevails."""
+        """Intersect: tuples in both relations (&).  LHS schema prevails.
+
+        Intersecting with the attributeless empty relation (see _is_dum)
+        yields an empty relation with the non-Dum side's heading and
+        schema, so downstream projections and filters still work.
+        """
+        if self._is_dum() or other._is_dum():
+            keep = other if self._is_dum() else self
+            return Relation(
+                frozenset(), attributes=keep._attributes, schema=keep._schema
+            )
         self._check_same_heading(other, "intersect")
         target_schema = self.schema
         left = self._normalize_to(target_schema)

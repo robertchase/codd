@@ -260,6 +260,37 @@ class TestFileEval:
         assert "+-" not in result.output
 
 
+class TestEmptyAccumulatorFile:
+    """A zero-byte CSV loads as Dum and unions as an identity."""
+
+    def test_accumulator_pattern(self, tmp_path: Path) -> None:
+        """Load empty file, union new rows, export; re-run dedups."""
+        accum = tmp_path / "accum.csv"
+        accum.write_text("")  # truly empty: no header
+
+        script = tmp_path / "acc.codd"
+        script.write_text(
+            f"\\load {accum} acc\n"
+            'new := {name amount; "a" 10; "b" 20}\n'
+            "out := acc |. new\n"
+            f"\\export {accum} out\n"
+            "out\n"
+        )
+
+        runner = CliRunner()
+        r1 = runner.invoke(main, ["-f", str(script)])
+        assert r1.exit_code == 0, r1.output
+        assert "a" in r1.output and "b" in r1.output
+
+        # Second run: the file now has data; union dedups.
+        r2 = runner.invoke(main, ["-f", str(script)])
+        assert r2.exit_code == 0, r2.output
+        assert accum.read_text().count("a,") + accum.read_text().count(",a") >= 1
+        # Still exactly two data rows after the second pass.
+        lines = [l for l in accum.read_text().splitlines() if l.strip()]
+        assert len(lines) == 3  # header + 2 rows
+
+
 class TestScriptCommands:
     """Test backslash commands in -f scripts."""
 

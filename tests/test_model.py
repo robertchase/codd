@@ -392,6 +392,61 @@ class TestRelation:
         with pytest.raises(ValueError, match="intersect requires matching attributes"):
             r1.intersect(r2)
 
+    def test_union_with_dum_is_identity(self) -> None:
+        """The attributeless empty relation is the identity for union."""
+        dum = Relation(frozenset())
+        r = Relation(frozenset({Tuple_(a=1), Tuple_(a=2)}))
+        assert r.union(dum) == r
+        assert dum.union(r) == r
+
+    def test_union_dum_preserves_schema(self) -> None:
+        """Union with Dum keeps the real side's schema."""
+        dum = Relation(frozenset())
+        r = Relation(frozenset({Tuple_(a=1)}), schema={"a": "int"})
+        assert dum.union(r).schema == {"a": "int"}
+        assert r.union(dum).schema == {"a": "int"}
+
+    def test_difference_with_dum(self) -> None:
+        """R -. Dum yields R; Dum -. R yields Dum."""
+        dum = Relation(frozenset())
+        r = Relation(frozenset({Tuple_(a=1)}))
+        assert r.difference(dum) == r
+        result = dum.difference(r)
+        assert len(result) == 0
+        assert result.attributes == frozenset()
+
+    def test_intersect_with_dum(self) -> None:
+        """R &. Dum is empty with R's heading (both directions)."""
+        dum = Relation(frozenset())
+        r = Relation(frozenset({Tuple_(a=1)}), schema={"a": "int"})
+        for result in (r.intersect(dum), dum.intersect(r)):
+            assert len(result) == 0
+            assert result.attributes == frozenset({"a"})
+            assert result.schema == {"a": "int"}
+
+    def test_empty_with_heading_is_not_dum(self) -> None:
+        """An empty relation WITH a (wrong) heading still heading-checks."""
+        empty_b = Relation(frozenset(), attributes=frozenset({"b"}))
+        r = Relation(frozenset({Tuple_(a=1)}))
+        with pytest.raises(ValueError, match="matching attributes"):
+            r.union(empty_b)
+
+    def test_apply_schema_imposes_heading_on_dum(self) -> None:
+        """Applying a schema to the attributeless relation sets its heading."""
+        from codd.model.coerce import apply_schema
+
+        dum = Relation(frozenset())
+        result = apply_schema(dum, {"name": "str", "amount": "int"})
+        assert len(result) == 0
+        assert result.attributes == frozenset({"name", "amount"})
+        assert result.schema == {"name": "str", "amount": "int"}
+        # And the imposed heading unions cleanly with real data.
+        r = Relation(
+            frozenset({Tuple_(name="a", amount=1)}),
+            attributes=frozenset({"name", "amount"}),
+        )
+        assert result.union(r) == r
+
     def test_summarize(self) -> None:
         """Summarize groups by dept_id and aggregates."""
         e = self._employees()

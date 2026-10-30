@@ -117,7 +117,22 @@ def apply_schema(
 
     For ``in(Relation, attr)`` constraints, *env* must be provided
     (an object with a ``lookup(name)`` method returning a Relation).
+
+    Applying a schema to the attributeless empty relation (e.g. a
+    zero-byte CSV) *imposes* the schema's heading: the result is an
+    empty relation whose attributes and types come from the schema.
+    This lets accumulator files start life truly empty.
     """
+    if not rel.attributes and len(rel) == 0:
+        imposed = {
+            attr: resolve_type_alias(t, env) for attr, t in schema.items()
+        }
+        return Relation(
+            frozenset(),
+            attributes=frozenset(schema.keys()),
+            schema=imposed,
+        )
+
     unknown = frozenset(schema.keys()) - rel.attributes
     if unknown:
         raise CoercionError(

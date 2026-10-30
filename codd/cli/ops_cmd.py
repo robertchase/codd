@@ -701,7 +701,11 @@ fn apply — Calling a function
   Notes:
     - The LHS schema prevails; RHS values are coerced to match before
       the set union.
-    - Duplicates are removed (relations are sets).""",
+    - Duplicates are removed (relations are sets).
+    - The attributeless empty relation (what a zero-byte file loads as)
+      is the identity: R |. Empty = R, Empty |. R = R.  This makes
+      accumulator files that start out truly empty "just work".  An
+      empty relation that HAS a (different) heading still errors.""",
     "-.": """\
 -. — Difference (set subtraction)
 
@@ -718,7 +722,9 @@ fn apply — Calling a function
 
   Notes:
     - LHS schema prevails for coercion (same as |.).
-    - For "rows in S not in R", flip the operands.""",
+    - For "rows in S not in R", flip the operands.
+    - The attributeless empty relation acts neutrally:
+      R -. Empty = R, Empty -. R = Empty.""",
     "&.": """\
 &. — Intersect (set intersection)
 
@@ -731,7 +737,11 @@ fn apply — Calling a function
 
   Examples:
     Engineers &. Senior              Senior engineers
-    A &. (B |. C)                    A ∩ (B ∪ C)""",
+    A &. (B |. C)                    A ∩ (B ∪ C)
+
+  Notes:
+    - Intersecting with the attributeless empty relation yields an
+      empty relation with the other side's heading and schema.""",
     "/.": """\
 /. — Summarize (group + aggregate)
 
