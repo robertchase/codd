@@ -424,6 +424,29 @@ class TestExtend:
         assert "y" in result.attributes
         assert len(result) == 0
 
+    def test_existing_attribute_error(self) -> None:
+        """Extend rejects attribute names that already exist (use =: instead)."""
+        import pytest
+
+        with pytest.raises(Exception, match="cannot overwrite"):
+            run("E +: salary: salary * 2")
+
+    def test_existing_attribute_error_in_list(self) -> None:
+        """Extend rejects an existing name even mixed with new ones."""
+        import pytest
+
+        with pytest.raises(Exception, match="cannot overwrite"):
+            run("E +: [bonus: salary * 0.1  salary: 0]")
+
+    def test_existing_attribute_error_on_empty(self) -> None:
+        """Extend rejects an existing name even when the relation is empty."""
+        import pytest
+
+        env = Environment()
+        env.bind("Empty", Relation(frozenset(), attributes=frozenset({"x"})))
+        with pytest.raises(Exception, match="cannot overwrite"):
+            run("Empty +: x: 1", env)
+
 
 class TestModify:
     """Test =: (modify)."""

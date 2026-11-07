@@ -211,13 +211,20 @@ class Relation:
         compute: Callable[[Tuple_], dict[str, Value]],
         added_attrs: frozenset[str] | None = None,
     ) -> Relation:
-        """Extend: add computed attributes to each tuple (+).
+        """Extend: add computed attributes to each tuple (+:).
 
         *added_attrs* names the columns the compute function will produce.
         When provided it is used to build the result heading even if the
         relation is empty (avoiding the silent attribute-drop that would
         otherwise occur on an empty relation).
         """
+        if added_attrs is not None:
+            overlap = self._attributes & added_attrs
+            if overlap:
+                raise ValueError(
+                    f"extend cannot overwrite existing attributes "
+                    f"(use =: modify): {sorted(overlap)}"
+                )
         result: set[Tuple_] = set()
         new_attrs: frozenset[str] | None = (
             self._attributes | added_attrs if added_attrs is not None else None
@@ -228,7 +235,8 @@ class Relation:
                 overlap = self._attributes & frozenset(new_values.keys())
                 if overlap:
                     raise ValueError(
-                        f"extend cannot overwrite existing attributes (use modify): {sorted(overlap)}"
+                        f"extend cannot overwrite existing attributes "
+                        f"(use =: modify): {sorted(overlap)}"
                     )
                 new_attrs = self._attributes | frozenset(new_values.keys())
             result.add(t.extend(new_values))
@@ -237,7 +245,7 @@ class Relation:
         return Relation(frozenset(result), attributes=new_attrs, schema=self._schema)
 
     def modify(self, compute: Callable[[Tuple_], dict[str, Value]]) -> Relation:
-        """Modify: replace existing attributes (+:)."""
+        """Modify: replace existing attributes (=:)."""
         result: set[Tuple_] = set()
         for t in self._tuples:
             new_values = compute(t)
